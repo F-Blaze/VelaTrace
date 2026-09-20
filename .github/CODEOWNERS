@@ -1,0 +1,9 @@
+# Trusted additional code owner required before maintainer-authored PRs can merge.
+* @F-Blaze
+/src/velatrace/ipc.py @F-Blaze
+/src/velatrace/providers* @F-Blaze
+/src/velatrace/*safety* @F-Blaze
+/src/velatrace/*routing* @F-Blaze
+/scripts/ @F-Blaze
+/.github/ @F-Blaze
+/pyproject.toml @F-Blaze
