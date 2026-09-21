@@ -6,16 +6,16 @@ Target upstream: F-Blaze/VelaTrace. The user explicitly left remote setup pendin
 ## Reviewed work
 
 - Phase 0: reviewed foundation, official IPC capability report, MIT from first commit, Python packaging and read-only PCB / XML connectivity readers.
-- Phase 1 audit logic: saved implementation and root review; 12 focused local tests pass. Function confirmation and classification cost confirmation are separate gates. Classifications are suggestions only. Pricing uses the actual flagged set and labeled fallback estimates.
+- Phase 1 audit logic: saved implementation and root review; 18 focused local tests pass. Function confirmation and classification cost confirmation are separate gates. Classifications are suggestions only. Pricing uses the actual flagged set and labeled fallback estimates.
 - First commit: 1157429, bootstrap/foundation. No main branch or remote was created.
 
 ## Current gate
 
-The audit-logic sub-agent stopped with a usage-limit error before its completion report. Root reviewed the saved modules, fixed model-change approval invalidation and pricing error visibility, and ran focused tests. The injection-guard marker is dispatched next; Phase 1 is not complete until its report and review are finished.
+The audit-logic sub-agent stopped with a usage-limit error before its completion report. Root reviewed the saved modules, fixed model-change approval invalidation and pricing error visibility, and ran focused tests. The injection-guard review completed successfully with six additional regression tests. Phase 1 is reviewed and committed as f19a4ba. Phase 2 routing-logic is now in progress.
 
 ## Pending phases, in required order
 
-1. Finish injection-guard review.
+1. Injection-guard review: complete.
 2. routing-logic agent: session/universal numeric constraints and confirmations, verified DSN handoff, strict SES support, no stackup changes, reason-required rejection.
 3. freerouting-integration agent: pinned externally executed router and Java checks, tested version evidence, no bundled GPL code.
 4. write-safety agent: backups before all board mutations including previews/cleanup, complete SES preflight, single undoable commit, partial failure rollback.
@@ -34,7 +34,7 @@ KiCad 9/10 IPC cannot export DSN with the pinned client. A verified user-exporte
 ## Verification so far
 
 - Python compileall: passed.
-- tests/test_audit_review.py: 12 focused unit tests passed using a fake provider; this is not a live provider test.
+- tests/test_audit_review.py and tests/test_injection_guard.py: 18 focused unit tests passed using a fake provider; this is not a live provider test.
 - XML connectivity preservation and conflicting-pin refusal: passed local smoke.
 - Actual kicad-python 0.8.0 object/signature construction: passed; no live IPC server test.
 - Required complete Phase 5 suite, CodeQL remote runs, signed release and GitHub protections: NOT verified.
@@ -47,3 +47,4 @@ Set PYTHONPATH to src to run `python -m unittest discover -s tests -v`.
 SDK/package directories installed by pip may require approved elevated read access in this particular Codex filesystem sandbox; source and pure-Python unit tests are readable normally.
 
 Do not call this build production-ready, install it from main, bypass reviews, create an unsigned release, or replace unsupported operations with fabricated success.
+

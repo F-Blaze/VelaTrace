@@ -33,6 +33,7 @@ class KiCadReader:
 
     def read_board(self) -> DesignSnapshot:
         from kipy.board_types import Field
+        from kipy.util.board_layer import canonical_name, is_copper_layer
 
         board = self.client.get_board()
         components = []
@@ -49,10 +50,28 @@ class KiCadReader:
                 position_mm=(fp.position.x / 1_000_000, fp.position.y / 1_000_000),
                 uuid=fp.id.value,
             ))
+        warnings = ["Footprint positions are geometry, not proof that placement is complete."]
+        try:
+            if self.version >= (9, 0, 5):
+                layer_ids = board.get_enabled_layers()
+            else:
+                layer_ids = [entry.layer for entry in board.get_stackup().layers if entry.enabled]
+            copper_layers = tuple(canonical_name(layer) for layer in layer_ids if is_copper_layer(layer))
+        except Exception:
+            copper_layers = ()
+            warnings.append("Could not read the enabled copper layers; routing is unavailable.")
+        board_path = Path(board.name) if board.name else None
+        if board_path is not None and not board_path.is_absolute():
+            project_path = Path(board.document.project.path)
+            if project_path.is_absolute():
+                project_dir = project_path.parent if project_path.suffix == ".kicad_pro" else project_path
+                board_path = project_dir / board_path
+            else:
+                board_path = None
+                warnings.append("KiCad did not provide an absolute board path; routing is unavailable.")
         # Net names, not internal net codes, identify connectivity.
-        return DesignSnapshot(tuple(components), "ipc-pcb", Path(board.name), warnings=(
-            "Footprint positions are geometry, not proof that placement is complete.",
-        ))
+        return DesignSnapshot(tuple(components), "ipc-pcb", board_path,
+                              copper_layers=copper_layers, warnings=tuple(warnings))
 
     def export_dsn(self, destination: Path) -> None:
         raise CapabilityError(

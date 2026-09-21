@@ -1,0 +1,104 @@
+"""Fresh human DSN export handshake and basic board correspondence checks.
+
+Basic checks are necessary, not sufficient: candidate DRC against the real board
+is required before approval because DSN pad geometry may differ from the board.
+"""
+from dataclasses import dataclass
+import hashlib
+from pathlib import Path
+import time
+
+from .errors import ValidationError
+from .models import DesignSnapshot
+from .ses import coordinate, number, resolution
+from .sexpr import children, one, parse
+
+
+def file_digest(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+@dataclass(frozen=True)
+class ExportTicket:
+    board_path: Path
+    board_digest: str
+    requested_ns: int
+
+    @classmethod
+    def begin(cls, board_path: Path):
+        path = Path(board_path).resolve(strict=True)
+        if path.suffix != ".kicad_pcb":
+            raise ValidationError("Routing requires a saved KiCad PCB file.")
+        return cls(path, file_digest(path), time.time_ns())
+
+
+@dataclass(frozen=True)
+class DsnInput:
+    path: Path
+    digest: str
+    ticket: ExportTicket
+    nets: frozenset[str]
+    layers: frozenset[str]
+
+    def assert_unchanged(self):
+        if file_digest(self.path) != self.digest or file_digest(self.ticket.board_path) != self.ticket.board_digest:
+            raise ValidationError("Board or DSN changed; save the board and export a fresh DSN.")
+
+
+def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
+                  *, user_confirms_saved_and_exported: bool) -> DsnInput:
+    path = Path(path).resolve(strict=True)
+    if not user_confirms_saved_and_exported:
+        raise ValidationError("Confirm the open board is saved and DSN freshly exported after this request.")
+    if path.suffix.lower() != ".dsn" or path.stat().st_mtime_ns < ticket.requested_ns:
+        raise ValidationError("Export a fresh .dsn after requesting routing.")
+    if file_digest(ticket.board_path) != ticket.board_digest:
+        raise ValidationError("Board changed after export request; start a fresh export request.")
+    if not snapshot.path or snapshot.path.resolve() != ticket.board_path:
+        raise ValidationError("PCB snapshot does not belong to this saved board.")
+    if path.stat().st_size > 32_000_000:
+        raise ValidationError("DSN input exceeds 32 MB.")
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    try:
+        root = parse(raw.decode("utf-8"))
+    except UnicodeError:
+        raise ValidationError("DSN text must use UTF-8.") from None
+    if root[0] != "pcb" or len(root) < 3 or not isinstance(root[1], str):
+        raise ValidationError("Invalid DSN PCB root.")
+    if Path(root[1]).stem != ticket.board_path.stem:
+        raise ValidationError("DSN board name does not match the current board.")
+    scale = resolution(one(root, "resolution"))
+    structure = one(root, "structure")
+    layer_rows = children(structure, "layer")
+    layers = frozenset(row[1] for row in layer_rows if len(row) >= 2 and isinstance(row[1], str))
+    if not snapshot.copper_layers or layers != frozenset(snapshot.copper_layers):
+        raise ValidationError("DSN layers differ from the board or board stackup evidence is unavailable.")
+    network = one(root, "network")
+    actual_nets = {}
+    for net in children(network, "net"):
+        if len(net) < 2 or not isinstance(net[1], str) or net[1] in actual_nets:
+            raise ValidationError("Malformed or duplicate DSN net.")
+        pins = one(net, "pins")[1:]
+        if any(not isinstance(pin, str) for pin in pins) or len(pins) != len(set(pins)):
+            raise ValidationError("Malformed DSN pins.")
+        actual_nets[net[1]] = set(pins)
+    expected_nets = {net: {f"{ref}-{pin}" for ref, pin in nodes}
+                     for net, nodes in snapshot.connectivity().items()}
+    if actual_nets != expected_nets:
+        raise ValidationError("DSN pin-to-net connectivity differs from the board.")
+    placements = {}
+    for component in children(one(root, "placement"), "component"):
+        for place in children(component, "place"):
+            if len(place) != 6 or place[1] in placements or place[4] not in {"front", "back"}:
+                raise ValidationError("Unsupported or duplicate DSN placement.")
+            placements[place[1]] = (coordinate(place[2], scale), -coordinate(place[3], scale))
+            number(place[5])
+    if set(placements) != {item.reference for item in snapshot.components}:
+        raise ValidationError("DSN footprint list differs from the board.")
+    for item in snapshot.components:
+        if item.position_mm is None or any(abs(a-b) > .00001 for a,b in zip(placements[item.reference], item.position_mm)):
+            raise ValidationError("DSN footprint placement differs from the board.")
+    result = DsnInput(path, digest, ticket, frozenset(actual_nets), layers)
+    result.assert_unchanged()
+    return result
