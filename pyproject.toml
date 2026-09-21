@@ -12,6 +12,7 @@ dependencies = ["kicad-python==0.8.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+tokenizer = ["transformers>=4.50,<6"]
 
 [project.scripts]
 velatrace = "velatrace.__main__:main"

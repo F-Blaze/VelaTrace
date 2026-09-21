@@ -7,6 +7,8 @@ from .models import Component, DesignSnapshot, Pin
 
 
 def read_xml_netlist(path: Path) -> DesignSnapshot:
+    if path.stat().st_size > 25_000_000:
+        raise ValidationError("Netlist is too large.")
     payload = path.read_bytes()
     if len(payload) > 25_000_000 or b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
         raise ValidationError("Netlist is too large or includes unsupported XML declarations.")
@@ -17,9 +19,18 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
     if root.tag != "export" or root.find("components") is None or root.find("nets") is None:
         raise ValidationError("A KiCad connectivity netlist is required, not a flat BOM.")
     pins: dict[str, list[Pin]] = {}
+    membership: dict[tuple[str, str], str] = {}
     for net in root.findall("./nets/net"):
         name = net.get("name", "")
+        if not name:
+            raise ValidationError("Netlist contains a net without a name.")
         for node in net.findall("node"):
+            key = (node.get("ref", ""), node.get("pin", ""))
+            if not all(key):
+                raise ValidationError("Netlist contains a node without a reference or pin number.")
+            if key in membership:
+                raise ValidationError("Netlist contains duplicate or conflicting pin membership.")
+            membership[key] = name
             pins.setdefault(node.get("ref", ""), []).append(
                 Pin(node.get("pin", ""), name, node.get("pinfunction", "")))
     components = []
