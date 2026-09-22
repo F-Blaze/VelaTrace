@@ -26,6 +26,20 @@ class KiCadCliTests(unittest.TestCase):
             with self.assertRaisesRegex(CapabilityError, "Install KiCad 9"):
                 KiCadCli()
 
+    def test_incomplete_drc_coverage_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "drc.json"
+            clean = {"violations": [], "unconnected_items": [], "schematic_parity": []}
+            for extra in ({"ignored_checks": [{"key": "clearance", "description": "Clearance"}]},
+                          {"ignored_checks": None},
+                          {"included_severities": ["error"]}):
+                path.write_text(json.dumps(clean | extra))
+                with self.assertRaises(ValidationError):
+                    parse_drc_report(path)
+            path.write_text(json.dumps(clean | {"ignored_checks": [], "included_severities":
+                                                ["error", "warning", "exclusion"]}))
+            self.assertEqual(parse_drc_report(path).violations, 0)
+
     def test_child_environment_excludes_secrets(self):
         with patch.dict(os.environ, {"VELATRACE_API_KEY": "fixture", "KICAD_API_TOKEN": "fixture",
                                      "PATH": "local-path", "KICAD9_SYMBOL_DIR": "symbols"}, clear=True):

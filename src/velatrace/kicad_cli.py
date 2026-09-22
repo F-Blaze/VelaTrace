@@ -40,6 +40,17 @@ def parse_drc_report(path: Path) -> DrcResult:
         if any(not isinstance(items, list) or any(not isinstance(item, dict) for item in items)
                for items in rows):
             raise ValueError()
+        ignored = value.get("ignored_checks", [])
+        if not isinstance(ignored, list):
+            raise ValueError()
+        if ignored:
+            raise ValidationError("KiCad reports disabled DRC checks; enable them before route approval.")
+        if "included_severities" in value:
+            severities = value["included_severities"]
+            if (not isinstance(severities, list) or
+                    any(not isinstance(item, str) for item in severities) or
+                    not {"error", "warning", "exclusion"}.issubset(severities)):
+                raise ValidationError("KiCad omitted DRC severities; a complete report is required.")
     except (ValueError, KeyError, TypeError) as exc:
         raise ValidationError("KiCad DRC report is incomplete or malformed; approval is unavailable.") from exc
     return DrcResult(*(len(items) for items in rows))

@@ -13,6 +13,7 @@ from typing import Callable
 from urllib.parse import urlsplit
 
 from .errors import CapabilityError, ValidationError, VelaTraceError
+from .network import connect_before
 from .tokens import Prompt, TokenCounter
 
 
@@ -112,6 +113,10 @@ class Provider:
         target = parsed.path.rstrip("/") + path
         deadline = monotonic() + timeout
         connection = http.client.HTTPSConnection(parsed.hostname, parsed.port, timeout=timeout)
+        # http.client delegates TCP setup here, then performs its normal verified
+        # TLS handshake. Bound DNS and all address attempts to the same deadline.
+        connection._create_connection = lambda address, timeout, source_address=None: connect_before(
+            address, deadline, source_address)
         pending = b""
         total = 0
         try:
