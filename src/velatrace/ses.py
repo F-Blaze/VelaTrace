@@ -93,14 +93,41 @@ def _sections(node: list, allowed: set[str], offset: int = 1):
 
 
 def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[str],
-              via_catalog: Mapping[str, ViaSpec] | None = None) -> RoutePlan:
+              via_catalog: Mapping[str, ViaSpec] | None = None,
+              expected_placements: Mapping[str, tuple[float, float, str, float]] | None = None) -> RoutePlan:
     root = parse(text)
     if root[0] != "session" or len(root) < 3 or not isinstance(root[1], str):
         raise ValidationError("Expected a Specctra session root.")
-    _sections(root, {"base_design", "routes"}, 2)
+    _sections(root, {"base_design", "routes", "placement", "was_is"}, 2)
     base = one(root, "base_design")
-    if len(base) != 2 or not isinstance(base[1], str) or Path(base[1]).name != Path(expected_design).name:
+    if len(base) != 2 or not isinstance(base[1], str) or base[1] not in {Path(expected_design).name, Path(expected_design).stem}:
         raise ValidationError("SES base design does not match the exported DSN.")
+    for name in ("placement", "was_is"):
+        if len(children(root, name)) > 1:
+            raise ValidationError("Duplicate SES placement metadata.")
+    if any(row != ["was_is"] for row in children(root, "was_is")):
+        raise ValidationError("SES component renaming is unsupported.")
+    for placement in children(root, "placement"):
+        if expected_placements is None:
+            raise ValidationError("SES placement requires verified original DSN placements.")
+        _sections(placement, {"resolution", "component"})
+        place_scale = resolution(one(placement, "resolution"))
+        seen_places = set()
+        for component in children(placement, "component"):
+            if len(component) < 2 or not isinstance(component[1], str):
+                raise ValidationError("Malformed SES component placement.")
+            _sections(component, {"place"}, 2)
+            for place in component[2:]:
+                if len(place) != 6 or place[1] in seen_places or place[1] not in expected_placements:
+                    raise ValidationError("Unknown, duplicate or unsupported SES placement.")
+                seen_places.add(place[1])
+                x, y, side, angle = expected_placements[place[1]]
+                if (abs(coordinate(place[2], place_scale)-x) > 1e-6 or
+                        abs(coordinate(place[3], place_scale)-y) > 1e-6 or place[4] != side or
+                        abs(number(place[5])-angle) > 1e-6):
+                    raise ValidationError("SES moved, rotated or flipped a footprint; entire route refused.")
+        if seen_places != set(expected_placements):
+            raise ValidationError("SES placement reference list changed.")
     routes = one(root, "routes")
     _sections(routes, {"resolution", "parser", "library_out", "network_out"})
     if any(len(children(routes, name)) > 1 for name in {"parser", "library_out"}):
@@ -114,11 +141,13 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
     # Padstack definitions are never trusted to choose a drill or layer pair.
     for library in children(routes, "library_out"):
         _sections(library, {"padstack"})
-        known = set()
+        known = {}
         for padstack in library[1:]:
-            if len(padstack) < 3 or not isinstance(padstack[1], str) or padstack[1] in known:
+            if len(padstack) < 3 or not isinstance(padstack[1], str):
                 raise ValidationError("Malformed SES padstack.")
-            known.add(padstack[1])
+            if padstack[1] in known and padstack != known[padstack[1]]:
+                raise ValidationError("Conflicting duplicate SES padstack.")
+            known[padstack[1]] = padstack
             spec = (via_catalog or {}).get(padstack[1])
             if spec is None:
                 raise ValidationError("SES padstack lacks a verified board drill/layer mapping.")

@@ -20,6 +20,9 @@ velatrace = "velatrace.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+velatrace = ["router_resources/*.class", "router_resources/*.java"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

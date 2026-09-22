@@ -1,0 +1,22 @@
+(pcb simple
+ (parser (string_quote ") (space_in_quoted_tokens on) (host_cad KiCad) (host_version 9.0))
+ (resolution um 10)
+ (unit um)
+ (structure
+  (layer F.Cu (type signal) (property (index 0)))
+  (layer B.Cu (type signal) (property (index 1)))
+  (boundary (path pcb 0 0 0 30000 0 30000 20000 0 20000 0 0))
+  (via Via[0-1]_600:300_um)
+  (rule (width 250) (clearance 200)))
+ (placement (component TestPad
+  (place J1 5000 10000 front 0)
+  (place J2 25000 10000 front 0)))
+ (library
+  (image TestPad (pin Pad 1 0 0))
+  (padstack Pad (shape (circle F.Cu 1500)) (attach off))
+  (padstack Via[0-1]_600:300_um
+   (shape (circle F.Cu 600)) (shape (circle B.Cu 600)) (attach off)))
+ (network (net N (pins J1-1 J2-1))
+  (class Default N (circuit (use_via Via[0-1]_600:300_um))
+   (rule (width 250) (clearance 200))))
+ (wiring))

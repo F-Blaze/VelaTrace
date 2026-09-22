@@ -2,6 +2,10 @@
 from .errors import ValidationError
 
 
+class QuotedAtom(str):
+    """Preserve lexical quoting for safe DSN reserialization."""
+
+
 def parse(text: str) -> list:
     if not isinstance(text, str) or len(text) > 32_000_000:
         raise ValidationError("Specctra input is missing or exceeds 32 MB.")
@@ -44,6 +48,7 @@ def parse(text: str) -> list:
                 if i == len(text):
                     raise ValidationError("Unterminated Specctra string.")
                 i += 1
+                token = QuotedAtom(token)
             else:
                 start = i
                 while i < len(text) and not text[i].isspace() and text[i] not in '()':

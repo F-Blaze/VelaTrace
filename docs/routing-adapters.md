@@ -21,6 +21,10 @@ The external process adapter implements `Router.check_startup()` and
 constraints through checked router settings or an appropriately validated DSN copy.
 It must not transmit data to any router service, modify the stackup, or accept
 AI-produced trace geometry. `RoutingSession` checks startup when constructed.
+The implemented `Freerouting` adapter pins version 2.1.0 and Java 21 with a tested
+process-local network-denial policy. See [external router setup and evidence](freerouting.md).
+It supports numeric width/clearance constraints for `all nets`; header keepouts
+and other targets are explicitly refused.
 
 `parse_ses` supports straight polyline wires and circular vias mapped through a
 trusted `ViaSpec` catalog derived by the board adapter. It verifies `library_out`
@@ -28,8 +32,10 @@ circle diameters/layers against that catalog. SES alone cannot supply a drill
 mapping. Coordinates in `RoutePlan` are millimetres with Specctra Y-up; invert Y
 exactly once in the KiCad adapter. Trace count is number of segments, computed in
 code. Unsupported geometry is refused as a whole, including arcs and placement
-changes. Actual Freerouting output must be tested against this grammar before
-declaring that router version supported. The parser accepts standard literal
+changes. Unchanged placement echoes are compared with the original DSN's full
+reference/position/side/rotation map. Actual 2.1.0 SES output is included as a
+regression fixture, including empty `was_is` and identical duplicate padstacks.
+The parser accepts standard literal
 `(string_quote ")` metadata. Additional output metadata needs explicit validation,
 not silent removal.
 

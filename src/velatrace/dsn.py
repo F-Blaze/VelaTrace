@@ -3,7 +3,7 @@
 Basic checks are necessary, not sufficient: candidate DRC against the real board
 is required before approval because DSN pad geometry may differ from the board.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
 import time
@@ -39,10 +39,29 @@ class DsnInput:
     ticket: ExportTicket
     nets: frozenset[str]
     layers: frozenset[str]
+    base_design: str = ""
+    placements: dict[str, tuple[float, float, str, float]] = field(default_factory=dict)
 
     def assert_unchanged(self):
         if file_digest(self.path) != self.digest or file_digest(self.ticket.board_path) != self.ticket.board_digest:
             raise ValidationError("Board or DSN changed; save the board and export a fresh DSN.")
+
+
+def dsn_scale(root: list) -> float:
+    """DSN decimal coordinates use unit; resolution is the precision declaration.
+
+    SES integer coordinates instead use unit/resolution. They must not be confused.
+    """
+    units = children(root, "unit")
+    if len(units) > 1:
+        raise ValidationError("Duplicate DSN coordinate unit.")
+    if units:
+        if len(units[0]) != 2 or units[0][1] not in {"mm", "um", "mil", "inch"}:
+            raise ValidationError("Unsupported DSN coordinate unit.")
+        return {"mm": 1, "um": .001, "mil": .0254, "inch": 25.4}[units[0][1]]
+    res = one(root, "resolution")
+    resolution(res)
+    return {"mm": 1, "um": .001, "mil": .0254, "inch": 25.4}[res[1]]
 
 
 def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
@@ -68,7 +87,8 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
         raise ValidationError("Invalid DSN PCB root.")
     if Path(root[1]).stem != ticket.board_path.stem:
         raise ValidationError("DSN board name does not match the current board.")
-    scale = resolution(one(root, "resolution"))
+    resolution(one(root, "resolution"))
+    scale = dsn_scale(root)
     structure = one(root, "structure")
     layer_rows = children(structure, "layer")
     layers = frozenset(row[1] for row in layer_rows if len(row) >= 2 and isinstance(row[1], str))
@@ -92,13 +112,13 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
         for place in children(component, "place"):
             if len(place) != 6 or place[1] in placements or place[4] not in {"front", "back"}:
                 raise ValidationError("Unsupported or duplicate DSN placement.")
-            placements[place[1]] = (coordinate(place[2], scale), -coordinate(place[3], scale))
-            number(place[5])
+            placements[place[1]] = (coordinate(place[2], scale), coordinate(place[3], scale), place[4], number(place[5]))
     if set(placements) != {item.reference for item in snapshot.components}:
         raise ValidationError("DSN footprint list differs from the board.")
     for item in snapshot.components:
-        if item.position_mm is None or any(abs(a-b) > .00001 for a,b in zip(placements[item.reference], item.position_mm)):
+        position = (placements[item.reference][0], -placements[item.reference][1])
+        if item.position_mm is None or any(abs(a-b) > .00001 for a,b in zip(position, item.position_mm)):
             raise ValidationError("DSN footprint placement differs from the board.")
-    result = DsnInput(path, digest, ticket, frozenset(actual_nets), layers)
+    result = DsnInput(path, digest, ticket, frozenset(actual_nets), layers, root[1], placements)
     result.assert_unchanged()
     return result
