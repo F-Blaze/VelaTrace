@@ -1,50 +1,64 @@
 # VelaTrace build status
 
-This checkout is an unfinished development build, not an installable signed release.
-Target upstream: F-Blaze/VelaTrace. The user explicitly left remote setup pending.
+This is an unfinished development checkout, not a signed release. Target upstream:
+F-Blaze/VelaTrace. Remote setup remains pending by the user's explicit choice.
 
 ## Reviewed work
 
-- Phase 0: reviewed foundation, official IPC capability report, MIT from first commit, Python packaging and read-only PCB / XML connectivity readers.
-- Phase 1 audit logic: saved implementation and root review; 18 focused local tests pass. Function confirmation and classification cost confirmation are separate gates. Classifications are suggestions only. Pricing uses the actual flagged set and labeled fallback estimates.
-- First commit: 1157429, bootstrap/foundation. No main branch or remote was created.
+- Phase 0: IPC feasibility, MIT from first commit (1157429), Python packaging,
+  read-only PCB/XML readers and security workflow scaffolding.
+- Phase 1: connectivity-aware audit, function correction/confirmation, actual-prompt
+  classification token estimate and consent, deterministic flags/math, flagged-only
+  pricing, call limits, injection boundary and endpoint-only provider transport.
+- Phase 2: numeric scoped constraints, fresh DSN handoff, strict SES parsing, pinned
+  external offline Freerouting, candidate DRC and backed-up single-commit IPC writer.
+  Write safety was reviewed and committed as 8f1f0d2.
 
-## Current gate
+## Current work and remaining phases
 
-The audit-logic sub-agent stopped with a usage-limit error before its completion report. Root reviewed the saved modules, fixed model-change approval invalidation and pricing error visibility, and ran focused tests. The injection-guard review completed successfully with six additional regression tests. Phase 1 is reviewed and committed as f19a4ba. Phase 2 routing-logic is now in progress.
+Phase 3 ui-design is active: one external Audit/Routing window and IPC launcher.
+Next, in order: privacy-disclosure, test, docs, release-review. Each marker is
+assigned to a sub-agent and reviewed before the next phase begins.
 
-## Pending phases, in required order
+## Verification
 
-1. Injection-guard review: complete.
-2. routing-logic agent: session/universal numeric constraints and confirmations, verified DSN handoff, strict SES support, no stackup changes, reason-required rejection.
-3. freerouting-integration agent: pinned externally executed router and Java checks, tested version evidence, no bundled GPL code.
-4. write-safety agent: backups before all board mutations including previews/cleanup, complete SES preflight, single undoable commit, partial failure rollback.
-5. ui-design agent: one always-on-top window with modes, component cards, constraints, previews and visible consent steps.
-6. privacy-disclosure agent: persistent endpoint-bound first-use notice, BYOK setup and provider policy verification.
-7. test agent: sample boards, required failure cases, code math/flags, SDK integration, actual router and editor checks when available.
-8. docs agent: full README install checklist, CONTRIBUTING and security ownership review.
-9. release-review agent: reviewed PR evidence, full history secret scan, signed tag, every write path, notice and tests. Remote work remains pending by user choice.
+- 58 unit/integration tests: 57 pass, optional installed-router test skipped in the
+  latest run. Earlier full 42-test suite included and passed that real router test.
+- Official Freerouting 2.1.0 plus Java 21: default and constrained routing passed;
+  runtime network-denial probe and actual blocked update request verified.
+- Exact pinned kicad-python 0.8.0 constructors/signatures checked offline.
+- Saved/live backup refusal, partial-create rollback, uncertain commit blocking,
+  project-rule changes and one-commit application tested using failure injection.
+- Wheel includes MIT license and hash-verified independent offline probe.
+- Qt 6.10.2 offscreen rendering works. UI implementation/review remains underway.
 
-## Known limitations
+No live provider request or live KiCad IPC/DRC test has been performed. KiCad is not
+installed. Java and Freerouting are local test tools under the workspace work/
+folder, not bundled in the deliverable. No API key was requested or stored.
 
-No KiCad, Java or Freerouting is installed on this host. No live LLM requests were made, and no API key was requested or stored. The current entry point is a connectivity inspector, not the finished UI. Provider requests refuse to run without a disclosure gate; the first-run UI/persistence is still pending. Groq classification requires a verified local model tokenizer; Gemini supports countTokens. Streamed token usage is only exact when reported by the provider or a matching tokenizer; otherwise the counter reports pending usage.
+## Explicit capability and release gates
 
-KiCad 9/10 IPC cannot export DSN with the pinned client. A verified user-exported DSN or validated standalone exporter is needed. There is no documented dock panel or transient overlay API. Dedicated user-layer graphics are the planned fallback, with KiCad-controlled color. See feasibility.md for primary sources and exact version limitations.
+KiCad 9/10 require a fresh manual DSN export. No docking or transient overlay API
+is available; the external window and User.9 graphics are the fallbacks. KiCad owns
+canvas layer colors. Routing currently supports initially unrouted boards,
+straight traces, through vias and global numeric width/clearance rules. Existing
+routing, hierarchical schematic context and unsupported header/per-net constraints
+are refused. These limitations are not claims of completed support.
 
-## Verification so far
-
-- Python compileall: passed.
-- tests/test_audit_review.py and tests/test_injection_guard.py: 18 focused unit tests passed using a fake provider; this is not a live provider test.
-- XML connectivity preservation and conflicting-pin refusal: passed local smoke.
-- Actual kicad-python 0.8.0 object/signature construction: passed; no live IPC server test.
-- Required complete Phase 5 suite, CodeQL remote runs, signed release and GitHub protections: NOT verified.
+Live candidate DRC, SaveCopy serialization, server default attributes, reads during
+an IPC commit and real single-step Undo remain mandatory release acceptance tests.
+The first-use persistent disclosure UI, final tests/docs and release review remain
+pending. GitHub protections, reviewed PRs, secret scanning/push protection, remote
+CodeQL evidence and a signed release tag have not been established. No main branch,
+remote or release tag exists; development commits are on bootstrap/foundation.
 
 ## Developer resume
 
-Bundled Python: C:\Users\Owner\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe
-Local dependency sandbox: ../../work/test-runtime (pytest, ruff, kicad-python 0.8.0).
-Set PYTHONPATH to src to run `python -m unittest discover -s tests -v`.
-SDK/package directories installed by pip may require approved elevated read access in this particular Codex filesystem sandbox; source and pure-Python unit tests are readable normally.
+Run `python -m unittest discover -s tests -v` with PYTHONPATH=src. The workspace
+work/test-runtime contains test tools and the pinned IPC SDK; work/ui-runtime
+contains PySide6-Essentials 6.10.2. Native router test paths are documented in
+freerouting.md. Pip directory ACLs may require approved read access in this build
+sandbox; this is a host-specific testing issue.
 
-Do not call this build production-ready, install it from main, bypass reviews, create an unsigned release, or replace unsupported operations with fabricated success.
-
+Do not call this production-ready, install from main, bypass reviews, create an
+unsigned release, or replace unsupported operations with fabricated success.
