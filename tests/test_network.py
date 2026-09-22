@@ -5,9 +5,39 @@ import unittest
 from unittest.mock import patch
 
 from velatrace.network import connect_before
+from velatrace.provider import Provider, ProviderConfig, ProviderError
 
 
 class NetworkDeadlineTests(unittest.TestCase):
+    def test_stalled_headers_are_cut_off_at_overall_deadline(self):
+        shutdown = Event()
+
+        class Connection:
+            def __init__(self, *args, **kwargs):
+                self.sock = self
+            def connect(self):
+                pass
+            def settimeout(self, timeout):
+                pass
+            def request(self, *args):
+                pass
+            def getresponse(self):
+                shutdown.wait(2)
+                raise OSError("closed")
+            def shutdown(self, how):
+                shutdown.set()
+            def close(self):
+                pass
+
+        provider = Provider(ProviderConfig("fixture", "https://example.invalid", "fixture", "fixture"),
+                            disclosure_gate=lambda _: True)
+        with patch("velatrace.provider.http.client.HTTPSConnection", Connection):
+            start = monotonic()
+            with self.assertRaisesRegex(ProviderError, "timed out"):
+                provider._request("/fixture", {}, .05)
+            self.assertTrue(shutdown.is_set())
+            self.assertLess(monotonic() - start, .5)
+
     def test_dns_timeout_never_opens_socket(self):
         release = Event()
 

@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -17,8 +18,9 @@ except ImportError:
     QApplication = None
 
 from velatrace.audit import AuditStage
-from velatrace.flags import Function
+from velatrace.flags import Function, Flag
 from velatrace.models import Component
+from velatrace.provider import ProviderError
 from velatrace.ses import RoutePlan, Track
 
 
@@ -71,6 +73,36 @@ class UiTests(unittest.TestCase):
             self.window.audit_next()
             infer.assert_not_called()
             self.assertIsNone(self.window.worker)
+
+    def test_consent_survives_new_store_and_endpoint_change_reprompts(self):
+        from velatrace.privacy import ConsentStore
+        from velatrace.ui import Settings
+        self.assertNotIn("test-secret", repr(Settings(key="test-secret")))
+        with patch("velatrace.ui.ask", return_value=True) as notice:
+            self.assertTrue(self.window.authorize_provider())
+            notice.assert_called_once()
+        self.window.consent = ConsentStore(Path(self.temp.name) / "privacy-consent.json")
+        with patch("velatrace.ui.ask", return_value=False) as notice:
+            self.assertTrue(self.window.authorize_provider())
+            notice.assert_not_called()
+            self.window.audit.provider.config = replace(self.window.audit.provider.config,
+                                                       endpoint="https://elsewhere.invalid/v1")
+            self.assertFalse(self.window.authorize_provider())
+            notice.assert_called_once()
+
+    def test_pricing_failure_is_visible_without_expanding_card(self):
+        self.window.audit.flags = [Flag("U3", "Review duplicate sensor")]
+        self.window.audit.provider.config = replace(self.window.audit.provider.config,
+                                                   protocol="openai", builtin_search=True)
+        with patch("velatrace.ui.ask", return_value=True), patch.object(
+                self.window.audit.provider, "complete",
+                side_effect=ProviderError("Provider rejected the API key or permission.")):
+            self.window.price_parts()
+            self.wait_idle()
+        self.assertIn("1 pricing search(es) failed", self.window.totals.text())
+        self.assertIn("API key or permission", self.window.status.text())
+        self.assertTrue(self.window.pricing.prices["U3"].estimated)
+        self.assertTrue(self.window.cards["U3"].details.isHidden())
 
     def test_function_edits_cannot_bypass_confirmation(self):
         self.window.audit.stage = AuditStage.REVIEW_FUNCTIONS

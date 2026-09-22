@@ -7,7 +7,7 @@ import http.client
 import json
 import re
 import socket
-from threading import Lock
+from threading import Event, Lock, Timer
 from time import monotonic
 from typing import Callable
 from urllib.parse import urlsplit
@@ -55,6 +55,18 @@ class ProviderConfig:
     protocol: str = "gemini"
     search_model: str | None = None
     builtin_search: bool = False
+
+    @property
+    def search_available(self) -> bool:
+        return self.builtin_search and self.protocol != "gemini"
+
+    @property
+    def search_unavailable_reason(self) -> str:
+        if self.protocol == "gemini":
+            return ("Gemini web search is disabled in this build: its required grounded-result "
+                    "and Search Suggestion display is not implemented. Pricing uses local "
+                    "estimates with zero API searches. Ordinary Gemini analysis remains available.")
+        return "Built-in search unavailable: local illustrative estimates only; zero API calls."
 
     def __post_init__(self):
         parsed = urlsplit(self.endpoint)
@@ -119,6 +131,23 @@ class Provider:
             address, deadline, source_address)
         pending = b""
         total = 0
+        response = None
+        active_socket = None
+        expired = Event()
+
+        def expire():
+            expired.set()
+            # A socket read timeout alone cannot bound a trickling HTTP header.
+            # Shut down the active connection at the overall request deadline.
+            if active_socket is not None:
+                try:
+                    active_socket.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+
+        watchdog = Timer(max(0, deadline - monotonic()), expire)
+        watchdog.daemon = True
+        watchdog.start()
         try:
             connection.connect()
             active_socket = connection.sock
@@ -171,25 +200,30 @@ class Provider:
         except (TimeoutError, socket.timeout) as exc:
             raise ProviderError("Provider request timed out.", True) from exc
         except (OSError, http.client.HTTPException) as exc:
+            if expired.is_set():
+                raise ProviderError("Provider request timed out.", True) from exc
             raise ProviderError("Cannot connect to configured provider. Check network and endpoint.", True) from exc
         except (ValueError, KeyError, TypeError, AttributeError) as exc:
             raise ProviderError("Provider returned malformed data; no results were applied.") from exc
         finally:
+            watchdog.cancel()
+            if response is not None:
+                response.close()
             connection.close()
 
     def _gemini_body(self, prompt: Prompt, max_tokens: int, model: str,
                      search: bool = False) -> dict:
+        if search:
+            raise CapabilityError(self.config.search_unavailable_reason)
         body = {"systemInstruction": {"parts": [{"text": prompt.system}]},
                 "contents": [{"role": "user", "parts": [{"text": prompt.user}]}],
                 "generationConfig": {"temperature": 0.1, "maxOutputTokens": max_tokens}}
-        if search:
-            body["tools"] = [{"google_search": {}}]
-        else:
-            body["generationConfig"]["responseMimeType"] = "application/json"
+        body["generationConfig"]["responseMimeType"] = "application/json"
         return body
 
     def count_tokens(self, prompt: Prompt, max_tokens: int = 2048,
                      model: str | None = None, search: bool = False) -> tuple[int, str]:
+        self._authorize()
         selected_model = model or self.config.model
         if self.config.protocol == "gemini":
             body = self._gemini_body(prompt, max_tokens, selected_model, search)
@@ -215,8 +249,8 @@ class Provider:
             raise ValidationError("Every generation requires an output token cap between 1 and 65536.")
         if type(retries) is not int or retries < 0 or retries > 2:
             raise ValidationError("At most two retries are permitted.")
-        if search and not self.config.builtin_search:
-            raise CapabilityError("Configured provider has no enabled built-in search.")
+        if search and not self.config.search_available:
+            raise CapabilityError(self.config.search_unavailable_reason)
         model = (self.config.search_model or self.config.model) if search else self.config.model
         deadline = monotonic() + min(timeout, 8 if search else timeout)
         for attempt in range(retries + 1):

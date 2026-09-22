@@ -5,7 +5,7 @@ blocking service operation; it reports plain data through queued signals.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import os
 import uuid
@@ -32,6 +32,7 @@ from .kicad_cli import KiCadCli
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
 from .pricing import PricingSession, estimate_price
+from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
 from .routing import Mode, RoutingSession, RoutingStage
 from .tokens import LocalChatTokenizer
@@ -95,7 +96,7 @@ class Settings:
     endpoint: str = "https://generativelanguage.googleapis.com/v1beta"
     protocol: str = "gemini"
     model: str = ""
-    key: str = ""
+    key: str = field(default="", repr=False)
     search_model: str = ""
     search: bool = False
     tokenizer: str = ""
@@ -115,7 +116,9 @@ class SettingsDialog(QDialog):
         self.resize(650, 680)
         layout = QVBoxLayout(self)
         layout.addWidget(label("Local tools and your provider", muted=False))
-        layout.addWidget(label("No backend or telemetry. Keys stay in memory. Tool paths and provider settings apply to this launch.", muted=True))
+        layout.addWidget(label("No backend or telemetry. Only your configured endpoint receives remote API requests. Keys stay in memory. Tool paths and provider settings apply to this launch.", muted=True))
+        layout.addWidget(label("Groq or Gemini offer free tiers, subject to current quotas and terms. " + PROVIDER_NOTE, muted=True))
+        layout.addWidget(label(f"Local config folder: {parent.config_dir}", muted=True))
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
@@ -139,7 +142,15 @@ class SettingsDialog(QDialog):
         form.addRow("Protocol", self.protocol)
         self.search = QCheckBox("Enable provider built-in web search")
         self.search.setChecked(settings.search)
+        def update_search(protocol):
+            available = protocol != "gemini"
+            self.search.setEnabled(available)
+            if not available:
+                self.search.setChecked(False)
+        self.protocol.currentTextChanged.connect(update_search)
+        update_search(self.protocol.currentText())
         form.addRow(self.search)
+        form.addRow(label("Gemini web search is disabled until its required grounded-result and Search Suggestion display is supported. Gemini pricing uses local estimates; ordinary analysis remains available.", muted=True))
         self.cap = QSpinBox()
         self.cap.setRange(1, 1000)
         self.cap.setValue(settings.cap)
@@ -363,7 +374,7 @@ class MainWindow(QMainWindow):
         self.ready = False
         self.preview_shown = False
         self.mode = Mode.AUDIT
-        self.accepted_providers = set()
+        self.consent = ConsentStore(self.config_dir / "privacy-consent.json")
         self.cards = {}
         self.build_ui()
         self.apply_theme("KiCad")
@@ -602,16 +613,11 @@ class MainWindow(QMainWindow):
         self.run_work("Checking required local router and Java", operation, success)
 
     def authorize_provider(self):
-        config = self.settings.provider_config()
-        identity = (config.name, config.endpoint, config.protocol)
-        if identity not in self.accepted_providers:
-            text = (f"Board connectivity, component fields and your description will be sent to {config.name}\n"
-                    f"Endpoint: {config.endpoint}\n\nUsing your API key. Avoid confidential/NDA designs unless you trust this provider. "
-                    "VelaTrace has no backend or telemetry. Provider terms apply.\n\n"
-                    "Accept this notice for this provider in this launch?")
-            if not ask(self, "Before first analysis", text):
+        config = self.audit.provider.config if self.audit else self.settings.provider_config()
+        if not self.consent.accepted(config):
+            if not ask(self, "Before first analysis", disclosure_text(config)):
                 return False
-            self.accepted_providers.add(identity)
+            self.consent.accept(config)
         return True
 
     def make_audit(self):
@@ -620,7 +626,7 @@ class MainWindow(QMainWindow):
         if self.settings.tokenizer:
             tokenizer = LocalChatTokenizer(Path(self.settings.tokenizer), config.model, self.settings.verified_model)
         provider = Provider(config, CallBudget(self.settings.cap), tokenizer,
-                            disclosure_gate=lambda cfg: (cfg.name, cfg.endpoint, cfg.protocol) in self.accepted_providers)
+                            disclosure_gate=self.consent.accepted)
         return AuditSession(provider)
 
     def load_design(self):
@@ -707,6 +713,8 @@ class MainWindow(QMainWindow):
             self.show_error(str(exc))
 
     def prepare_classification(self):
+        if not self.authorize_provider():
+            return
         def done(estimate):
             self.render_cards()
             self.next_button.setText("Review classification estimate")
@@ -722,6 +730,12 @@ class MainWindow(QMainWindow):
     def start_classification(self, fingerprint):
         if self.worker is not None:
             QTimer.singleShot(30, lambda: self.start_classification(fingerprint))
+            return
+        try:
+            if not self.authorize_provider():
+                return
+        except Exception as exc:
+            self.show_error(str(exc))
             return
         def done(_):
             self.audit_step.setText(f"5 · Audit complete · {len(self.audit.flags)} flagged or borderline components.")
@@ -753,6 +767,8 @@ class MainWindow(QMainWindow):
 
     def price_parts(self):
         try:
+            if not self.authorize_provider():
+                return
             pricing = PricingSession(self.audit)
             estimate = pricing.prepare()
             text = (f"{estimate.flagged_count} flagged, ~{estimate.searches_low}–{estimate.searches_high} searches, "
@@ -765,6 +781,9 @@ class MainWindow(QMainWindow):
                 self.pricing = pricing
                 self.render_cards()
                 self.totals.setText(f"Flagged cost: ${pricing.flagged_cost:.2f} · hypothetical savings: ${pricing.hypothetical_savings:.2f}. Estimates are illustrative; verify every suggestion.")
+                if pricing.failures:
+                    self.show_error(pricing.failure_summary)
+                    self.totals.setText(self.totals.text() + "\n" + pricing.failure_summary)
             self.run_work("Pricing only flagged components", lambda usage: pricing.run(estimate.fingerprint, usage), done)
         except Exception as exc:
             self.show_error(str(exc))

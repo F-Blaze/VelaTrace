@@ -77,6 +77,7 @@ class PricingSession:
         audit._require(AuditStage.CLASSIFIED)
         self.audit = audit
         self.prices: dict[str, Price] = {}
+        self.failures: dict[str, str] = {}
         self.estimate: PricingEstimate | None = None
         self._prompts: dict[str, Prompt] = {}
 
@@ -89,7 +90,7 @@ class PricingSession:
                          for comp in self.audit.snapshot.components if comp.reference in flagged}
         count = len(self._prompts)
         provider = self.audit.provider
-        search_enabled = provider.config.builtin_search
+        search_enabled = provider.config.search_available
         call_count = count if search_enabled else 0
         # Pricing preflight is explicitly approximate: byte count conservatively
         # estimates visible prompt tokens, NOT internal search/reasoning context.
@@ -105,7 +106,7 @@ class PricingSession:
                 "search context and tool charges are unknown. Search count is an estimate, not an "
                 "enforceable provider-internal limit. One HTTP generation per flagged item, no retries; "
                 "8 seconds maximum each. The run's hard API call cap also applies.") if search_enabled else (
-                "Built-in search unavailable: local illustrative estimates only; zero API calls.")
+                provider.config.search_unavailable_reason)
         self.estimate = PricingEstimate(count, count if search_enabled else 0,
             count * 2 if search_enabled else 0, visible_bound, output_cap_each, call_count,
             fingerprint, note)
@@ -123,11 +124,12 @@ class PricingSession:
             raise ValidationError("Pricing exceeds the remaining hard API call cap; reduce the flagged set "
                                   "or start a new audit with a reviewed cap.")
         self.prices = {}
+        self.failures = {}
         components = {comp.reference: comp for comp in self.audit.snapshot.components}
         for reference, prompt in self._prompts.items():
             comp = components[reference]
-            if not provider.config.builtin_search:
-                self.prices[reference] = estimate_price(comp, "built-in search unavailable")
+            if not provider.config.search_available:
+                self.prices[reference] = estimate_price(comp, provider.config.search_unavailable_reason)
                 continue
             try:
                 response = provider.complete(prompt, refreshed.output_cap_each, on_usage,
@@ -159,8 +161,16 @@ class PricingSession:
                           "estimate only — quoted part number did not match"))
             except (VelaTraceError, InvalidOperation, ValueError) as exc:
                 detail = str(exc) if isinstance(exc, VelaTraceError) else "quote invalid"
+                self.failures[reference] = detail
                 self.prices[reference] = estimate_price(comp, detail)
         return dict(self.prices)
+
+    @property
+    def failure_summary(self) -> str:
+        if not self.failures:
+            return ""
+        reasons = "; ".join(dict.fromkeys(self.failures.values()))
+        return f"{len(self.failures)} pricing search(es) failed; local estimates used. {reasons}"
 
     @property
     def flagged_cost(self) -> Decimal:
