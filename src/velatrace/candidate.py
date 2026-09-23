@@ -63,7 +63,7 @@ def project_context(board_path: Path):
             raise ValueError()
         if settings.get("drc_exclusions"):
             raise CapabilityError("Remove DRC exclusions before routing; excluded checks cannot prove safety.")
-        if any(value == "ignore" for value in settings.get("drc_severities", {}).values()):
+        if any(value == "ignore" for value in settings.get("rule_severities", {}).values()):
             raise CapabilityError("Enable all DRC checks before routing; the project contains ignored checks.")
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ValidationError("Project design rules are missing or malformed.") from exc

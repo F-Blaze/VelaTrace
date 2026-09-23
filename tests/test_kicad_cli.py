@@ -42,8 +42,10 @@ class KiCadCliTests(unittest.TestCase):
 
     def test_child_environment_excludes_secrets(self):
         with patch.dict(os.environ, {"VELATRACE_API_KEY": "fixture", "KICAD_API_TOKEN": "fixture",
-                                     "PATH": "local-path", "KICAD9_SYMBOL_DIR": "symbols"}, clear=True):
-            self.assertEqual(local_tool_environment(), {"PATH": "local-path", "KICAD9_SYMBOL_DIR": "symbols"})
+                                     "PATH": "local-path", "KICAD9_SYMBOL_DIR": "symbols",
+                                     "KICAD_CONFIG_HOME": "isolated-config"}, clear=True):
+            self.assertEqual(local_tool_environment(), {"PATH": "local-path", "KICAD9_SYMBOL_DIR": "symbols",
+                                                       "KICAD_CONFIG_HOME": "isolated-config"})
 
     def test_saved_schematic_confirmation_precedes_subprocess(self):
         cli = object.__new__(KiCadCli)

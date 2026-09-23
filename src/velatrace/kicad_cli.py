@@ -16,7 +16,8 @@ from .netlist import read_xml_netlist
 def local_tool_environment() -> dict[str, str]:
     """Do not pass provider keys or IPC authentication to child tools."""
     allowed = {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE",
-               "APPDATA", "LOCALAPPDATA", "LANG", "LC_ALL", "DISPLAY", "XAUTHORITY"}
+               "APPDATA", "LOCALAPPDATA", "LANG", "LC_ALL", "DISPLAY", "XAUTHORITY",
+               "KICAD_CONFIG_HOME"}
     return {key: value for key, value in os.environ.items()
             if key.upper() in allowed or re.fullmatch(
                 r"KICAD\d+_(?:FOOTPRINT|SYMBOL|3DMODEL|3RD_PARTY|TEMPLATE)_DIR", key)}

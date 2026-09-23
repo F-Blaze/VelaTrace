@@ -87,7 +87,7 @@ class SafetyTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / "board.kicad_pcb"
         self.path.write_text(BOARD, encoding="utf-8")
-        self.path.with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {"drc_severities": {}, "via_dimensions": []}}}), encoding="utf-8")
+        self.path.with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {"rule_severities": {}, "via_dimensions": []}}}), encoding="utf-8")
         self.board = FakeBoard(self.path)
         self.safety = BoardSafety(self.board, self.path)
         self.signatures = patch("velatrace.write_safety._signature", lambda item: item.signature)
@@ -172,7 +172,7 @@ class SafetyTests(unittest.TestCase):
         self.assertTrue(context_matches(context))
         self.path.with_suffix(".kicad_dru").write_text("(version 1)")
         self.assertFalse(context_matches(context))
-        self.path.with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {"drc_severities": {"clearance": "ignore"}}}}))
+        self.path.with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {"rule_severities": {"clearance": "ignore"}}}}))
         with self.assertRaises(CapabilityError):
             project_context(self.path)
 

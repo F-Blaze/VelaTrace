@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
-from math import dist
+from math import dist, isfinite
 
 from .models import Component
 from .errors import ValidationError
@@ -50,8 +50,8 @@ def redundancy_flags(components: tuple[Component, ...],
     candidates to possible. Different value or footprint is never sufficient for
     a duplicate flag, regardless of what an LLM claims.
     """
-    if proximity_mm <= 0:
-        raise ValidationError("Proximity must be positive.")
+    if type(proximity_mm) not in {int, float} or not isfinite(proximity_mm) or proximity_mm <= 0:
+        raise ValidationError("Proximity must be finite and positive.")
     groups: dict[tuple, list[Component]] = {}
     for comp in components:
         if (not comp.value.strip() or not comp.footprint.strip() or not comp.pins

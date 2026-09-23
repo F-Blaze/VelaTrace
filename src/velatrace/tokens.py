@@ -32,6 +32,13 @@ class TokenEstimate:
     method: str
     calls_max: int = 1
 
+    def __post_init__(self):
+        if type(self.input_tokens) is not int or self.input_tokens < 0:
+            raise ValidationError("Input token count must be a nonnegative integer.")
+        for value in (self.output_cap, self.calls_max):
+            if type(value) is not int or value < 1:
+                raise ValidationError("Output cap and maximum calls must be positive integers.")
+
     def cost_ceiling(self, input_per_million: Decimal,
                      output_per_million: Decimal) -> Decimal:
         if (not input_per_million.is_finite() or not output_per_million.is_finite()

@@ -13,3 +13,5 @@ dist/
 *.pem
 work/
 *.velatrace-backup-*
+*.kicad_prl
+*.lck
