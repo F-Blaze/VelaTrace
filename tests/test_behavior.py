@@ -121,6 +121,36 @@ class FixtureFlagTests(unittest.TestCase):
         self.assertEqual(candidate_savings(list(flags.values()),
                          {'U2': Decimal('2'), 'C1': Decimal('1.5'), 'C2': Decimal('.1')}), Decimal('.1'))
 
+    def test_low_classification_confidence_on_either_duplicate_excludes_savings(self):
+        verdicts = {'U1': Verdict('U1', Bucket.CRITICAL, .99, 'Keep the original sensor'),
+                    'U2': Verdict('U2', Bucket.REDUNDANT, .99, 'Verify duplicate function')}
+        for uncertain_reference in ('U1', 'U2'):
+            with self.subTest(uncertain_reference=uncertain_reference):
+                uncertain = {**verdicts, uncertain_reference:
+                             replace(verdicts[uncertain_reference], confidence=.79)}
+                flags = compute_flags(self.sensors, self.functions, uncertain)
+                duplicate = next(flag for flag in flags if flag.reference == 'U2')
+                self.assertEqual(duplicate.reason, 'possible redundancy — verify')
+                self.assertTrue(duplicate.possible)
+                self.assertEqual(candidate_savings(flags, {'U2': Decimal('2')}), Decimal('0'))
+        boundary = {ref: replace(verdict, confidence=.8) for ref, verdict in verdicts.items()}
+        flags = compute_flags(self.sensors, self.functions, boundary)
+        self.assertFalse(flags[0].possible)
+        self.assertEqual(candidate_savings(flags, {'U2': Decimal('2')}), Decimal('2'))
+
+    def test_low_confidence_optional_component_excludes_savings(self):
+        component = self.components[0]
+        verdict = Verdict(component.reference, Bucket.NICE_TO_HAVE, .79, 'Possibly optional')
+        flags = compute_flags((component,), self.functions, {component.reference: verdict})
+        self.assertEqual(len(flags), 1)
+        self.assertTrue(flags[0].possible)
+        self.assertEqual(flags[0].reason, 'Borderline classification — verify')
+        self.assertEqual(candidate_savings(flags, {component.reference: Decimal('1.5')}), Decimal('0'))
+        flags = compute_flags((component,), self.functions,
+                              {component.reference: replace(verdict, confidence=.8)})
+        self.assertFalse(flags[0].possible)
+        self.assertEqual(candidate_savings(flags, {component.reference: Decimal('1.5')}), Decimal('1.5'))
+
 
 class ArithmeticTests(unittest.TestCase):
     def test_precise_decimal_totals_empty_and_unique_savings(self):

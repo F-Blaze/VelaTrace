@@ -724,7 +724,7 @@ class MainWindow(QMainWindow):
                     f"Method: {estimate.method}\nHard call cap remaining: {self.audit.provider.budget.remaining}\n\nStart classification?")
             if ask(self, "Classification token estimate", text):
                 # Worker completion is delivered after result; queue the next job.
-                QTimer.singleShot(0, lambda: self.start_classification(estimate.prompt_fingerprint))
+                QTimer.singleShot(0, lambda: self.start_classification(estimate.confirmation_fingerprint))
         self.run_work("Counting the actual classification prompt", lambda _: self.audit.estimate_classification(self.settings.output_cap), done)
 
     def start_classification(self, fingerprint):

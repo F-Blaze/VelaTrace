@@ -90,7 +90,11 @@ def compute_flags(components: tuple[Component, ...], functions: dict[str, Functi
                   verdicts: dict[str, Verdict]) -> list[Flag]:
     flags = {flag.reference: flag for flag in redundancy_flags(components, functions)}
     for reference, flag in tuple(flags.items()):
-        if verdicts[reference].bucket in {Bucket.CRITICAL, Bucket.IMPORTANT}:
+        verdict = verdicts[reference]
+        baseline = verdicts.get(flag.duplicate_of) if flag.duplicate_of else None
+        if (verdict.bucket in {Bucket.CRITICAL, Bucket.IMPORTANT}
+                or verdict.confidence < 0.8
+                or (baseline is not None and baseline.confidence < 0.8)):
             flags[reference] = Flag(reference, "possible redundancy — verify", True,
                                     flag.duplicate_of)
     for comp in components:
@@ -101,7 +105,9 @@ def compute_flags(components: tuple[Component, ...], functions: dict[str, Functi
             # Model assertion cannot create flags without hard matching facts.
             continue
         elif verdict.bucket == Bucket.NICE_TO_HAVE:
-            flags[comp.reference] = Flag(comp.reference, "Optional function — verify before changing design")
+            flags[comp.reference] = Flag(comp.reference,
+                "Borderline classification — verify" if verdict.confidence < 0.8 else
+                "Optional function — verify before changing design", verdict.confidence < 0.8)
         elif verdict.confidence < 0.8:
             flags[comp.reference] = Flag(comp.reference, "Borderline classification — verify", True)
     return list(flags.values())

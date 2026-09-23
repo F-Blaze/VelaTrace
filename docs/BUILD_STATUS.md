@@ -5,12 +5,14 @@ Status updated 2026-09-23. This is a local development alpha, not a signed relea
 ## Phase evidence
 
 - **Phase 0 — foundation:** architecture feasibility reviewed before UI, official IPC only, MIT in first commit `1157429`, packaging and security workflow scaffolding.
-- **Phase 1 — audit:** real connectivity, required description, editable function confirmation, prompt-bound token consent, code-side flags/math, flagged-only pricing, call limits and injection boundary. Root completed the implementation review after an audit-agent usage interruption; its final review has resumed. Injection-guard review completed.
+- **Phase 1 — audit:** real connectivity, required description, editable function confirmation, prompt-bound token consent, code-side flags/math, flagged-only pricing, call limits and injection boundary. Audit and injection-guard reviews completed. The resumed audit review corrected low-confidence savings and bound classification consent to provider/model and the token budget.
 - **Phase 2 — routing:** numeric scoped constraints, fresh DSN handoff, strict SES parsing, pinned external offline Freerouting, candidate validation and backed-up single-commit IPC writer. Routing, Freerouting and write-safety agents completed; live editor acceptance remains open.
 - **Phase 3 — UI:** external Audit/Routing window, component cards, constraints, worker-thread services, token/pricing dialogs, preview/annotation controls and IPC launcher. Qt offscreen review completed.
 - **Phase 4 — privacy:** endpoint-bound first-use notice, key-memory handling, explicit provider errors and pricing fallback disclosure reviewed. Gemini search is disabled pending grounding presentation; ordinary analysis is supported.
 - **Phase 5 — tests:** reviewed and committed as `dc7fc35`; **101 tests passed, 58 subtests passed, zero skips**, with correctness lint passing on 2026-09-22. Both optional native tests were enabled.
 - **Phase 6 — docs:** README install/setup/limitations, CONTRIBUTING, explicit CODEOWNERS paths and security checklist completed and reviewed by root. Local documentation links and whitespace checks pass. Release-review is the next required agent marker; its report must be recorded before declaring the local review complete.
+
+Final audit regressions on 2026-09-23: **105 tests passed, 63 subtests passed, zero skips**, including both native integrations. Correctness lint passed.
 
 ## What was verified
 

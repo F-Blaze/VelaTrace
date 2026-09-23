@@ -38,7 +38,7 @@ def pricing_session(provider, mpn=None):
     audit.infer_functions()
     audit.confirm_functions()
     estimate = audit.estimate_classification()
-    audit.classify(estimate.prompt_fingerprint)
+    audit.classify(estimate.confirmation_fingerprint)
     return PricingSession(audit)
 
 

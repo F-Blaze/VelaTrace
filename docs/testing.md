@@ -12,6 +12,8 @@ CI sets `QT_QPA_PLATFORM=offscreen`, verifies the pinned SDK and Qt imports, the
 
 Phase 5 local evidence on Windows, 2026-09-22: **101 passed, 58 subtests passed**, with correctness lint passing and no skips. Both optional native tests (Freerouting and KiCad CLI) were enabled in that run. The default suite skips these two tests unless their executable paths are configured. The SDK geometry tests use real `kicad-python==0.8.0` wrappers; the UI tests use real `PySide6-Essentials==6.10.2` offscreen widgets. Mocked IPC/DRC tests do not certify a real KiCad transaction.
 
+After the final audit review on 2026-09-23: **105 passed, 63 subtests passed, zero skips**, with both native integrations enabled. Added regressions bind classification consent to provider/model and token budget, and exclude uncertain duplicate/optional verdicts from savings. Correctness lint passed.
+
 Coverage includes:
 
 - Authored KiCad-format PCB, project and XML connectivity fixtures: bulk plus decoupling capacitors on one rail do not flag, identical nearby sensors do, and netlist-only ambiguity remains possible redundancy.

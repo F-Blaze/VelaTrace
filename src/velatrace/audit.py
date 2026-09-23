@@ -184,9 +184,10 @@ class AuditSession:
             raise ValidationError("Choose an output cap between 1 and 65536 tokens.")
         prompt = self._build_classification_prompt()
         count, method = self.provider.count_tokens(prompt, output_cap)
-        self.estimate = TokenEstimate(count, output_cap, prompt.fingerprint, method, 3)
-        self._classification_prompt = prompt
         config = self.provider.config
+        self.estimate = TokenEstimate(count, output_cap, prompt.fingerprint, method, 3,
+                                      (config.endpoint, config.model, config.protocol))
+        self._classification_prompt = prompt
         self._classification_settings = (config.endpoint, config.model, config.protocol)
         self.stage = AuditStage.CLASSIFICATION_ESTIMATE
         return self.estimate
@@ -196,10 +197,10 @@ class AuditSession:
         self._require(AuditStage.CLASSIFICATION_ESTIMATE)
         current = self._build_classification_prompt()
         config = self.provider.config
-        if (self.estimate is None or confirmed_fingerprint != self.estimate.prompt_fingerprint
-                or current.fingerprint != confirmed_fingerprint
+        if (self.estimate is None or confirmed_fingerprint != self.estimate.confirmation_fingerprint
+                or current.fingerprint != self.estimate.prompt_fingerprint
                 or self._classification_settings != (config.endpoint, config.model, config.protocol)):
-            raise ValidationError("Classification prompt changed. Review and confirm a new token estimate.")
+            raise ValidationError("Classification prompt, provider or budget changed. Review and confirm a new token estimate.")
         response = self.provider.complete(current, self.estimate.output_cap, on_usage)
         rows = self._rows(parse_object(response.text), "verdicts")
         verdicts = {}

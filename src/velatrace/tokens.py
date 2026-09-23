@@ -31,6 +31,14 @@ class TokenEstimate:
     prompt_fingerprint: str
     method: str
     calls_max: int = 1
+    provider_identity: tuple[str, ...] = ()
+
+    @property
+    def confirmation_fingerprint(self) -> str:
+        """Bind approval to the actual prompt, provider and approved token budget."""
+        payload = (self.prompt_fingerprint, self.input_tokens, self.output_cap,
+                   self.calls_max, self.provider_identity)
+        return sha256(json.dumps(payload, ensure_ascii=True).encode()).hexdigest()
 
     def __post_init__(self):
         if type(self.input_tokens) is not int or self.input_tokens < 0:
