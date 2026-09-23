@@ -85,6 +85,14 @@ class KiCadCli:
         self.version = tuple(int(part) for part in match.groups())
         return self.version
 
+    def require_editor_version(self, editor_version: tuple[int, int, int]):
+        actual = self.check_startup()
+        if actual != tuple(editor_version):
+            expected = ".".join(map(str, editor_version))
+            found = ".".join(map(str, actual))
+            raise CapabilityError(f"KiCad CLI {found} does not match editor {expected}. "
+                                  "Configure the CLI from the same KiCad installation before routing.")
+
     def _run(self, arguments: list[str], cwd: Path, allowed_exit_codes=(0,)) -> int:
         if self.version is None:
             self.check_startup()
@@ -122,11 +130,18 @@ class KiCadCli:
         candidate = Path(candidate).resolve(strict=True)
         if candidate.suffix.lower() != ".kicad_pcb":
             raise ValidationError("DRC requires a KiCad candidate board.")
+        parity = []
+        schematic = candidate.with_suffix(".kicad_sch")
+        if schematic.exists():
+            # KiCad may skip parity if it cannot fetch a schematic netlist. Prove
+            # that the saved context is exportable before requesting that check.
+            self.schematic_snapshot(schematic, saved_confirmed=True)
+            parity = ["--schematic-parity"]
         with tempfile.TemporaryDirectory(prefix="velatrace-drc-") as directory:
             output = Path(directory) / "drc.json"
             status = self._run(["pcb", "drc", "--format", "json", "--severity-all",
                                "--all-track-errors", "--exit-code-violations", "--output",
-                               str(output), str(candidate)], candidate.parent, (0, 5))
+                               str(output), *parity, str(candidate)], candidate.parent, (0, 5))
             if not output.is_file():
                 raise ValidationError("KiCad did not produce a DRC report; approval is unavailable.")
             report = parse_drc_report(output)

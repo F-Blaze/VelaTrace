@@ -45,7 +45,10 @@ The candidate is local temporary data under the project `.velatrace/backups`
 directory. It copies the corresponding project, rules and non-hierarchical
 schematic context. The validator binds both contents and absence of optional
 files, refuses DRC exclusions/ignored checks, and invokes official `kicad-cli`
-DRC. For confirmed extra clearance it runs both the original rules and a second
+DRC. The routing UI requires an exact editor/CLI version match before creating the
+routing session. Matching saved schematic context must export successfully before
+DRC explicitly enables schematic parity; malformed context refuses validation.
+For confirmed extra clearance it runs both the original rules and a second
 pass with a global minimum rule; adding a weaker global rule cannot erase evidence
 from the original stronger rules. Trace-width minima are also measured in code.
 Unknown, nonzero or failed DRC prevents approval. The writer accepts only the exact

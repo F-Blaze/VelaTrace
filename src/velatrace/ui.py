@@ -859,8 +859,10 @@ class MainWindow(QMainWindow):
             snapshot = reader.read_board()
             if not snapshot.path:
                 raise ValidationError("Routing requires a saved PCB with an absolute path.")
+            cli = KiCadCli(self.settings.cli)
+            cli.require_editor_version(reader.version)
             safety = BoardSafety(reader.client.get_board(), snapshot.path)
-            validator = SafeCandidateValidator(safety, KiCadCli(self.settings.cli))
+            validator = SafeCandidateValidator(safety, cli)
             session = RoutingSession(self.constraints, self.router, validator)
             session.command("/autoroute")
             ticket = ExportTicket.begin(snapshot.path)

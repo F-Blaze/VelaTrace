@@ -38,6 +38,10 @@ class NativeKiCadTests(unittest.TestCase):
                     project.write_text(json.dumps(data), encoding='utf-8')
                     with self.assertRaisesRegex(ValidationError, 'disabled DRC checks'):
                         cli.drc(board)
+                # An unusable saved schematic must not silently become zero parity errors.
+                board.with_suffix('.kicad_sch').write_text('(not-a-valid-schematic)', encoding='utf-8')
+                with self.assertRaisesRegex(ValidationError, 'KiCad CLI failed'):
+                    cli.drc(board)
         for suffix, content in original.items():
             self.assertEqual((FIXTURES / ('necessity' + suffix)).read_bytes(), content)
 

@@ -21,7 +21,7 @@ The [feasibility report](docs/feasibility.md), [UI guide](docs/ui.md) and [routi
 
 These steps become usable when an independently reviewed release tag and trusted signing identity are published. **Never install from `main`, an unsigned tag, or this development branch.** No release tag or maintainer signing fingerprint is available yet.
 
-1. Install [KiCad](https://www.kicad.org/download/) 9 or newer and Python 3.11 or newer. Use the `kicad-cli` matching your editor version. Live editor compatibility still needs the acceptance tests below.
+1. Install [KiCad](https://www.kicad.org/download/) 9 or newer and Python 3.11 or newer. Routing requires the `kicad-cli` version to exactly match the connected editor, including its patch version. Live editor compatibility still needs the acceptance tests below.
 2. Clone outside KiCad's plugin directory. Verify the chosen signed release against a maintainer key/fingerprint obtained through a trusted independent channel, then check out that tag. A signature from an unknown key is insufficient. Example PowerShell commands, after replacing the placeholder:
 
    ```powershell
@@ -80,6 +80,6 @@ python -m venv .venv
 
 On macOS/Linux use `.venv/bin/python`. Demo data is synthetic, with no provider or IPC calls. Read-only inspection: `python -m velatrace --netlist tests/fixtures/audit/necessity.xml`.
 
-Latest local validation: **105 tests and 63 subtests passed, zero skips**, with pinned SDK, offscreen Qt, real Freerouting and official KiCad 10.0.6 CLI fixture checks. Native tests require the paths in [testing instructions](docs/testing.md); otherwise those two tests skip. The real CLI fixture intentionally has violations; this does not certify a fully routed candidate. No live provider or live KiCad editor write/undo acceptance has been performed.
+Latest local validation: **107 tests and 66 subtests passed, zero skips**, with pinned SDK, offscreen Qt, real Freerouting and official KiCad 10.0.6 CLI fixture checks. Native tests require the paths in [testing instructions](docs/testing.md); otherwise those two tests skip. The real CLI fixture intentionally has violations; this does not certify a fully routed candidate. No live provider or live KiCad editor write/undo acceptance has been performed.
 
 **F-Blaze: enable two-factor authentication on the maintainer account.** Before publishing, enforce PR-only `main` with no maintainer bypass, independent review, required CODEOWNERS/CI/CodeQL checks, secret scanning and push protection, and signed tagged releases. A solo maintainer cannot approve their own PR: add a trusted second reviewer/code owner before merging. Local policy files do not enable GitHub settings. Remote controls, historical reviewed PR evidence and release signing remain pending. See [CONTRIBUTING](CONTRIBUTING.md) and [repository security setup](docs/repository-security.md).

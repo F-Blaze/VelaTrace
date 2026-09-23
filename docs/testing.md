@@ -14,6 +14,8 @@ Phase 5 local evidence on Windows, 2026-09-22: **101 passed, 58 subtests passed*
 
 After the final audit review on 2026-09-23: **105 passed, 63 subtests passed, zero skips**, with both native integrations enabled. Added regressions bind classification consent to provider/model and token budget, and exclude uncertain duplicate/optional verdicts from savings. Correctness lint passed.
 
+Release-review fixes on 2026-09-23: **107 passed, 66 subtests passed, zero skips**, plus correctness lint. Routing requires the exact editor/CLI version. Matching schematic context is exported successfully before explicit parity checking; the native CLI test also refuses a malformed matching schematic. A live divergent-schematic parity acceptance test remains required.
+
 Coverage includes:
 
 - Authored KiCad-format PCB, project and XML connectivity fixtures: bulk plus decoupling capacitors on one rail do not flag, identical nearby sensors do, and netlist-only ambiguity remains possible redundancy.
