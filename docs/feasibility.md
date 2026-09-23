@@ -1,6 +1,6 @@
 # Feasibility and boundary decisions
 
-Verified 2026-09-20 against official documentation and installed PyPI kicad-python 0.8.0 source. Documentation at /kicad-python/ includes future KiCad 11 methods; their appearance is not evidence of availability in KiCad 9. No KiCad or Java is installed on this development host, so these are source checks, not end-to-end hardware/editor tests.
+Verified 2026-09-20 against official documentation and installed PyPI kicad-python 0.8.0 source. Documentation at /kicad-python/ includes future KiCad 11 methods; their appearance is not evidence of availability in KiCad 9. At this initial review, KiCad and Java were unavailable; these were source checks, not live editor tests. Subsequent Phase 5 testing used isolated Java 21/Freerouting and official KiCad 10.0.6 CLI runtimes, without installing KiCad system-wide. See [current test evidence](testing.md): actual fixture DRC passed its expected-violations and incomplete-report refusal checks, while live IPC/Undo acceptance remains pending.
 
 | Requirement | Verified capability and implementation decision |
 | --- | --- |

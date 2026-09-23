@@ -91,7 +91,10 @@ Failure-injection tests verify ordering, backup refusal, partial-create rollback
 failed-removal rollback, ambiguous IPC blocking, preview ownership, original and
 supplemental DRC passes, changed project rules and single-commit application.
 Official pinned SDK constructors for tracks, through vias, graphics and text are
-checked offline. There is no KiCad installation in the build environment. Real
+checked offline. An isolated official KiCad 10.0.6 CLI runtime passed the authored
+fixture checks for expected violations/unconnected items and refusal of disabled
+checks; see [testing.md](testing.md). KiCad is not installed system-wide, and no
+live editor IPC session has been tested. Real
 candidate DRC, SaveCopy project naming, server attribute normalization, reads during
 an open commit, and actual one-step Ctrl+Z still require live KiCad 9+ acceptance
 testing before release. Exact protobuf comparison may safely refuse a server that
