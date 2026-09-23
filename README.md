@@ -2,7 +2,7 @@
 
 VelaTrace is a Python companion for KiCad 9+ that audits component necessity and cost using real connectivity, and orchestrates external Freerouting with validation, previews and backups. It uses the official IPC client, never legacy SWIG/`pcbnew` bindings.
 
-**Development alpha: no signed release exists.** The target repository is `F-Blaze/VelaTrace`; remote setup is pending. This local checkout is for development and review, not production installation. Live KiCad editor transactions and several requested capabilities remain release gates. See [build status](docs/BUILD_STATUS.md).
+**Development alpha: no signed release exists.** The target repository is `F-Blaze/VelaTrace`; remote setup is pending. This local checkout is for development and review, not production installation. Live KiCad editor transactions and several requested capabilities remain release gates. See [build status](docs/BUILD_STATUS.md) and the [completed release review](docs/RELEASE_REVIEW.md).
 
 F-Blaze is the solo maintainer. There is no support or response-time guarantee. The [MIT license](LICENSE), present from the first commit, lets anyone use, modify and fork VelaTrace. Plugin and Content Manager listing is deferred until the features are stable.
 

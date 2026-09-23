@@ -10,9 +10,9 @@ Status updated 2026-09-23. This is a local development alpha, not a signed relea
 - **Phase 3 — UI:** external Audit/Routing window, component cards, constraints, worker-thread services, token/pricing dialogs, preview/annotation controls and IPC launcher. Qt offscreen review completed.
 - **Phase 4 — privacy:** endpoint-bound first-use notice, key-memory handling, explicit provider errors and pricing fallback disclosure reviewed. Gemini search is disabled pending grounding presentation; ordinary analysis is supported.
 - **Phase 5 — tests:** reviewed and committed as `dc7fc35`; **101 tests passed, 58 subtests passed, zero skips**, with correctness lint passing on 2026-09-22. Both optional native tests were enabled.
-- **Phase 6 — docs:** README install/setup/limitations, CONTRIBUTING, explicit CODEOWNERS paths and security checklist completed and reviewed by root. Local documentation links and whitespace checks pass. Release-review is the next required agent marker; its report must be recorded before declaring the local review complete.
+- **Phase 6 — docs:** README install/setup/limitations, CONTRIBUTING, explicit CODEOWNERS paths and security checklist completed and reviewed by root. Local documentation links and whitespace checks pass. The independent release-review marker is complete; see [release review](RELEASE_REVIEW.md). Its two findings were fixed and re-reviewed. Local review is complete, but release remains blocked.
 
-Final audit regressions on 2026-09-23: **105 tests passed, 63 subtests passed, zero skips**, including both native integrations. Correctness lint passed.
+Final regressions on 2026-09-23: **107 tests passed, 66 subtests passed, zero skips**, including both native integrations. Correctness lint passed.
 
 ## What was verified
 
@@ -22,7 +22,7 @@ The official Freerouting 2.1.0 JAR ran separately under Temurin Java 21.0.12.1+1
 
 An official, signed Windows KiCad 10.0.6 installer was extracted as data into an isolated workspace runtime; KiCad was not installed system-wide. Its real CLI parsed the authored PCB/project and reported expected DRC violations and unrouted connections. Production parsing also refused a deliberately incomplete report with disabled checks. This is fixture/CLI evidence, **not a passed DRC report for a routed candidate** and not a live IPC test.
 
-The wheel was checked for the MIT license, required runtime modules, independent probe hash and absence of a bundled router JAR or credential files. Root review's Gitleaks 8.30.1 scan found no matches across all ten local commits through Phase 5; the working-directory scan skipped an inaccessible untracked `.pytest_cache`. See [security evidence limits](repository-security.md). No provider API key or live provider request was used.
+The wheel was checked for the MIT license, required runtime modules, independent probe hash and absence of a bundled router JAR or credential files. Root review's Gitleaks 8.30.1 scan found no matches across all 13 commits through final source revision `11e9d65` and its clean archived source tree, without the earlier untracked-cache exclusion. See [security evidence limits](repository-security.md). No provider API key or live provider request was used.
 
 ## Open capability and release gates
 
