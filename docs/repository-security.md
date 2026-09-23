@@ -1,6 +1,6 @@
 # Repository security and release setup
 
-Target: `F-Blaze/VelaTrace`. The human requested **remote setup pending**. These are instructions for the eventual repository, not enabled settings. No remote repository, reviewed PR history, protected `main` or signed release tag has been established by this build.
+Repository: [F-Blaze/VelaTrace](https://github.com/F-Blaze/VelaTrace). Remote setup was subsequently authorized. Main protection, secret scanning, push protection, private reporting and a release-tag lock are configured; see [remote setup status](REMOTE_SETUP.md). The checklist below remains the ongoing policy. Application PR approval and a signed release are still pending.
 
 ## Maintainer and review controls
 

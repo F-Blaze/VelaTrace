@@ -1,6 +1,6 @@
 # Contributing to VelaTrace
 
-VelaTrace is maintained by F-Blaze without a support or response-time guarantee. Contributions and forks are welcome under the MIT license. Remote setup is currently pending, so the PR and release requirements below are gates to enable before publishing, not claims about an existing protected repository.
+VelaTrace is maintained by F-Blaze without a support or response-time guarantee. Contributions and forks are welcome under the MIT license. The public remote and main protections are configured. Application changes await independent PR approval; release acceptance and signing remain pending. See [remote setup status](docs/REMOTE_SETUP.md).
 
 ## Local development
 

@@ -2,6 +2,8 @@
 
 Reviewed on 2026-09-23 for the local `bootstrap/foundation` development branch. Target upstream: `F-Blaze/VelaTrace`. **Release is blocked.** This review completes the requested release-review agent pass; it does not certify production readiness, authorize publication, or replace independent human PR review.
 
+Remote setup was subsequently resumed by the user. The historical gate results below describe the original local review; [remote setup status](REMOTE_SETUP.md) records the current repository protections and workflow evidence. Release remains blocked by independent approval, live acceptance, unfinished capabilities and signing.
+
 ## Requested release gates
 
 | Gate | Result | Evidence and limit |

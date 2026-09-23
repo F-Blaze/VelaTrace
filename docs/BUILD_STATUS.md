@@ -1,6 +1,6 @@
 # VelaTrace build status
 
-Status updated 2026-09-23. This is a local development alpha, not a signed release. Target upstream: **F-Blaze/VelaTrace**. Remote setup remains pending by the user's explicit choice. No remote, main branch or release tag exists; work is on `bootstrap/foundation`.
+Status updated 2026-09-23. This is a local development alpha, not a signed release. Target upstream: **F-Blaze/VelaTrace**. The public remote now exists with a protected, MIT-license-only `main`. Application code is on `review/initial-alpha` awaiting independent PR review. No release tag exists. The original local `bootstrap/foundation` history is retained. See [remote setup](REMOTE_SETUP.md).
 
 ## Phase evidence
 
@@ -35,8 +35,8 @@ The wheel was checked for the MIT license, required runtime modules, independent
 | Live IPC writes and Undo | SaveCopy board/project serialization, server default attributes, in-commit reads, preview cleanup, rollback/disconnection and one Ctrl+Z must be verified in supported editors. |
 | Privacy/provider integration | Notice and errors tested locally; exact live model token counts/streaming need consented nonconfidential provider integration. Gemini search display remains unimplemented. |
 | Cross-version/OS behavior | No blanket KiCad 9/10/11 or desktop OS certification. Windows CLI and offline SDK/Qt evidence are narrower. |
-| Reviewed PRs and protected main | Pending remote setup. Local agent review is not a reviewed GitHub PR. A trusted second code owner is required for maintainer-authored PRs. |
-| Secret scanning/push protection and CodeQL | Workflow/config guidance exists; remote settings and successful PR execution evidence are pending. |
+| Reviewed PRs and protected main | Protected main and the public remote are configured. Independent PR review remains pending; a trusted second code owner is required for maintainer-authored changes. |
+| Secret scanning/push protection and CodeQL | Secret scanning and push protection are enabled. PR workflow results are recorded in [remote setup](REMOTE_SETUP.md). |
 | Signed release | No signing identity/fingerprint, signed tag or production install target exists. All prior gates must pass first. |
 
 Backups and refusal are implemented for every live board-write path, including temporary graphics. Automatic crash reconciliation is not implemented; exact-ID journals support manual recovery. Do not save a board containing temporary graphics. Inspect an uncertain state before retrying.
