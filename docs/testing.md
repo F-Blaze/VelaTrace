@@ -8,7 +8,7 @@ python -m ruff check src tests launch.py
 python -m pytest
 ```
 
-CI sets `QT_QPA_PLATFORM=offscreen`, verifies the pinned SDK and Qt imports, then runs the same checks. UI tests also select offscreen rendering locally. No API key, external provider calls, or running KiCad instance is needed for this suite. Ruff checks syntax errors, invalid comparisons and control flow, and undefined names; it does not enforce a broad formatting rewrite.
+Linux CI installs `libegl1` and `libopengl0`, sets `QT_QPA_PLATFORM=offscreen`, verifies the pinned SDK and Qt imports, then runs the same checks. UI tests also select offscreen rendering locally. No API key, external provider calls, or running KiCad instance is needed for this suite. Ruff checks syntax errors, invalid comparisons and control flow, and undefined names; it does not enforce a broad formatting rewrite.
 
 Phase 5 local evidence on Windows, 2026-09-22: **101 passed, 58 subtests passed**, with correctness lint passing and no skips. Both optional native tests (Freerouting and KiCad CLI) were enabled in that run. The default suite skips these two tests unless their executable paths are configured. The SDK geometry tests use real `kicad-python==0.8.0` wrappers; the UI tests use real `PySide6-Essentials==6.10.2` offscreen widgets. Mocked IPC/DRC tests do not certify a real KiCad transaction.
 

@@ -2,7 +2,7 @@
 
 Repository: [F-Blaze/VelaTrace](https://github.com/F-Blaze/VelaTrace), public.
 
-The user authorized remote setup after the original local release review. `main` was initialized with the MIT license only, then protected before application code was uploaded. All implementation changes are submitted on `review/initial-alpha` for independent PR review. Public commits use the maintainer's GitHub noreply address. The original local development history remains on `bootstrap/foundation`; older local hashes in the build notes are provenance, not public commit links.
+The user authorized remote setup after the original local release review. `main` was initialized with the MIT license only, then protected before application code was uploaded. All implementation changes are submitted in [draft PR #1](https://github.com/F-Blaze/VelaTrace/pull/1) on `review/initial-alpha` for independent review. Public commits use the maintainer's GitHub noreply address. The original local development history remains on `bootstrap/foundation`; older local hashes in the build notes are provenance, not public commit links.
 
 Verified repository settings:
 
@@ -11,7 +11,7 @@ Verified repository settings:
 - GitHub secret scanning and push protection are enabled.
 - Private vulnerability reporting is enabled.
 - An active tag ruleset blocks all tag creation, update and deletion without bypass until the trusted signing/release process is configured. No release tag exists.
-- Required checks are currently `tests` and `analyze`; actual workflow results will be recorded here after the first PR run.
+- Required checks are `tests` and `analyze` from GitHub Actions, plus `CodeQL` from GitHub Advanced Security. Their producer app IDs are pinned in branch protection. Current results are visible on [PR #1 checks](https://github.com/F-Blaze/VelaTrace/pull/1/checks). The first CI run identified missing Linux Qt runtime libraries; the workflow installs `libegl1` and `libopengl0` before testing.
 
 Still required:
 
