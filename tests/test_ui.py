@@ -134,6 +134,14 @@ class UiTests(unittest.TestCase):
         self.assertTrue(self.window.isVisible())
         self.assertIsNotNone(self.window.safety)
         self.assertIn("Backup refused", self.window.status.text())
+        # A second close offers an explicit exit instead of retrying forever.
+        with patch("velatrace.ui.ask", return_value=True) as ask:
+            self.window.close()
+            self.wait_idle()
+            self.app.processEvents()
+        ask.assert_called_once()
+        self.assertIsNone(self.window.safety)
+        self.assertFalse(self.window.isVisible())
 
     def test_multilayer_canvas_renders_actual_polylines(self):
         canvas = RouteCanvas()

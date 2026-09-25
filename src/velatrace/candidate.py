@@ -133,7 +133,9 @@ def prepare_copper(plan: RoutePlan, dsn: DsnInput) -> tuple[CopperItem, ...]:
     _, root = read_board(dsn.ticket.board_path)
     if any(children(root, kind) for kind in ("segment", "arc", "via")):
         raise CapabilityError("This routing adapter requires an unrouted board; existing copper is never replaced.")
-    actual_layers = {row[1] for row in one(root, "layers")[1:] if isinstance(row, list) and len(row) > 2 and row[2] == "signal"}
+    # Inner planes are commonly typed power/mixed; they are still copper layers in the DSN.
+    actual_layers = {row[1] for row in one(root, "layers")[1:] if isinstance(row, list) and len(row) > 2
+                     and row[2] in {"signal", "power", "mixed", "jumper"}}
     if actual_layers != set(dsn.layers):
         raise ValidationError("Saved board copper layers differ from DSN.")
     nets = {row[2] for row in children(root, "net") if len(row) == 3}

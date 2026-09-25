@@ -167,6 +167,12 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaises(CapabilityError):
             prepare_copper(self.plan, self.dsn)
 
+    def test_power_typed_inner_plane_is_copper(self):
+        self.path.write_text(BOARD.replace('(31 "B.Cu" signal)', '(4 "In1.Cu" power) (31 "B.Cu" signal)'), encoding="utf-8")
+        self.dsn = DsnInput(self.dsnpath, file_digest(self.dsnpath), ExportTicket.begin(self.path),
+                            frozenset({"N"}), frozenset({"F.Cu", "In1.Cu", "B.Cu"}))
+        self.assertEqual(len(prepare_copper(self.plan, self.dsn)), 1)
+
     def test_context_creation_and_ignored_rules_invalidate(self):
         _, context = project_context(self.path)
         self.assertTrue(context_matches(context))

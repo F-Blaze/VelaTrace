@@ -3,9 +3,11 @@
 Basic checks are necessary, not sufficient: candidate DRC against the real board
 is required before approval because DSN pad geometry may differ from the board.
 """
+from collections import Counter
 from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path
+import re
 import time
 
 from .errors import ValidationError
@@ -103,14 +105,22 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
         if any(not isinstance(pin, str) for pin in pins) or len(pins) != len(set(pins)):
             raise ValidationError("Malformed DSN pins.")
         actual_nets[net[1]] = set(pins)
-    expected_nets = {net: {f"{ref}-{pin}" for ref, pin in nodes}
+    # KiCad exports a repeated pad number as "2", "2@1", "2@2"… (SOT-223 tabs,
+    # connector shields). Compare pin multiplicity per net, not a deduplicated set.
+    expected_nets = {net: Counter(f"{ref}-{pin}" for ref, pin in nodes)
                      for net, nodes in snapshot.connectivity().items()}
-    if actual_nets != expected_nets:
+    if {net: Counter(re.sub(r"@\d+$", "", pin) for pin in pins)
+            for net, pins in actual_nets.items()} != expected_nets:
         raise ValidationError("DSN pin-to-net connectivity differs from the board.")
     placements = {}
     for component in children(one(root, "placement"), "component"):
         for place in children(component, "place"):
-            if len(place) != 6 or place[1] in placements or place[4] not in {"front", "back"}:
+            # KiCad always appends (PN <value>) and (lock_type position) when locked.
+            if (len(place) < 6 or not isinstance(place[1], str) or place[1] in placements
+                    or place[4] not in {"front", "back"}
+                    or any(extra != ["lock_type", "position"] and not (
+                        isinstance(extra, list) and len(extra) == 2 and extra[0] == "PN"
+                        and isinstance(extra[1], str)) for extra in place[6:])):
                 raise ValidationError("Unsupported or duplicate DSN placement.")
             placements[place[1]] = (coordinate(place[2], scale), coordinate(place[3], scale), place[4], number(place[5]))
     if set(placements) != {item.reference for item in snapshot.components}:

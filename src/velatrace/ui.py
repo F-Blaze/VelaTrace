@@ -373,6 +373,7 @@ class MainWindow(QMainWindow):
         self.executor.start()
         self.ready = False
         self.preview_shown = False
+        self._cleanup_failed = False
         self.mode = Mode.AUDIT
         self.consent = ConsentStore(self.config_dir / "privacy-consent.json")
         self.cards = {}
@@ -944,7 +945,16 @@ class MainWindow(QMainWindow):
             return
         if self.safety:
             event.ignore()
+            # A failed cleanup (e.g. KiCad already closed) must not trap the window forever.
+            if self._cleanup_failed and ask(self, "Close without cleanup",
+                    "VelaTrace could not remove its temporary User.9 graphics. Delete any "
+                    "remaining VelaTrace graphics in KiCad before saving. Close anyway?"):
+                self.safety = None
+                QTimer.singleShot(0, self.close_after_cleanup)
+                return
+            self._cleanup_failed = True  # Cleared only when cleanup succeeds.
             def done(_):
+                self._cleanup_failed = False
                 self.safety = None
                 QTimer.singleShot(0, self.close_after_cleanup)
             self.run_work("Cleaning owned temporary graphics before closing", lambda _: self.safety.clear_preview(), done)

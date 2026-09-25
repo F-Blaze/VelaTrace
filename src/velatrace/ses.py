@@ -118,13 +118,18 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                 raise ValidationError("Malformed SES component placement.")
             _sections(component, {"place"}, 2)
             for place in component[2:]:
-                if len(place) != 6 or place[1] in seen_places or place[1] not in expected_placements:
+                # Freerouting marks DSN-locked parts with a trailing (lock_type position).
+                if (len(place) not in {6, 7} or not isinstance(place[1], str)
+                        or place[1] in seen_places or place[1] not in expected_placements
+                        or place[6:] not in ([], [["lock_type", "position"]])):
                     raise ValidationError("Unknown, duplicate or unsupported SES placement.")
                 seen_places.add(place[1])
                 x, y, side, angle = expected_placements[place[1]]
-                if (abs(coordinate(place[2], place_scale)-x) > 1e-6 or
-                        abs(coordinate(place[3], place_scale)-y) > 1e-6 or place[4] != side or
-                        abs(number(place[5])-angle) > 1e-6):
+                # Freerouting rounds coordinates to the SES resolution and rotation to whole degrees.
+                tolerance = place_scale / 2 + 1e-9
+                if (abs(coordinate(place[2], place_scale)-x) > tolerance or
+                        abs(coordinate(place[3], place_scale)-y) > tolerance or place[4] != side or
+                        abs(number(place[5])-angle) > .5 + 1e-9):
                     raise ValidationError("SES moved, rotated or flipped a footprint; entire route refused.")
         if seen_places != set(expected_placements):
             raise ValidationError("SES placement reference list changed.")
