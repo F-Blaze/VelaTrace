@@ -6,7 +6,7 @@ is required before approval because DSN pad geometry may differ from the board.
 from collections import Counter
 from dataclasses import dataclass, field
 import hashlib
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import time
 
@@ -87,7 +87,8 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
         raise ValidationError("DSN text must use UTF-8.") from None
     if root[0] != "pcb" or len(root) < 3 or not isinstance(root[1], str):
         raise ValidationError("Invalid DSN PCB root.")
-    if Path(root[1]).stem != ticket.board_path.stem:
+    # KiCad names the pcb by its full export path; PureWindowsPath splits on / and \.
+    if PureWindowsPath(root[1]).stem != ticket.board_path.stem:
         raise ValidationError("DSN board name does not match the current board.")
     resolution(one(root, "resolution"))
     scale = dsn_scale(root)
@@ -115,12 +116,11 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
     placements = {}
     for component in children(one(root, "placement"), "component"):
         for place in children(component, "place"):
-            # KiCad always appends (PN <value>) and (lock_type position) when locked.
-            if (len(place) < 6 or not isinstance(place[1], str) or place[1] in placements
+            # KiCad appends (PN <value>) for every footprint with a value.
+            if (len(place) not in {6, 7} or not isinstance(place[1], str) or place[1] in placements
                     or place[4] not in {"front", "back"}
-                    or any(extra != ["lock_type", "position"] and not (
-                        isinstance(extra, list) and len(extra) == 2 and extra[0] == "PN"
-                        and isinstance(extra[1], str)) for extra in place[6:])):
+                    or any(not (isinstance(extra, list) and len(extra) == 2 and extra[0] == "PN"
+                                and isinstance(extra[1], str)) for extra in place[6:])):
                 raise ValidationError("Unsupported or duplicate DSN placement.")
             placements[place[1]] = (coordinate(place[2], scale), coordinate(place[3], scale), place[4], number(place[5]))
     if set(placements) != {item.reference for item in snapshot.components}:

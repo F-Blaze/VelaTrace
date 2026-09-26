@@ -67,6 +67,20 @@ class ItemFactory:
         return output
 
     @staticmethod
+    def delete(board, items) -> bool:
+        """KiCad accepted the deletion. Reads inside an open commit still show pending
+        removals and KiCad 10.0.6 returns no per-item results, so _mutate re-reads
+        after the commit to prove the items are gone."""
+        from kipy.proto.common.commands.editor_commands_pb2 import (
+            IDS_OK, DeleteItems, DeleteItemsResponse)
+        from kipy.proto.common.types.base_types_pb2 import IRS_OK
+        command = DeleteItems()
+        command.header.document.CopyFrom(board.document)
+        command.item_ids.extend(item.id for item in items)
+        response = board.client.send(command, DeleteItemsResponse)
+        return response.status == IRS_OK and all(result.status == IDS_OK for result in response.deleted_items)
+
+    @staticmethod
     def preview(plan, layer):
         from kipy.board_types import BoardSegment
         from kipy.geometry import Vector2
@@ -124,6 +138,33 @@ def _signature(item):
     if "parent" in proto.DESCRIPTOR.fields_by_name:
         proto.ClearField("parent")
     return proto.SerializeToString(deterministic=True)
+
+
+def _echoes(sent, got) -> bool:
+    """Every field VelaTrace set comes back exactly; KiCad-filled defaults are allowed.
+
+    Live KiCad returns created items with defaults filled in (text alignment, fill,
+    padstack shape) and KiCad 10 identifies nets by name only, so byte equality never
+    holds. Net codes are server-internal; the net name is compared.
+    """
+    from google.protobuf.json_format import MessageToDict
+
+    def plain(item):
+        data = MessageToDict(item.proto)
+        data.pop("parent", None)
+        if isinstance(data.get("net"), dict):
+            data["net"].pop("code", None)
+        return data
+
+    def subset(a, b):
+        if isinstance(a, dict):
+            return isinstance(b, dict) and all(key in b and subset(value, b[key]) for key, value in a.items())
+        if isinstance(a, list):
+            return isinstance(b, list) and len(a) == len(b) and all(map(subset, a, b))
+        return a == b
+    # ponytail: proto3 omits default scalars from `sent`, so a server flipping one
+    # (e.g. unlocked -> locked) is not caught; geometry, layer, width and net are.
+    return type(sent.proto) is type(got.proto) and subset(plain(sent), plain(got))
 
 
 class BoardSafety:
@@ -235,14 +276,14 @@ class BoardSafety:
             commit = None
             try:
                 commit = self.board.begin_commit()
-                if removals:
-                    self.board.remove_items(removals)
-                    remaining = {item.id.value for item in [*self.board.get_shapes(), *self.board.get_text()]}
-                    if remaining & {item.id.value for item in removals}:
-                        raise ValidationError("KiCad did not remove every owned preview item.")
+                if removals and not self.factory.delete(self.board, removals):
+                    raise ValidationError("KiCad did not remove every owned preview item.")
                 created = self.board.create_items(additions) if additions else []
+                # Owned signatures are KiCad's own echo, so later edit detection compares like with like.
                 received = {item.id.value: _signature(item) for item in created}
-                if len(created) != len(additions) or received != expected:
+                by_id = {item.id.value: item for item in created}
+                if (len(created) != len(additions) or received.keys() != expected.keys()
+                        or not all(_echoes(item, by_id[item.id.value]) for item in additions)):
                     raise ValidationError("KiCad did not create the complete exact route; transaction cancelled.")
                 self._identity()
                 if file_digest(self.path) != file_digest(backup.saved) or (context is not None and not context_matches(context)):
@@ -264,6 +305,10 @@ class BoardSafety:
             except Exception as exc:
                 self.blocked = True
                 raise UncertainWriteError(f"IPC commit result is uncertain; do not retry. Inspect KiCad and backups: {backup.directory}") from exc
+            removed = {item.id.value for item in removals}
+            if removed & {item.id.value for item in [*self.board.get_shapes(), *self.board.get_text()]}:
+                self.blocked = True
+                raise UncertainWriteError(f"Committed, but KiCad still shows VelaTrace preview items. Use Undo in KiCad and inspect backups: {backup.directory}")
             if remove_owned:
                 self.owned.clear()
             if temporary:

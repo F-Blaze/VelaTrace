@@ -6,7 +6,13 @@ class QuotedAtom(str):
     """Preserve lexical quoting for safe DSN reserialization."""
 
 
-def parse(text: str) -> list:
+# KiCad's own files escape inside quotes; Specctra DSN/SES never does (KiCad's
+# specctraMode lexer and Freerouting both read a backslash literally, and Windows
+# DSN exports embed the full backslashed path). \x/octal are never written by KiCad.
+KICAD_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "a": "\a", "b": "\b", "f": "\f", "v": "\v"}
+
+
+def parse(text: str, *, kicad: bool = False) -> list:
     if not isinstance(text, str) or len(text) > 32_000_000:
         raise ValidationError("Specctra input is missing or exceeds 32 MB.")
     stack, roots, i, count = [], [], 0, 0
@@ -32,18 +38,20 @@ def parse(text: str) -> list:
                 raise ValidationError("Specctra text outside its root expression.")
             if char == '"':
                 # Standard Specctra parser declares a literal quote without a closing quote.
-                if stack[-1] == ['string_quote'] and text[i+1:i+2] == ')':
+                if not kicad and stack[-1] == ['string_quote'] and text[i+1:i+2] == ')':
                     stack[-1].append('"')
                     i += 1
                     continue
                 i += 1
                 token = ''
                 while i < len(text) and text[i] != '"':
-                    if text[i] == '\\':
+                    if kicad and text[i] == '\\':
                         i += 1
-                        if i >= len(text) or text[i] not in {'"', '\\'}:
-                            raise ValidationError("Unsupported Specctra string escape.")
-                    token += text[i]
+                        if i >= len(text):
+                            break
+                        token += KICAD_ESCAPES.get(text[i], text[i])
+                    else:
+                        token += text[i]
                     i += 1
                 if i == len(text):
                     raise ValidationError("Unterminated Specctra string.")

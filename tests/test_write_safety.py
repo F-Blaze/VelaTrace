@@ -93,6 +93,14 @@ class SafetyTests(unittest.TestCase):
         self.signatures = patch("velatrace.write_safety._signature", lambda item: item.signature)
         self.signatures.start()
         self.addCleanup(self.signatures.stop)
+        echoes = patch("velatrace.write_safety._echoes", lambda sent, got: sent.signature == got.signature)
+        echoes.start()
+        self.addCleanup(echoes.stop)
+        # Fake KiCad reports per-item deletion status like DeleteItemsResponse.
+        delete = patch("velatrace.write_safety.ItemFactory.delete", staticmethod(lambda board, items: (
+            board.remove_items(items), all(item.id.value not in board.items for item in items))[1]))
+        delete.start()
+        self.addCleanup(delete.stop)
         self.dsnpath = self.path.with_suffix(".dsn")
         self.dsnpath.write_text('(pcb "board" (unit mm) (library))', encoding="utf-8")
         self.dsn = DsnInput(self.dsnpath, file_digest(self.dsnpath), ExportTicket.begin(self.path), frozenset({"N"}), frozenset({"F.Cu", "B.Cu"}))
@@ -156,6 +164,14 @@ class SafetyTests(unittest.TestCase):
         self.board.items["preview"].signature = b"edited"
         with self.assertRaises(ValidationError):
             self.safety.clear_preview()
+
+    def test_reported_but_unperformed_removal_blocks_after_commit(self):
+        # Live KiCad returns no per-item delete results; only a post-commit read proves removal.
+        self.mutate([Item("preview")], temporary=True)
+        with patch("velatrace.write_safety.ItemFactory.delete", staticmethod(lambda board, items: True)):
+            with self.assertRaises(UncertainWriteError):
+                self.mutate([Item("copper")])
+        self.assertTrue(self.safety.blocked)
 
     def test_candidate_preserves_original_geometry_and_quantizes_once(self):
         items = prepare_copper(self.plan, self.dsn)
@@ -244,3 +260,34 @@ class SafetyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EchoTests(unittest.TestCase):
+    """Shapes captured from a live KiCad 10.0.6 create_items echo."""
+    def test_server_defaults_and_nameonly_net_accepted_geometry_changes_refused(self):
+        from kipy.board_types import Track, Via
+        from kipy.geometry import Vector2
+        from velatrace.write_safety import _echoes
+        for kind in (Track, Via):
+            sent = kind()
+            sent.id.value = "a"
+            sent.proto.net.code.value, sent.proto.net.name = 1, "VIN"
+            if kind is Track:
+                sent.start, sent.end, sent.width = Vector2.from_xy(0, 0), Vector2.from_xy(1_000_000, 0), 250_000
+            else:
+                sent.position, sent.diameter, sent.drill_diameter = Vector2.from_xy(0, 0), 600_000, 300_000
+            echo = kind(proto=type(sent.proto)())
+            echo.proto.CopyFrom(sent.proto)
+            echo.proto.net.ClearField("code")  # KiCad 10 names nets only.
+            echo.proto.parent.value = "board-uuid"
+            if kind is Via:
+                echo.proto.pad_stack.unconnected_layer_removal = 1  # server-filled default
+            with self.subTest(kind=kind.__name__):
+                self.assertTrue(_echoes(sent, echo))
+                moved = kind(proto=type(echo.proto)())
+                moved.proto.CopyFrom(echo.proto)
+                moved.proto.net.name = "GND"
+                self.assertFalse(_echoes(sent, moved))
+        track = Track(); track.width = 250_000
+        other = Track(); other.width = 300_000
+        self.assertFalse(_echoes(track, other))

@@ -87,7 +87,10 @@ def _serialize(node: list) -> str:
             return _serialize(value)
         if value and not isinstance(value, QuotedAtom) and not re.search(r'[\s()"\\]', value):
             return value
-        return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+        # Specctra has no escapes: Freerouting reads a backslash literally and ends at the next quote.
+        if '"' in value:
+            raise ValidationError("DSN text contains a quote Specctra cannot represent.")
+        return '"' + value + '"'
     if node == ["string_quote", '"']:
         return '(string_quote ")'
     return '(' + ' '.join(atom(item) for item in node) + ')'

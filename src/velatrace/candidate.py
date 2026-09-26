@@ -20,7 +20,7 @@ def read_board(path: Path):
     if path.stat().st_size > 32_000_000:
         raise ValidationError("Board exceeds the 32 MB safety limit.")
     text = path.read_text(encoding="utf-8")
-    root = parse(text)
+    root = parse(text, kicad=True)
     if root[0] != "kicad_pcb":
         raise ValidationError("Expected a saved KiCad PCB.")
     return text, root
@@ -73,7 +73,7 @@ def project_context(board_path: Path):
         if path.exists():
             if not path.is_file() or path.stat().st_size > 32_000_000:
                 raise ValidationError("Project context file is invalid or oversized.")
-            if suffix == ".kicad_sch" and children(parse(path.read_text(encoding="utf-8")), "sheet"):
+            if suffix == ".kicad_sch" and children(parse(path.read_text(encoding="utf-8"), kicad=True), "sheet"):
                 raise CapabilityError("Hierarchical schematic context is not supported by candidate validation yet.")
         paths.append(path)
     return data, {path: file_digest(path) if path.exists() else None for path in paths}
@@ -129,6 +129,20 @@ class CopperItem:
     drill: float = 0
 
 
+def board_nets(root) -> dict[str, str]:
+    """Net name -> the (net ...) body copper must use in this board's file format.
+
+    KiCad 9 declares (net <code> "name") at top level; KiCad 10 dropped net codes and
+    names nets inline, e.g. pads carry (net "VIN").
+    """
+    codes = {row[2]: row[1] for row in children(root, "net") if len(row) == 3}
+    if codes:
+        return codes
+    return {net[1]: '"' + net[1].replace("\\", "\\\\").replace('"', '\\"') + '"'
+            for fp in children(root, "footprint") for pad in children(fp, "pad")
+            for net in children(pad, "net") if len(net) == 2 and net[1]}
+
+
 def prepare_copper(plan: RoutePlan, dsn: DsnInput) -> tuple[CopperItem, ...]:
     _, root = read_board(dsn.ticket.board_path)
     if any(children(root, kind) for kind in ("segment", "arc", "via")):
@@ -138,7 +152,7 @@ def prepare_copper(plan: RoutePlan, dsn: DsnInput) -> tuple[CopperItem, ...]:
                      and row[2] in {"signal", "power", "mixed", "jumper"}}
     if actual_layers != set(dsn.layers):
         raise ValidationError("Saved board copper layers differ from DSN.")
-    nets = {row[2] for row in children(root, "net") if len(row) == 3}
+    nets = board_nets(root)
     catalog = set(trusted_via_catalog(dsn).values()) if plan.vias else set()
     output = []
     def q(value):
@@ -167,8 +181,8 @@ def prepare_copper(plan: RoutePlan, dsn: DsnInput) -> tuple[CopperItem, ...]:
 
 
 def candidate_text(source: str, items: tuple[CopperItem, ...]) -> str:
-    root = parse(source)
-    nets = {row[2]: int(row[1]) for row in children(root, "net")}
+    root = parse(source, kicad=True)
+    nets = board_nets(root)
     lines = []
     for item in items:
         if item.kind == "segment":

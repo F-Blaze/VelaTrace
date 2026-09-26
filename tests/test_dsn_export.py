@@ -5,21 +5,24 @@ import tempfile
 import time
 import unittest
 
+from velatrace.constraints import Constraint, Scope
 from velatrace.dsn import ExportTicket, accept_export
 from velatrace.errors import ValidationError
+from velatrace.freerouting import constrained_dsn
 from velatrace.models import Component, DesignSnapshot, Pin
 from velatrace.ses import parse_ses
+from velatrace.sexpr import parse
 
-# KiCad's specctra_export always writes (PN <value>), adds (lock_type position)
-# for locked footprints and renames repeated pad numbers "2", "2@1", ...
-DSN = '''(pcb board.dsn
+# KiCad's specctra_export names the pcb by its full output path (backslashes on
+# Windows, never escaped), writes (PN <value>) and renames repeated pads "2", "2@1".
+DSN = r'''(pcb "C:\Users\Me\My Boards\board.dsn"
  (parser (string_quote ") (space_in_quoted_tokens on) (host_cad KiCad) (host_version 9.0))
  (resolution um 10)
  (unit um)
  (structure (layer F.Cu (type signal)) (layer B.Cu (type signal)))
  (placement
   (component SOT223 (place U1 10000 -20000 front 0 (PN AMS1117)))
-  (component R0805 (place R1 30000 -20000 front 90 (lock_type position) (PN 10k))))
+  (component R0805 (place R1 30000 -20000 front 90 (PN 10k))))
  (library)
  (network
   (net VIN (pins U1-3 R1-1))
@@ -63,28 +66,38 @@ class AcceptExportTests(unittest.TestCase):
 
     def test_placement_and_connectivity_changes_still_refused(self):
         for text in (DSN.replace("(PN 10k)", "(PN 10k) (mirror x)"),
-                     DSN.replace("(lock_type position)", "(lock_type gate)"),
+                     DSN.replace("(PN 10k)", "(lock_type position)"),
                      DSN.replace("U1-2@1 ", ""),
                      DSN.replace("U1-2@1", "U1-2@1 U1-2@2"),
                      DSN.replace("(pins U1-1)", "(pins U1-1 R1-2)")):
             with self.subTest(text=text), self.assertRaises(ValidationError):
                 self.accept(text)
 
-    def test_freerouting_locked_and_rounded_placement(self):
-        # Freerouting writes integers at the SES resolution and marks fixed parts.
+    def test_freerouting_rounded_placement(self):
+        # Freerouting writes integers at the SES resolution and whole-degree rotation.
         ses = '''(session board (base_design board)
  (placement (resolution um 10)
-  (component R0805 (place R1 300000 -200000 front 90
-   (lock_type position))))
+  (component R0805 (place R1 300000 -200000 front 90)))
  (routes (resolution um 10) (network_out)))'''
         placements = {"R1": (30.00004, -20.0, "front", 90.0)}
         parse_ses(ses, expected_design="board.dsn", nets=set(), layers={"F.Cu"},
                   expected_placements=placements)
         for text in (ses.replace("300000", "300010"), ses.replace("front 90", "front 91"),
-                     ses.replace("position", "gate"), ses.replace("(place R1", "(place (R1)")):
+                     ses.replace("90)))", "90 (lock_type position))))"),
+                     ses.replace("(place R1", "(place (R1)")):
             with self.subTest(text=text), self.assertRaises(ValidationError):
                 parse_ses(text, expected_design="board.dsn", nets=set(), layers={"F.Cu"},
                           expected_placements=placements)
+
+
+class QuotingTests(unittest.TestCase):
+    def test_specctra_backslash_is_literal_and_kicad_escapes_decode(self):
+        self.assertEqual(parse(r'(pcb "C:\new\board.dsn")')[1], r"C:\new\board.dsn")
+        self.assertEqual(parse(r'(gr_text "a\nb \"q\" \\")', kicad=True)[1], 'a\nb "q" \\')
+        dsn = r'(pcb "C:\x\b.dsn" (unit um) (structure (rule (width 100))))'
+        out = constrained_dsn(dsn, (Constraint("w", Scope.SESSION, "trace-width", "all nets", .2),))
+        self.assertIn(r'"C:\x\b.dsn"', out)  # Freerouting would keep "\\" as two characters.
+        self.assertIn("(width 200)", out)
 
 
 if __name__ == "__main__":
