@@ -175,14 +175,23 @@ class SetupUsabilityTests(unittest.TestCase):
                 patch.object(ui.Freerouting, "check_startup", check_startup or (lambda router: None)):
             window = MainWindow(config_dir=self.config)
             window.show()
-            self.app.processEvents()
-            deadline = time.monotonic() + 5
-            while window.worker is not None and time.monotonic() < deadline:
-                self.app.processEvents()
-                time.sleep(.005)
-            self.app.processEvents()
-        self.addCleanup(window.close)
+            self.settle(window)
+        self.addCleanup(self.shut, window)
         return window
+
+    def settle(self, window):
+        self.app.processEvents()  # Let queued work (e.g. the Setup timer) start first.
+        deadline = time.monotonic() + 5
+        while window.worker is not None and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(.005)
+        self.app.processEvents()
+
+    def shut(self, window):
+        # A busy window refuses to close; a still-running worker aborts Qt at exit.
+        self.settle(window)
+        window.close()
+        self.assertTrue(window.executor.wait(5000))
 
     def test_audit_is_usable_and_routing_lock_is_explained_before_setup(self):
         window = self.launch(accept=False)
@@ -212,11 +221,7 @@ class SetupUsabilityTests(unittest.TestCase):
         window = self.launch(accept=True)
         window.command.setText("/autoroute")
         window.run_command()
-        deadline = time.monotonic() + 5
-        while window.worker is not None and time.monotonic() < deadline:
-            self.app.processEvents()
-            time.sleep(.005)
-        self.app.processEvents()
+        self.settle(window)
         self.assertTrue(window.placed.isEnabled())
         self.assertFalse(window.setup_hint.isVisibleTo(window))
 
