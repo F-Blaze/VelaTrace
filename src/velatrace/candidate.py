@@ -219,7 +219,7 @@ class SafeCandidateValidator:
                 raise ValidationError("Router violated the confirmed minimum trace width.")
         source, _ = read_board(dsn.ticket.board_path)
         content = candidate_text(source, items)
-        with tempfile.TemporaryDirectory(prefix="candidate-", dir=self.safety.directory) as folder:
+        with tempfile.TemporaryDirectory(prefix="candidate-", dir=self.safety.directory, ignore_cleanup_errors=True) as folder:
             target = Path(folder) / dsn.ticket.board_path.name
             target.write_text(content, encoding="utf-8")
             for path, digest in context.items():
