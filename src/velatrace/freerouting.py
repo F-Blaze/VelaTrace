@@ -17,7 +17,7 @@ from .constraints import Constraint
 from .dsn import DsnInput, dsn_scale
 from .errors import CapabilityError, ValidationError
 from .ses import number
-from .sexpr import QuotedAtom, one, parse
+from .sexpr import JoinedAtom, QuotedAtom, one, parse
 
 VERSION = "2.1.0"
 JAR_SHA256 = "2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def"
@@ -85,6 +85,8 @@ def _serialize(node: list) -> str:
     def atom(value):
         if isinstance(value, list):
             return _serialize(value)
+        if isinstance(value, JoinedAtom):
+            return value.raw  # e.g. "Pi-1"-3: re-quoting as one string would change the pin reference.
         if value and not isinstance(value, QuotedAtom) and not re.search(r'[\s()"\\]', value):
             return value
         # Specctra has no escapes: Freerouting reads a backslash literally and ends at the next quote.
