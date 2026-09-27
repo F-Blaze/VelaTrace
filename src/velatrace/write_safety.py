@@ -148,7 +148,7 @@ def _echoes(sent, got) -> bool:
     holds. Net codes are server-internal; the net name is compared.
     """
     from google.protobuf.json_format import MessageToDict
-    from kipy.board_types import BoardSegment, BoardText, Track, Via
+    from kipy.board_types import BoardShape, BoardText, Track, Via
     from kipy.proto.board.board_types_pb2 import DS_UNDEFINED, PSS_CIRCLE
 
     def geometry(item):
@@ -173,7 +173,9 @@ def _echoes(sent, got) -> bool:
                              drill.shape or DS_UNDEFINED, layers, stack.angle.value_degrees,
                              stack.secondary_drill, stack.tertiary_drill,
                              stack.front_post_machining, stack.back_post_machining)
-        if isinstance(item, BoardSegment):
+        # The SDK unwraps created graphics as BoardShape, even when the request
+        # used BoardSegment. Require the same concrete protobuf geometry.
+        if isinstance(item, BoardShape) and proto.shape.WhichOneof("geometry") == "segment":
             return common + (proto.shape.segment, proto.layer, proto.net.name)
         if isinstance(item, BoardText):
             return common + (proto.text.position, proto.text.attributes.angle.value_degrees,

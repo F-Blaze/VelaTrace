@@ -292,6 +292,23 @@ if __name__ == "__main__":
 
 class EchoTests(unittest.TestCase):
     """Shapes captured from a live KiCad 10.0.6 create_items echo."""
+    def test_sdk_unwrapped_preview_segment_keeps_exact_geometry(self):
+        from kipy.board import pack_any, unwrap
+        from kipy.board_types import BoardShape
+        from kipy.proto.board.board_types_pb2 import BL_User_9
+        from velatrace.write_safety import ItemFactory, _echoes
+        for points in (((0, 0), (1, 0)), ((1, -1), (2, -1)), ((2, -1), (2, -2))):
+            plan = RoutePlan("board", (Track("N", "F.Cu", .25, points),), ())
+            sent = ItemFactory.preview(plan, BL_User_9)[0]
+            echo = unwrap(pack_any(sent.proto))
+            self.assertIs(type(echo), BoardShape)
+            self.assertTrue(_echoes(sent, echo))
+            echo.proto.shape.segment.start.x_nm += 1
+            self.assertFalse(_echoes(sent, echo))
+            echo = unwrap(pack_any(sent.proto))
+            echo.proto.shape.circle.SetInParent()
+            self.assertFalse(_echoes(sent, echo))
+
     def test_zero_coordinates_and_via_geometry_must_match(self):
         from kipy.board_types import Track, Via
         from kipy.geometry import Vector2
