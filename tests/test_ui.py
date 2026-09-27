@@ -155,5 +155,101 @@ class UiTests(unittest.TestCase):
         canvas.close()
 
 
+@unittest.skipIf(QApplication is None, "Install the pinned Qt UI dependency")
+class SetupUsabilityTests(unittest.TestCase):
+    """Non-demo launches: what a real user sees before and after Setup."""
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.config = Path(self.temp.name)
+
+    def launch(self, accept, check_startup=None):
+        from PySide6.QtWidgets import QDialog
+        from velatrace import ui
+        code = QDialog.DialogCode.Accepted if accept else QDialog.DialogCode.Rejected
+        with patch.object(ui.SettingsDialog, "exec", lambda dialog: code), \
+                patch.object(ui.Freerouting, "check_startup", check_startup or (lambda router: None)):
+            window = MainWindow(config_dir=self.config)
+            window.show()
+            self.settle(window)
+        self.addCleanup(self.shut, window)
+        return window
+
+    def settle(self, window):
+        self.app.processEvents()  # Let queued work (e.g. the Setup timer) start first.
+        deadline = time.monotonic() + 5
+        while window.worker is not None and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(.005)
+        self.app.processEvents()
+
+    def shut(self, window):
+        # A busy window refuses to close; a still-running worker aborts Qt at exit.
+        self.settle(window)
+        window.close()
+        self.assertTrue(window.executor.wait(5000))
+
+    def test_audit_is_usable_and_routing_lock_is_explained_before_setup(self):
+        window = self.launch(accept=False)
+        self.assertTrue(window.description.isEnabled())
+        self.assertTrue(window.load_button.isEnabled())
+        self.assertFalse(window.placed.isEnabled())
+        self.assertTrue(window.setup_hint.isVisibleTo(window))
+        self.assertIn("Click Setup", window.setup_hint.text())
+        window.command.setText("/autoroute")
+        window.run_command()
+        self.app.processEvents()
+        # "Ready." after a mode change must not hide why routing is locked.
+        self.assertTrue(window.setup_hint.isVisibleTo(window))
+
+    def test_failed_setup_names_the_error_and_keeps_typed_values(self):
+        from velatrace.errors import CapabilityError
+        def missing(router):
+            raise CapabilityError("Freerouting is missing.")
+        window = self.launch(accept=True, check_startup=missing)
+        self.assertIn("Freerouting is missing.", window.setup_hint.text())
+        self.assertFalse(window.placed.isEnabled())
+        # Values from the dialog are kept for the retry, not reset to old defaults.
+        self.assertEqual(window.settings.name, "Gemini")
+        self.assertTrue((self.config / "settings.json").is_file())
+
+    def test_verified_setup_unlocks_routing(self):
+        window = self.launch(accept=True)
+        window.command.setText("/autoroute")
+        window.run_command()
+        self.settle(window)
+        self.assertTrue(window.placed.isEnabled())
+        self.assertFalse(window.setup_hint.isVisibleTo(window))
+
+    def test_settings_persist_without_the_api_key(self):
+        from velatrace.ui import Settings
+        path = self.config / "settings.json"
+        Settings(jar="C:/tools/fr.jar", model="gemini-x", key="secret-key", cap=7).save(path)
+        self.assertNotIn("secret-key", path.read_text(encoding="utf-8"))
+        loaded = Settings()
+        loaded.load(path)
+        self.assertEqual((loaded.jar, loaded.model, loaded.cap, loaded.key), ("C:/tools/fr.jar", "gemini-x", 7, ""))
+        path.write_text('{"cap": "not a number", "key": "x", "unknown": 1}', encoding="utf-8")
+        damaged = Settings()
+        damaged.load(path)
+        self.assertEqual((damaged.cap, damaged.key), (40, ""))
+        path.write_text("not json", encoding="utf-8")
+        Settings().load(path)  # A damaged file never blocks launch.
+
+    def test_disabled_inputs_look_disabled_and_window_is_on_screen(self):
+        window = self.launch(accept=False)
+        for selector in ("QCheckBox:disabled", "QLineEdit:disabled", "QTextEdit:disabled", "QPushButton#primary:disabled"):
+            self.assertIn(selector, window.styleSheet())
+        screen = QApplication.primaryScreen().availableGeometry()
+        if window.frameGeometry().width() <= screen.width():
+            self.assertLessEqual(window.frameGeometry().right(), screen.right())
+        self.assertGreaterEqual(window.frameGeometry().left(), screen.left())
+        self.assertIn("press Enter", window.command.placeholderText())
+
+
 if __name__ == "__main__":
     unittest.main()
