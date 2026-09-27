@@ -1,4 +1,5 @@
 """Non-destructive candidate construction and independent official CLI validation."""
+from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import json
@@ -198,6 +199,21 @@ def candidate_text(source: str, items: tuple[CopperItem, ...]) -> str:
     return source[:boundary] + "\n" + "\n".join(lines) + "\n" + source[boundary:]
 
 
+def route_issues(baseline, candidate) -> tuple[int, int]:
+    """(blocking, pre-existing warnings) for one DRC pass.
+
+    A route may not add any DRC issue, and pre-existing errors still block. Warnings
+    already on the unrouted board are reported only. Without issue identities every
+    candidate issue blocks."""
+    total = candidate.violations + candidate.schematic_parity
+    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
+        return total, 0
+    before, after = Counter(baseline.issues), Counter(candidate.issues)
+    carried = after & before  # Same type, severity and items: already on the unrouted board.
+    errors = sum(count for issue, count in carried.items() if issue[1] != "warning")
+    return (after - before).total() + errors, carried.total() - errors
+
+
 class SafeCandidateValidator:
     def __init__(self, safety, cli):
         self.safety, self.cli = safety, cli
@@ -225,22 +241,30 @@ class SafeCandidateValidator:
             for path, digest in context.items():
                 if digest is not None:
                     shutil.copy2(path, Path(folder) / path.name)
-            original = self.cli.drc(target)
-            extra = original
+            def drc_pair():
+                """DRC of the unrouted board and of the candidate, under identical rules."""
+                target.write_text(source, encoding="utf-8")
+                baseline = self.cli.drc(target)
+                target.write_text(content, encoding="utf-8")
+                return baseline, self.cli.drc(target)
+            passes = [drc_pair()]
             clearance = max((c.minimum_mm for c in constraints if c.kind == "clearance"), default=0)
             if clearance:
                 rules = target.with_suffix(".kicad_dru")
                 previous = rules.read_text(encoding="utf-8") if rules.exists() else "(version 1)\n"
                 # Second pass supplements, never replaces proof under the original rules.
                 rules.write_text(previous + f'\n(rule "VelaTrace confirmed clearance" (constraint clearance (min {clearance:.6f})))\n', encoding="utf-8")
-                extra = self.cli.drc(target)
+                passes.append(drc_pair())
         dsn.assert_unchanged()
         if not context_matches(context):
             raise ValidationError("Project/rules changed during DRC; route again.")
         self.safety.assert_matches(dsn)
-        report = ValidationReport(plan_digest(plan), max(original.violations + original.schematic_parity, extra.violations + extra.schematic_parity),
-                                  max(original.unconnected, extra.unconnected),
+        judged = [route_issues(baseline, candidate) for baseline, candidate in passes]
+        report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged),
+                                  max(candidate.unconnected for _, candidate in passes),
                                   enforced_constraint_ids=frozenset(c.id for c in constraints),
-                                  details="Official KiCad CLI candidate DRC; source board unchanged.", board_digest=dsn.ticket.board_digest)
+                                  details="Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                                  board_digest=dsn.ticket.board_digest,
+                                  preexisting_warnings=max(carried for _, carried in judged))
         self.evidence = (dsn.digest, plan_digest(plan), report, items, context)
         return report

@@ -47,9 +47,11 @@ class ValidationReport:
     enforced_constraint_ids: frozenset[str] = frozenset()
     details: str = ""
     board_digest: str = ""
+    preexisting_warnings: int = 0  # Present on the unrouted board too; reported, not blocking.
 
     def __post_init__(self):
-        for value in (self.drc_violations, self.unconnected_count, self.routed_connections, self.total_connections):
+        for value in (self.drc_violations, self.unconnected_count, self.routed_connections, self.total_connections,
+                      self.preexisting_warnings):
             if value is not None and (type(value) is not int or value < 0):
                 raise ValidationError("Routing validation counts must be non-negative integers or unknown.")
         if self.routed_connections is not None and self.total_connections is not None and self.routed_connections > self.total_connections:
@@ -190,6 +192,9 @@ class RoutingSession:
         completion = ("All connections verified" if self.report.unconnected_count == 0 else "Completion unknown") if percent is None else f"{percent:.1f}% routed"
         drc = "unknown" if self.report.drc_violations is None else str(self.report.drc_violations)
         text = f"{self.plan.trace_count} traces; {len(self.plan.vias)} vias; layers: {', '.join(self.plan.layers_used)}; DRC violations: {drc}; {completion}."
+        if self.report.preexisting_warnings:
+            text += (f" {self.report.preexisting_warnings} pre-existing DRC warning(s) on the unrouted board"
+                     " were not caused by this route and do not block approval; review them in KiCad.")
         if self.stage == RoutingStage.SHORTFALL:
             text += (" Routing stopped: completion verification is unavailable." if self.report.unconnected_count is None
                      else " Routing stopped: needs more layers or relaxed clearance.")
