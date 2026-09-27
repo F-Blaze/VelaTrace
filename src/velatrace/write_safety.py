@@ -243,10 +243,16 @@ class BoardSafety:
             os.fsync(stream.fileno())
         live = folder / "live.kicad_pcb"
         try:
-            self.board.save_as(str(live), overwrite=False, include_project=True)
+            # Never ask KiCad to save a copy (SaveCopyOfDocument): it rewrites the real
+            # project file on every call, and KiCad 10.0.4's project manager crashed in
+            # _eeschema.dll after repeated copies. The in-memory board text writes nothing.
+            live.write_text(self.board.get_as_string(), encoding="utf-8")
             read_board(live)
         except Exception as exc:
             raise CapabilityError("Cannot create the live board backup; no board mutation was attempted.") from exc
+        project = self.path.with_suffix(".kicad_pro")
+        if project.is_file():
+            shutil.copyfile(project, folder / "saved.kicad_pro")
         if file_digest(saved) != file_digest(self.path):
             raise ValidationError("Saved board changed during backup; operation refused.")
         result = Backup(folder, saved, live)
@@ -260,16 +266,9 @@ class BoardSafety:
         _, live = read_board(backup.live)
         if canonical(saved, frozenset(self.owned)) != canonical(live, frozenset(self.owned)):
             raise ValidationError("Live board has unsaved changes. Save it, then export and validate again.")
-        project = self.path.with_suffix(".kicad_pro")
-        if project.exists():
-            live_project = backup.live.with_suffix(".kicad_pro")
-            if not live_project.is_file():
-                raise CapabilityError("KiCad did not include a live project backup; rule consistency cannot be verified.")
-            try:
-                if json.loads(project.read_text(encoding="utf-8")) != json.loads(live_project.read_text(encoding="utf-8")):
-                    raise ValidationError("Live project rules differ from disk; save the project and validate again.")
-            except (ValueError, OSError) as exc:
-                raise ValidationError("Cannot verify the live project rule backup.") from exc
+        # Unsaved Board Setup changes cannot be read without KiCad rewriting the project
+        # (see backup). Validation uses the saved project, and its digest is re-checked
+        # around every commit via the candidate context.
         # Do not delete an owned preview that the user changed after creation.
         self._owned_items()
 
