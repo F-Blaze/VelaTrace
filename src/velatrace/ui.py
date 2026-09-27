@@ -45,6 +45,61 @@ BUCKET_COLORS = {"critical": "#F87171", "important": "#FBBF24",
                  "nice-to-have": "#60A5FA", "redundant": "#A78BFA"}
 
 
+def theme_tokens(dark: bool) -> dict:
+    """Colours for the frosted-glass look: translucent cards over a painted gradient.
+
+    Real Windows 11 Acrylic was measured and rejected: Windows removes it from
+    stay-on-top windows (VelaTrace stays above KiCad), and dark Acrylic renders
+    as near-opaque grey. Popups and dialogs stay solid for legibility."""
+    if dark:
+        tokens = dict(fg="#F5F3FF", muted="#B7B1CF", solid="#1C1930", rim="rgba(255,255,255,40)",
+                      card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)",
+                      field="rgba(255,255,255,14)",
+                      frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #251F45, stop:1 #120F22)")
+    else:
+        tokens = dict(fg="#1E1933", muted="#5E5874", solid="#F6F3FF", rim="rgba(255,255,255,230)",
+                      card="rgba(255,255,255,150)", card_hover="rgba(255,255,255,200)",
+                      field="rgba(255,255,255,170)",
+                      frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #F7F4FF, stop:1 #E4DDFB)")
+    return tokens
+
+
+def glass_stylesheet(t: dict) -> str:
+    gloss = ("qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #B79CFF, stop:0.48 #8B5CF6, "
+             "stop:0.52 #7A48EE, stop:1 #6A36E0)")
+    return f"""
+        QMainWindow {{background:{t['solid']}}}
+        QWidget {{background:transparent; color:{t['fg']}; font-family:'Segoe UI Variable Text','Segoe UI'; font-size:12px}}
+        QWidget#glassRoot {{background:{t['frost']}}}
+        QDialog, QMessageBox {{background:{t['frost']}}}
+        QLabel#muted {{color:{t['muted']}}}
+        QLabel#title {{font-size:26px; font-weight:700; color:{t['fg']}}}
+        QLabel#mode {{color:white; font-weight:700; padding:2px 10px; border-radius:9px; background:{gloss}}}
+        QFrame#card {{background:{t['card']}; border:1px solid {t['rim']}; border-radius:14px}}
+        QFrame#card:hover {{background:{t['card_hover']}}}
+        QFrame#card QLabel {{background:transparent}}
+        QPushButton {{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 {t['card_hover']}, stop:1 {t['card']});
+                      border:1px solid {t['rim']}; border-radius:10px; padding:8px 12px}}
+        QPushButton:hover {{border-color:{ACCENT}}}
+        QPushButton:pressed {{background:{t['card']}}}
+        QPushButton:disabled {{color:{t['muted']}}}
+        QPushButton#primary {{background:{gloss}; color:white; border:1px solid rgba(255,255,255,90); font-weight:600}}
+        QPushButton#primary:hover {{border-color:white}}
+        QPushButton#primary:disabled {{background:{t['card']}; color:{t['muted']}; border:1px solid {t['rim']}}}
+        QPushButton#textButton {{border:0; color:{ACCENT}; padding:4px 0px; background:transparent}}
+        QLineEdit,QTextEdit,QComboBox,QSpinBox,QDoubleSpinBox,QListWidget {{background:{t['field']};
+                      border:1px solid {t['rim']}; border-radius:9px; padding:6px}}
+        QLineEdit:focus,QTextEdit:focus,QComboBox:focus {{border-color:{ACCENT}}}
+        QComboBox QAbstractItemView, QToolTip {{background:{t['solid']}; color:{t['fg']}; border:1px solid {ACCENT}}}
+        QScrollArea {{border:0}} QCheckBox {{spacing:7px}}
+        QScrollBar:vertical {{width:8px; background:transparent}}
+        QScrollBar::handle:vertical {{background:{t['rim']}; border-radius:4px; min-height:30px}}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{height:0}}
+        QLineEdit:disabled,QTextEdit:disabled,QComboBox:disabled,QSpinBox:disabled,QDoubleSpinBox:disabled,QListWidget:disabled {{color:{t['muted']}; background:transparent}}
+        QCheckBox:disabled,QLabel:disabled {{color:{t['muted']}}}
+    """
+
+
 def label(text="", *, muted=False):
     widget = QLabel(text)
     widget.setTextFormat(Qt.TextFormat.PlainText)
@@ -372,6 +427,7 @@ class MainWindow(QMainWindow):
         screen = QApplication.primaryScreen().availableGeometry()
         self.resize(630, min(900, screen.height() - 80))
         self._positioned = False
+        self._dark = True
         self.demo = demo
         self.config_dir = Path(config_dir or QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation))
         self.constraints = ConstraintStore(self.config_dir / "constraints.json")
@@ -408,12 +464,13 @@ class MainWindow(QMainWindow):
 
     def build_ui(self):
         central = QWidget()
+        central.setObjectName("glassRoot")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(12)
         header = QHBoxLayout()
         title = label("VelaTrace")
-        title.setStyleSheet("font-size:25px; font-weight:700")
+        title.setObjectName("title")
         header.addWidget(title)
         self.mode_label = label("Audit")
         self.mode_label.setObjectName("mode")
@@ -541,29 +598,14 @@ class MainWindow(QMainWindow):
     def apply_theme(self, choice):
         if choice == "KiCad":
             choice = (saved_kicad_theme(*self.reader.version[:2]) if self.reader else None) or "System"
-        dark = choice == "Dark" or (choice == "System" and QApplication.palette().window().color().lightness() < 128)
-        bg, card, fg, muted, border = (("#171820", "#242530", "#F4F3FA", "#ACADBD", "#393A48") if dark else
-                                      ("#F5F4F8", "#FFFFFF", "#252331", "#686575", "#E1DFE9"))
+        self._dark = choice == "Dark" or (choice == "System" and QApplication.palette().window().color().lightness() < 128)
+        tokens = theme_tokens(self._dark)
         palette = self.palette()
-        for role, value in ((QPalette.ColorRole.Window, bg), (QPalette.ColorRole.Base, card),
-                            (QPalette.ColorRole.Text, fg), (QPalette.ColorRole.WindowText, fg)):
+        for role, value in ((QPalette.ColorRole.Window, tokens["solid"]), (QPalette.ColorRole.Base, tokens["solid"]),
+                            (QPalette.ColorRole.Text, tokens["fg"]), (QPalette.ColorRole.WindowText, tokens["fg"])):
             palette.setColor(role, QColor(value))
         self.setPalette(palette)
-        self.setStyleSheet(f"""
-            QMainWindow, QDialog, QWidget {{background:{bg}; color:{fg}; font-family:'Segoe UI'; font-size:12px}}
-            QLabel#muted {{color:{muted}}} QLabel#mode {{color:{ACCENT}; font-weight:700}}
-            QFrame#card {{background:{card}; border:1px solid {border}; border-radius:9px}}
-            QFrame#card QLabel {{background:transparent}}
-            QPushButton {{border:1px solid {border}; border-radius:6px; padding:8px 10px; background:{card}}}
-            QPushButton:hover {{border-color:{ACCENT}}} QPushButton:disabled {{color:{muted}}}
-            QPushButton#primary {{background:{ACCENT}; color:white; border:0; font-weight:600}}
-            QPushButton#primary:disabled {{background:{border}; color:{muted}}}
-            QPushButton#textButton {{border:0; color:{ACCENT}; padding:4px 0px; background:transparent}}
-            QLineEdit,QTextEdit,QComboBox,QSpinBox,QDoubleSpinBox,QListWidget {{background:{card}; border:1px solid {border}; border-radius:5px; padding:6px}}
-            QScrollArea {{border:0}} QCheckBox {{spacing:7px}}
-            QLineEdit:disabled,QTextEdit:disabled,QComboBox:disabled,QSpinBox:disabled,QDoubleSpinBox:disabled,QListWidget:disabled {{color:{muted}; background:{bg}}}
-            QCheckBox:disabled,QLabel:disabled {{color:{muted}}}
-        """)
+        self.setStyleSheet(glass_stylesheet(tokens))
 
     def refresh_badge(self):
         self.badge.setText(f"● {len(self.constraints.items)} constraints")
