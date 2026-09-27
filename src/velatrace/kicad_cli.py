@@ -127,7 +127,7 @@ class KiCadCli:
         schematic = Path(schematic).resolve(strict=True)
         if schematic.suffix.lower() != ".kicad_sch":
             raise ValidationError("Select a KiCad schematic file.")
-        with tempfile.TemporaryDirectory(prefix="velatrace-netlist-") as directory:
+        with tempfile.TemporaryDirectory(prefix="velatrace-netlist-", ignore_cleanup_errors=True) as directory:
             output = Path(directory) / "netlist.xml"
             self._run(["sch", "export", "netlist", "--format", "kicadxml", "--output",
                        str(output), str(schematic)], schematic.parent)
@@ -149,7 +149,7 @@ class KiCadCli:
             # that the saved context is exportable before requesting that check.
             self.schematic_snapshot(schematic, saved_confirmed=True)
             parity = ["--schematic-parity"]
-        with tempfile.TemporaryDirectory(prefix="velatrace-drc-") as directory:
+        with tempfile.TemporaryDirectory(prefix="velatrace-drc-", ignore_cleanup_errors=True) as directory:
             output = Path(directory) / "drc.json"
             status = self._run(["pcb", "drc", "--format", "json", "--severity-all",
                                "--all-track-errors", "--exit-code-violations", "--output",

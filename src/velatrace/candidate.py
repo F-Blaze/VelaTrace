@@ -48,6 +48,11 @@ def canonical(root, excluded_ids=frozenset()):
             ids = children(row, "uuid")
             if ids and len(ids[0]) == 2 and ids[0][1] in excluded_ids:
                 continue
+            if row[0] == "footprint":
+                # KiCad's in-memory board text stamps every footprint with file-format
+                # metadata that the saved file carries only once at the top.
+                row = [item for item in row if not (isinstance(item, list) and item
+                       and item[0] in {"version", "generator", "generator_version"})]
         rows.append(row)
     # KiCad may reorder top-level items when serializing. Their full contents remain compared.
     return tuple(sorted((visit(row) for row in rows), key=repr))
@@ -230,7 +235,7 @@ class SafeCandidateValidator:
                 raise ValidationError("Router violated the confirmed minimum trace width.")
         source, _ = read_board(dsn.ticket.board_path)
         content = candidate_text(source, items)
-        with tempfile.TemporaryDirectory(prefix="candidate-", dir=self.safety.directory) as folder:
+        with tempfile.TemporaryDirectory(prefix="candidate-", dir=self.safety.directory, ignore_cleanup_errors=True) as folder:
             target = Path(folder) / dsn.ticket.board_path.name
             target.write_text(content, encoding="utf-8")
             for path, digest in context.items():

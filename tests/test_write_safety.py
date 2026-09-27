@@ -36,12 +36,15 @@ class FakeBoard:
         self.events = []
         self.fail = ""
 
-    def save_as(self, filename, **options):
+    def get_as_string(self):
         self.events.append("backup")
         if self.fail == "backup":
             raise OSError("disk full")
-        Path(filename).write_text(self.source, encoding="utf-8")
-        Path(filename).with_suffix(".kicad_pro").write_bytes(self.path.with_suffix(".kicad_pro").read_bytes())
+        return self.source
+
+    def save_as(self, filename, **options):
+        # KiCad rewrites the real project on every copy; it crashed a live project manager.
+        raise AssertionError("VelaTrace must never ask KiCad to save a copy of the board")
 
     def begin_commit(self):
         self.events.append("begin")
@@ -277,15 +280,22 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(self.board.items, {})
         self.assertNotIn("push", self.board.events)
 
-    def test_unsaved_live_project_changes_refuse_before_begin(self):
-        save = self.board.save_as
-        def changed_project(filename, **kwargs):
-            save(filename, **kwargs)
-            Path(filename).with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {"different": True}}}))
-        self.board.save_as = changed_project
-        with self.assertRaises(ValidationError):
-            self.mutate([Item("copper")])
-        self.assertNotIn("begin", self.board.events)
+    def test_live_board_text_metadata_is_not_a_design_change(self):
+        # KiCad's in-memory board text stamps each footprint with format metadata.
+        saved = '(kicad_pcb (version 20260206) (footprint "R" (layer "F.Cu") (uuid "u") (at 1 2)))'
+        live = ('(kicad_pcb (version 20260206) (footprint "R" (version 20260206) (generator "pcbnew") '
+                '(generator_version "10.0") (layer "F.Cu") (uuid "u") (at 1 2)))')
+        self.assertEqual(canonical(parse(saved, kicad=True)), canonical(parse(live, kicad=True)))
+        moved = live.replace("(at 1 2)", "(at 1 3)")
+        self.assertNotEqual(canonical(parse(saved, kicad=True)), canonical(parse(moved, kicad=True)))
+
+    def test_backup_reads_live_board_without_touching_the_project(self):
+        project = self.path.with_suffix(".kicad_pro")
+        before = (project.read_bytes(), project.stat().st_mtime_ns)
+        backup = self.safety.backup()
+        self.assertEqual(backup.live.read_text(encoding="utf-8"), BOARD)
+        self.assertEqual((backup.directory / "saved.kicad_pro").read_bytes(), before[0])
+        self.assertEqual((project.read_bytes(), project.stat().st_mtime_ns), before)
 
 
 if __name__ == "__main__":
