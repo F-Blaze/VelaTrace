@@ -7,12 +7,11 @@ from collections import Counter
 from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path, PureWindowsPath
-import re
 import time
 
 from .errors import ValidationError
 from .models import DesignSnapshot
-from .ses import coordinate, number, resolution
+from .ses import MAX_PLACEMENT_RESOLUTION_MM, coordinate, number, resolution
 from .sexpr import children, one, parse
 
 
@@ -43,6 +42,7 @@ class DsnInput:
     layers: frozenset[str]
     base_design: str = ""
     placements: dict[str, tuple[float, float, str, float]] = field(default_factory=dict)
+    placement_resolution_mm: float | None = None
 
     def assert_unchanged(self):
         if file_digest(self.path) != self.digest or file_digest(self.ticket.board_path) != self.ticket.board_digest:
@@ -90,7 +90,9 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
     # KiCad names the pcb by its full export path; PureWindowsPath splits on / and \.
     if PureWindowsPath(root[1]).stem != ticket.board_path.stem:
         raise ValidationError("DSN board name does not match the current board.")
-    resolution(one(root, "resolution"))
+    placement_resolution_mm = resolution(one(root, "resolution"))
+    if placement_resolution_mm > MAX_PLACEMENT_RESOLUTION_MM:
+        raise ValidationError("DSN placement resolution is coarser than the supported KiCad precision.")
     scale = dsn_scale(root)
     structure = one(root, "structure")
     layer_rows = children(structure, "layer")
@@ -106,12 +108,26 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
         if any(not isinstance(pin, str) for pin in pins) or len(pins) != len(set(pins)):
             raise ValidationError("Malformed DSN pins.")
         actual_nets[net[1]] = set(pins)
-    # KiCad exports a repeated pad number as "2", "2@1", "2@2"… (SOT-223 tabs,
-    # connector shields). Compare pin multiplicity per net, not a deduplicated set.
-    expected_nets = {net: Counter(f"{ref}-{pin}" for ref, pin in nodes)
-                     for net, nodes in snapshot.connectivity().items()}
-    if {net: Counter(re.sub(r"@\d+$", "", pin) for pin in pins)
-            for net, pins in actual_nets.items()} != expected_nets:
+    # KiCad preserves the first literal pad number, then appends @1, @2, ...
+    # to repeated occurrences in footprint pad order. Never strip a suffix:
+    # a literal pad "2@1" is distinct from a generated alias for pad "2".
+    expected_nets = {}
+    identifiers = set()
+    for component in snapshot.components:
+        occurrences = Counter()
+        for pin in component.pins:
+            occurrence = occurrences[pin.number]
+            occurrences[pin.number] += 1
+            # Empty pad numbers receive @1 even on their first occurrence.
+            alias = (pin.number if occurrence == 0 and pin.number else
+                     f"{pin.number}@{occurrence if pin.number else occurrence + 1}")
+            identifier = f"{component.reference}-{alias}"
+            if identifier in identifiers:
+                raise ValidationError("Ambiguous DSN pad aliases collide with literal board identifiers.")
+            identifiers.add(identifier)
+            if pin.net:
+                expected_nets.setdefault(pin.net, set()).add(identifier)
+    if actual_nets != expected_nets:
         raise ValidationError("DSN pin-to-net connectivity differs from the board.")
     placements = {}
     for component in children(one(root, "placement"), "component"):
@@ -129,6 +145,7 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
         position = (placements[item.reference][0], -placements[item.reference][1])
         if item.position_mm is None or any(abs(a-b) > .00001 for a,b in zip(position, item.position_mm)):
             raise ValidationError("DSN footprint placement differs from the board.")
-    result = DsnInput(path, digest, ticket, frozenset(actual_nets), layers, root[1], placements)
+    result = DsnInput(path, digest, ticket, frozenset(actual_nets), layers, root[1], placements,
+                      placement_resolution_mm)
     result.assert_unchanged()
     return result

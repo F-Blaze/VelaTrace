@@ -4,12 +4,24 @@ SES coordinates use the Specctra Y-up convention. Convert to KiCad Y-down only
 in the board adapter. A syntactically valid plan does not imply DRC or completion.
 """
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_FLOOR
 import math
 from pathlib import PureWindowsPath
 from typing import Mapping
 
 from .errors import ValidationError
 from .sexpr import children, one, parse
+
+
+# KiCad's supported DSN exporter declares (resolution um 10). Never let an
+# untrusted SES declaration enlarge the permitted placement quantization.
+MAX_PLACEMENT_RESOLUTION_MM = .0001
+
+
+def _rounded(value: float, scale: float = 1) -> int:
+    """Freerouting's Java Math.round: ties go towards positive infinity."""
+    ratio = Decimal(str(value)) / Decimal(str(scale))
+    return int((ratio + Decimal("0.5")).to_integral_value(rounding=ROUND_FLOOR))
 
 
 @dataclass(frozen=True)
@@ -94,7 +106,8 @@ def _sections(node: list, allowed: set[str], offset: int = 1):
 
 def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[str],
               via_catalog: Mapping[str, ViaSpec] | None = None,
-              expected_placements: Mapping[str, tuple[float, float, str, float]] | None = None) -> RoutePlan:
+              expected_placements: Mapping[str, tuple[float, float, str, float]] | None = None,
+              expected_placement_resolution_mm: float | None = None) -> RoutePlan:
     root = parse(text)
     if root[0] != "session" or len(root) < 3 or not isinstance(root[1], str):
         raise ValidationError("Expected a Specctra session root.")
@@ -112,6 +125,12 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
             raise ValidationError("SES placement requires verified original DSN placements.")
         _sections(placement, {"resolution", "component"})
         place_scale = resolution(one(placement, "resolution"))
+        if (type(expected_placement_resolution_mm) not in {int, float}
+                or not math.isfinite(expected_placement_resolution_mm)
+                or not 0 < expected_placement_resolution_mm <= MAX_PLACEMENT_RESOLUTION_MM
+                or not math.isclose(place_scale, expected_placement_resolution_mm,
+                                    rel_tol=1e-12, abs_tol=0)):
+            raise ValidationError("SES placement resolution differs from the verified DSN precision.")
         seen_places = set()
         for component in children(placement, "component"):
             if len(component) < 2 or not isinstance(component[1], str):
@@ -123,11 +142,13 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                     raise ValidationError("Unknown, duplicate or unsupported SES placement.")
                 seen_places.add(place[1])
                 x, y, side, angle = expected_placements[place[1]]
-                # Freerouting rounds coordinates to the SES resolution and rotation to whole degrees.
-                tolerance = place_scale / 2 + 1e-9
-                if (abs(coordinate(place[2], place_scale)-x) > tolerance or
-                        abs(coordinate(place[3], place_scale)-y) > tolerance or place[4] != side or
-                        abs(number(place[5])-angle) > .5 + 1e-9):
+                # Match the pinned router's exact integer serialization, not a
+                # tolerance interval that also admits real moves/rotations.
+                px, py, rotation = (number(place[i]) for i in (2, 3, 5))
+                if (px != _rounded(x, place_scale) or py != _rounded(y, place_scale)
+                        or place[4] != side or not rotation.is_integer()
+                        or not 0 <= rotation <= 360
+                        or int(rotation) % 360 != _rounded(angle % 360) % 360):
                     raise ValidationError("SES moved, rotated or flipped a footprint; entire route refused.")
         if seen_places != set(expected_placements):
             raise ValidationError("SES placement reference list changed.")

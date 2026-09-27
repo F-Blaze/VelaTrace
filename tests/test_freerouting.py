@@ -76,7 +76,8 @@ class FreeroutingTests(unittest.TestCase):
         return parse_ses(text or (FIXTURES / "freerouting-2.1.0.ses").read_text(),
                          expected_design="simple-test.dsn", nets={"N"}, layers={"F.Cu", "B.Cu"},
                          via_catalog={"Via[0-1]_600:300_um": ViaSpec(.6, .3, ("F.Cu", "B.Cu"))},
-                         expected_placements={"J1": (5, 10, "front", 0), "J2": (25, 10, "front", 0)})
+                         expected_placements={"J1": (5, 10, "front", 0), "J2": (25, 10, "front", 0)},
+                         expected_placement_resolution_mm=.0001)
 
     def test_published_router_actual_ses_all_metadata_and_width(self):
         plan = self.parse_actual()

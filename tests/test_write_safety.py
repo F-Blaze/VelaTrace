@@ -173,6 +173,34 @@ class SafetyTests(unittest.TestCase):
                 self.mutate([Item("copper")])
         self.assertTrue(self.safety.blocked)
 
+    def test_postcommit_read_failure_blocks_retry_and_preserves_recovery_intent(self):
+        self.mutate([Item("preview")], temporary=True)
+        self.board.events.clear()
+        get_shapes = self.board.get_shapes
+        def fail_after_commit():
+            if "push" in self.board.events:
+                raise TimeoutError("IPC read failed after commit")
+            return get_shapes()
+        self.board.get_shapes = fail_after_commit
+        with self.assertRaises(UncertainWriteError):
+            self.mutate([Item("copper")])
+        self.assertTrue(self.safety.blocked)
+        self.assertEqual(set(self.board.items), {"copper"})
+        self.assertTrue((self.safety.last_backup.directory / "intent.json").is_file())
+        self.assertFalse((self.safety.last_backup.directory / "completion.json").exists())
+        events = list(self.board.events)
+        with self.assertRaises(UncertainWriteError):
+            self.mutate([Item("retry")])
+        self.assertEqual(self.board.events, events)
+
+    def test_creation_without_removals_needs_no_postcommit_read(self):
+        def fail_read():
+            raise TimeoutError("No cleanup read should be needed")
+        self.board.get_shapes = fail_read
+        self.mutate([Item("preview")], temporary=True)
+        self.assertEqual(set(self.safety.owned), {"preview"})
+        self.assertTrue((self.safety.last_backup.directory / "completion.json").is_file())
+
     def test_candidate_preserves_original_geometry_and_quantizes_once(self):
         items = prepare_copper(self.plan, self.dsn)
         output = candidate_text(BOARD, items)
@@ -264,6 +292,55 @@ if __name__ == "__main__":
 
 class EchoTests(unittest.TestCase):
     """Shapes captured from a live KiCad 10.0.6 create_items echo."""
+    def test_zero_coordinates_and_via_geometry_must_match(self):
+        from kipy.board_types import Track, Via
+        from kipy.geometry import Vector2
+        from kipy.proto.board.board_types_pb2 import BL_B_Cu, PSS_RECTANGLE
+        from velatrace.write_safety import _echoes
+        for kind in (Track, Via):
+            sent = kind()
+            sent.id.value = "a"
+            sent.proto.net.name = "VIN"
+            sent.locked = False
+            if kind is Track:
+                sent.start, sent.end, sent.width = Vector2.from_xy(0, 0), Vector2.from_xy(1_000_000, 0), 250_000
+                changes = (
+                    lambda item: setattr(item, "start", Vector2.from_xy(9_000_000, 7_000_000)),
+                    lambda item: setattr(item, "end", Vector2.from_xy(1_000_000, 8_000_000)),
+                    lambda item: setattr(item, "layer", BL_B_Cu),
+                )
+            else:
+                sent.position, sent.diameter, sent.drill_diameter = Vector2.from_xy(0, 0), 600_000, 300_000
+                changes = (
+                    lambda item: setattr(item, "position", Vector2.from_xy(9_000_000, 7_000_000)),
+                    lambda item: setattr(item, "diameter", 700_000),
+                    lambda item: setattr(item, "drill_diameter", 400_000),
+                    lambda item: setattr(item.proto.pad_stack.drill, "start_layer", BL_B_Cu),
+                    lambda item: setattr(item.proto.pad_stack.copper_layers[0].offset, "x_nm", 1),
+                    lambda item: setattr(item.proto.pad_stack.copper_layers[0], "shape", PSS_RECTANGLE),
+                )
+            for change in (*changes, lambda item: setattr(item, "locked", True)):
+                echo = kind(proto=type(sent.proto)())
+                echo.proto.CopyFrom(sent.proto)
+                self.assertTrue(_echoes(sent, echo))
+                change(echo)
+                with self.subTest(kind=kind.__name__, echo=str(echo.proto)):
+                    self.assertFalse(_echoes(sent, echo))
+
+    def test_zero_coordinates_in_preview_and_annotation_must_match(self):
+        from kipy.geometry import Vector2
+        from kipy.proto.board.board_types_pb2 import BL_User_9
+        from velatrace.write_safety import ItemFactory, _echoes
+        plan = RoutePlan("board", (Track("N", "F.Cu", .25, ((0, 0), (1, 0))),), ())
+        segment = ItemFactory.preview(plan, BL_User_9)[0]
+        text = ItemFactory.annotations([("annotation", 0, 0)], BL_User_9)[0]
+        for sent, field in ((segment, "start"), (text, "position")):
+            proto = type(sent.proto)()
+            proto.CopyFrom(sent.proto)
+            echo = type(sent)(proto=proto)
+            setattr(echo, field, Vector2.from_xy(1, 0))
+            self.assertFalse(_echoes(sent, echo))
+
     def test_server_defaults_and_nameonly_net_accepted_geometry_changes_refused(self):
         from kipy.board_types import Track, Via
         from kipy.geometry import Vector2

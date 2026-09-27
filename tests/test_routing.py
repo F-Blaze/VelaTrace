@@ -1,6 +1,8 @@
 from pathlib import Path
+from dataclasses import replace
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from velatrace.constraints import ConstraintStore, Scope, propose_constraint
 from velatrace.dsn import DsnInput, ExportTicket, file_digest
@@ -49,6 +51,22 @@ class RoutingTests(unittest.TestCase):
         self.store = ConstraintStore(self.root / "constraints.json")
         self.validator = FakeValidator()
         self.session = RoutingSession(self.store, FakeRouter(), self.validator)
+
+    def test_session_binds_ses_placement_precision_before_validation(self):
+        self.dsn = replace(self.dsn, placements={"U1": (10.4, 20, "front", 0)},
+                           placement_resolution_mm=.0001)
+        placement = "(placement (resolution um 10) (component pkg (place U1 104000 200000 front 0)))"
+        ses = SES.replace("(routes", placement + " (routes", 1)
+        self.ready()
+        with patch.object(self.session.router, "route", return_value=ses):
+            self.session.run()
+        self.session.reject("Verify refusal of changed precision")
+        self.session.confirm_constraints(self.store.fingerprint)
+        coarse = ses.replace("(resolution um 10)", "(resolution mm 1)", 1)
+        with patch.object(self.session.router, "route", return_value=coarse), \
+                patch.object(self.validator, "validate") as validate, self.assertRaises(ValidationError):
+            self.session.run()
+        validate.assert_not_called()
 
     def ready(self):
         self.session.command("/autoroute")

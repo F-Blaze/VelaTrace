@@ -87,8 +87,13 @@ class LocalChatTokenizer:
             raise CapabilityError("This tokenizer has no verified chat template.")
 
     def count(self, prompt: Prompt) -> int:
-        return len(self.tokenizer.apply_chat_template(
-            prompt.messages(), tokenize=True, add_generation_prompt=True))
+        # Transformers 5 defaults to a BatchEncoding mapping; its length is the
+        # number of fields, not tokens. Request the flat token IDs explicitly.
+        ids = self.tokenizer.apply_chat_template(
+            prompt.messages(), tokenize=True, add_generation_prompt=True, return_dict=False)
+        if not isinstance(ids, list) or any(type(value) is not int for value in ids):
+            raise CapabilityError("Tokenizer did not return a flat list of input token IDs.")
+        return len(ids)
 
     def count_output(self, text: str) -> int:
         return len(self.tokenizer.encode(text, add_special_tokens=False))

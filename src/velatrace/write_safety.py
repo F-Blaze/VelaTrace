@@ -148,6 +148,41 @@ def _echoes(sent, got) -> bool:
     holds. Net codes are server-internal; the net name is compared.
     """
     from google.protobuf.json_format import MessageToDict
+    from kipy.board_types import BoardSegment, BoardText, Track, Via
+    from kipy.proto.board.board_types_pb2 import DS_UNDEFINED, PSS_CIRCLE
+
+    def geometry(item):
+        proto = item.proto
+        common = (proto.locked,)
+        if isinstance(item, Track):
+            return common + (proto.start, proto.end, proto.width, proto.layer, proto.net.name)
+        if isinstance(item, Via):
+            stack = proto.pad_stack
+            # KiCad supplies these two shape defaults for the factory's circular
+            # through-vias. All coordinates, dimensions and other shape values
+            # remain exact, including fields whose scalar value is zero.
+            layers = tuple((row.layer, row.size, row.shape or PSS_CIRCLE,
+                            row.custom_anchor_shape or PSS_CIRCLE,
+                            row.offset.x_nm, row.offset.y_nm, row.trapezoid_delta,
+                            row.corner_rounding_ratio, row.chamfer_ratio,
+                            row.chamfered_corners, tuple(row.custom_shapes))
+                           for row in stack.copper_layers)
+            drill = stack.drill
+            return common + (proto.position, proto.type, proto.net.name, stack.type,
+                             drill.start_layer, drill.end_layer, drill.diameter,
+                             drill.shape or DS_UNDEFINED, layers, stack.angle.value_degrees,
+                             stack.secondary_drill, stack.tertiary_drill,
+                             stack.front_post_machining, stack.back_post_machining)
+        if isinstance(item, BoardSegment):
+            return common + (proto.shape.segment, proto.layer, proto.net.name)
+        if isinstance(item, BoardText):
+            return common + (proto.text.position, proto.text.attributes.angle.value_degrees,
+                             proto.text.attributes.size, proto.text.attributes.stroke_width,
+                             proto.layer, proto.knockout)
+        return None
+
+    if type(sent.proto) is not type(got.proto) or geometry(sent) is None or geometry(sent) != geometry(got):
+        return False
 
     def plain(item):
         data = MessageToDict(item.proto)
@@ -162,9 +197,9 @@ def _echoes(sent, got) -> bool:
         if isinstance(a, list):
             return isinstance(b, list) and len(a) == len(b) and all(map(subset, a, b))
         return a == b
-    # ponytail: proto3 omits default scalars from `sent`, so a server flipping one
-    # (e.g. unlocked -> locked) is not caught; geometry, layer, width and net are.
-    return type(sent.proto) is type(got.proto) and subset(plain(sent), plain(got))
+    # Geometry is compared above as protobuf values, because JSON omits zero
+    # coordinates. Subset comparison here permits KiCad's display defaults.
+    return subset(plain(sent), plain(got))
 
 
 class BoardSafety:
@@ -306,9 +341,14 @@ class BoardSafety:
                 self.blocked = True
                 raise UncertainWriteError(f"IPC commit result is uncertain; do not retry. Inspect KiCad and backups: {backup.directory}") from exc
             removed = {item.id.value for item in removals}
-            if removed & {item.id.value for item in [*self.board.get_shapes(), *self.board.get_text()]}:
-                self.blocked = True
-                raise UncertainWriteError(f"Committed, but KiCad still shows VelaTrace preview items. Use Undo in KiCad and inspect backups: {backup.directory}")
+            if removed:
+                try:
+                    remaining = {item.id.value for item in [*self.board.get_shapes(), *self.board.get_text()]}
+                    if removed & remaining:
+                        raise ValidationError("KiCad still shows VelaTrace preview items.")
+                except Exception as exc:
+                    self.blocked = True
+                    raise UncertainWriteError(f"Committed, but preview removal could not be verified. Use Undo in KiCad and inspect backups: {backup.directory}") from exc
             if remove_owned:
                 self.owned.clear()
             if temporary:
