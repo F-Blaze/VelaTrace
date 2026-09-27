@@ -6,9 +6,12 @@ beside KiCad. KiCad's public IPC interface does not expose docking or the native
 window rectangle. VelaTrace never uses legacy `pcbnew` bindings.
 
 Setup verifies the exact external Freerouting JAR and Java runtime before enabling
-work. See [Freerouting setup](freerouting.md). Tool paths, model choices and the
-API key currently last for this launch only; the key is never written to a config
-file. Environment variables `VELATRACE_FREEROUTING_JAR`, `VELATRACE_JAVA`,
+routing. The audit page works without them; while routing is locked, a red line
+under the header names the reason (including the last Setup error) and points to
+**Setup**. See [Freerouting setup](freerouting.md). Tool paths, provider and model
+choices are remembered in `settings.json` in the local configuration directory and
+are kept for a retry if verification fails. The API key is never written to a
+config file; it lasts for the current launch only. Environment variables `VELATRACE_FREEROUTING_JAR`, `VELATRACE_JAVA`,
 `VELATRACE_KICAD_CLI`, `VELATRACE_MODEL` and `VELATRACE_API_KEY` can supply defaults.
 Do not place secrets in repository files or shared launch scripts. Gemini requires
 an exact currently available model ID. OpenAI-compatible/Groq classification
@@ -35,7 +38,7 @@ classification, with a refresh button. Failure is visible. They use guarded
 temporary `User.9` items and require a saved board/project and enabled user layer.
 Schematic-only audits cannot annotate the PCB canvas.
 
-`/autoroute` changes the same window to Routing; `/autoroute_exit` returns to
+Type `/autoroute` and press **Enter** to change the same window to Routing; `/autoroute_exit` returns to
 Audit and clears owned temporary graphics. The violet constraint badge opens
 session and universal rules. Universal rules live in the platform's local
 application configuration directory as `constraints.json`; session rules remain
@@ -62,7 +65,12 @@ keeps the window open and displays the error. The application never silently
 discards an uncertain board-write outcome. See [write safety](write-safety.md) for
 backup, undo and live KiCad acceptance requirements.
 
-Light and dark palettes share violet `#8B5CF6`. KiCad's IPC has no live theme
+The look is frosted glass: translucent cards with a light rim over a violet-indigo
+(dark) or lilac (light) gradient, glossy violet primary buttons, and a pill mode
+badge. Popups, tooltips and dialogs stay solid for legibility, and disabled controls
+are visibly greyed. Real Windows 11 Acrylic is not used: Windows removes it from
+stay-on-top windows, and dark Acrylic renders as near-opaque grey. Light and dark
+palettes share violet `#8B5CF6`. KiCad's IPC has no live theme
 notification. The default **KiCad** menu choice reads the connected version's
 saved Windows `appearance.app_theme` setting when available, then falls back to
 the OS palette. The menu also provides a manual override; custom KiCad palettes
