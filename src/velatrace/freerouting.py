@@ -206,7 +206,11 @@ class Freerouting:
         if not self.java.is_file():
             raise CapabilityError("Java is missing. Install Eclipse Temurin Java 21 (JRE or JDK) and configure its bin/java executable.")
         self.work_directory.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="startup-", dir=self.work_directory) as name:
+        # Windows can hold Java's temporary socket files for a moment after exit, so a
+        # previous run's scratch folder may survive its own cleanup. Remove leftovers.
+        for leftover in (*self.work_directory.glob("route-*"), *self.work_directory.glob("startup-*")):
+            shutil.rmtree(leftover, ignore_errors=True)
+        with tempfile.TemporaryDirectory(prefix="startup-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
             directory = Path(name)
             result = run_bounded([str(self.java), "-version"], directory, 15)
             if result.returncode or not re.search(r'version "21(?:\.|\")', result.output):
@@ -223,7 +227,7 @@ class Freerouting:
         if any(ch in dsn.path.name for ch in ('+', '\n', '\r')):
             raise ValidationError("DSN filename contains unsupported characters; export using a simple filename.")
         text = constrained_dsn(dsn.path.read_text(encoding="utf-8"), constraints)
-        with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory) as name:
+        with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
             directory = Path(name)
             self._prepare(directory)
             copied = directory / dsn.path.name
