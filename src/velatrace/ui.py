@@ -6,6 +6,7 @@ blocking service operation; it reports plain data through queued signals.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 import os
 import uuid
@@ -107,6 +108,24 @@ class Settings:
     def provider_config(self):
         return ProviderConfig(self.name, self.endpoint, self.model, self.key,
                               self.protocol, self.search_model or None, self.search)
+
+    def save(self, path: Path):
+        """Remember paths and provider choices between launches. Never the API key."""
+        values = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "key"}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(values, indent=2), encoding="utf-8")
+
+    def load(self, path: Path):
+        """Apply saved values of the right type; a missing or damaged file changes nothing."""
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(saved, dict):
+            return
+        for name, value in saved.items():
+            if name != "key" and name in self.__dataclass_fields__ and type(value) is type(getattr(self, name)):
+                setattr(self, name, value)
 
 
 class SettingsDialog(QDialog):
@@ -350,9 +369,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("VelaTrace · KiCad companion")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
-        self.resize(630, 900)
         screen = QApplication.primaryScreen().availableGeometry()
-        self.move(max(screen.left(), screen.right() - self.width()), screen.top() + 30)
+        self.resize(630, min(900, screen.height() - 80))
+        self._positioned = False
         self.demo = demo
         self.config_dir = Path(config_dir or QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation))
         self.constraints = ConstraintStore(self.config_dir / "constraints.json")
@@ -361,6 +380,9 @@ class MainWindow(QMainWindow):
                                  cli=os.environ.get("VELATRACE_KICAD_CLI", "kicad-cli"),
                                  key=os.environ.get("VELATRACE_API_KEY", ""),
                                  model=os.environ.get("VELATRACE_MODEL", ""))
+        if not demo:
+            self.settings.load(self.config_dir / "settings.json")
+        self._setup_error = ""
         self.audit = self.pricing = self.routing = self.router = None
         self.reader = self.safety = self.validator = self.writer = None
         self.ticket = self.snapshot = None
@@ -407,7 +429,7 @@ class MainWindow(QMainWindow):
         self.refresh_badge()
         options = QHBoxLayout()
         self.command = QLineEdit()
-        self.command.setPlaceholderText("/autoroute or /autoroute_exit")
+        self.command.setPlaceholderText("Type /autoroute or /autoroute_exit, then press Enter")
         self.command.returnPressed.connect(self.run_command)
         options.addWidget(self.command)
         self.theme = QComboBox()
@@ -417,6 +439,9 @@ class MainWindow(QMainWindow):
         layout.addLayout(options)
         self.banner = label("No backend. No telemetry. Your key, your provider.", muted=True)
         layout.addWidget(self.banner)
+        self.setup_hint = label()
+        self.setup_hint.setStyleSheet("color:#D45A67")
+        layout.addWidget(self.setup_hint)
         self.pages = QStackedWidget()
         self.audit_page = QWidget()
         audit_layout = QVBoxLayout(self.audit_page)
@@ -532,9 +557,12 @@ class MainWindow(QMainWindow):
             QPushButton {{border:1px solid {border}; border-radius:6px; padding:8px 10px; background:{card}}}
             QPushButton:hover {{border-color:{ACCENT}}} QPushButton:disabled {{color:{muted}}}
             QPushButton#primary {{background:{ACCENT}; color:white; border:0; font-weight:600}}
+            QPushButton#primary:disabled {{background:{border}; color:{muted}}}
             QPushButton#textButton {{border:0; color:{ACCENT}; padding:4px 0px; background:transparent}}
             QLineEdit,QTextEdit,QComboBox,QSpinBox,QDoubleSpinBox,QListWidget {{background:{card}; border:1px solid {border}; border-radius:5px; padding:6px}}
             QScrollArea {{border:0}} QCheckBox {{spacing:7px}}
+            QLineEdit:disabled,QTextEdit:disabled,QComboBox:disabled,QSpinBox:disabled,QDoubleSpinBox:disabled,QListWidget:disabled {{color:{muted}; background:{bg}}}
+            QCheckBox:disabled,QLabel:disabled {{color:{muted}}}
         """)
 
     def refresh_badge(self):
@@ -547,7 +575,15 @@ class MainWindow(QMainWindow):
 
     def refresh_actions(self):
         busy = self.worker is not None
-        self.pages.setEnabled(not busy and (self.ready or self.demo))
+        # Audit needs only the AI provider (checked when used); routing needs the verified router.
+        self.audit_page.setEnabled(not busy)
+        self.route_page.setEnabled(not busy and (self.ready or self.demo))
+        locked = not (self.ready or self.demo)
+        self.setup_hint.setVisible(locked)
+        self.setup_hint.setText(
+            "Routing is locked until Setup verifies Java 21 and Freerouting 2.1.0"
+            + (f": {self._setup_error}" if self._setup_error else ".")
+            + " Click Setup and check those paths. The audit works without them.")
         self.command.setEnabled(not busy and not self.demo)
         self.setup_button.setEnabled(not busy and not self.demo)
         self.badge.setEnabled(not busy and not self.demo)
@@ -596,11 +632,21 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         settings = dialog.value()
+        self.settings = settings  # Reopening Setup after a failure shows what was typed.
+        try:
+            settings.save(self.config_dir / "settings.json")
+        except OSError:
+            pass  # Remembering settings is a convenience; verification still runs.
+        self._setup_error = ""
         def operation(_):
             if self.safety:
                 self.safety.clear_preview()
-            router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work")
-            router.check_startup()
+            try:
+                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work")
+                router.check_startup()
+            except Exception as exc:
+                self._setup_error = str(exc) or type(exc).__name__
+                raise
             return router
         def success(router):
             self.settings, self.router, self.ready = settings, router, True
@@ -938,6 +984,15 @@ class MainWindow(QMainWindow):
             self.route_summary.setText("Applied to KiCad in one commit, using normal copper layer colors. Inspect and save in KiCad. Refresh before further routing, including after Undo.")
         self.run_work("Backing up and applying one routing commit", lambda _: self.routing.approve(self.writer), done)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._positioned:
+            # Content can make the window wider than requested; place it by its real frame.
+            self._positioned = True
+            screen = self.screen().availableGeometry()
+            frame = self.frameGeometry()
+            self.move(max(screen.left(), screen.right() - frame.width() + 1), screen.top() + 30)
+
     def closeEvent(self, event):
         if self.worker is not None:
             event.ignore()
@@ -1015,6 +1070,8 @@ def launch(*, demo=False, screenshot: Path | None = None):
     app.setOrganizationName("F-Blaze")
     window = MainWindow(demo=demo)
     window.show()
+    window.raise_()
+    window.activateWindow()
     if screenshot:
         def render():
             screenshot.parent.mkdir(parents=True, exist_ok=True)

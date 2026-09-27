@@ -365,7 +365,7 @@ class BoardSafety:
         from kipy.proto.board.board_types_pb2 import BL_User_9
         _, root = read_board(self.path)
         if not any(isinstance(row, list) and len(row) > 1 and row[1] == "User.9" for row in one_layers(root)):
-            raise CapabilityError("Enable User.9 in KiCad for temporary VelaTrace graphics; no layer settings are changed automatically.")
+            raise CapabilityError("Temporary VelaTrace graphics need the User.9 layer. In KiCad: File > Board Setup > Board Stackup > Board Editor Layers > Add User Defined Layer... > User.9, then save the board. VelaTrace never changes layer settings itself.")
         return BL_User_9
 
     def show_preview(self, dsn, plan):
