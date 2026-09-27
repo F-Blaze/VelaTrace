@@ -28,6 +28,17 @@ class DrcResult:
     violations: int
     unconnected: int
     schematic_parity: int
+    # (type, severity, item uuids) per violation/parity issue, to tell pre-existing
+    # issues from ones a route introduced. Empty means identities are unknown.
+    issues: tuple = ()
+
+
+def _issue(row) -> tuple:
+    items = row.get("items", [])
+    if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+        raise ValueError()
+    return (str(row.get("type", "")), str(row.get("severity", "")),
+            tuple(sorted(str(item.get("uuid", "")) for item in items)))
 
 
 def parse_drc_report(path: Path) -> DrcResult:
@@ -52,9 +63,10 @@ def parse_drc_report(path: Path) -> DrcResult:
                     any(not isinstance(item, str) for item in severities) or
                     not {"error", "warning", "exclusion"}.issubset(severities)):
                 raise ValidationError("KiCad omitted DRC severities; a complete report is required.")
+        issues = tuple(sorted(_issue(row) for row in (*rows[0], *rows[2])))
     except (ValueError, KeyError, TypeError) as exc:
         raise ValidationError("KiCad DRC report is incomplete or malformed; approval is unavailable.") from exc
-    return DrcResult(*(len(items) for items in rows))
+    return DrcResult(*(len(items) for items in rows), issues)
 
 
 class KiCadCli:

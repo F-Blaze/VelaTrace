@@ -231,8 +231,9 @@ class SafetyTests(unittest.TestCase):
         cli = SimpleNamespace(drc=lambda path: (calls.append(path.read_text()), DrcResult(0, 0, 0))[1])
         validator = SafeCandidateValidator(self.safety, cli)
         report = validator.validate(self.dsn, self.plan, ())
-        self.assertEqual(len(calls), 1)
-        self.assertIn("(segment", calls[0])
+        self.assertEqual(len(calls), 2)  # unrouted baseline, then the candidate
+        self.assertNotIn("(segment", calls[0])
+        self.assertIn("(segment", calls[1])
         self.safety.factory = SimpleNamespace(copper=lambda items, board: [Item(item.id) for item in items])
         SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
         self.assertIsNone(validator.evidence)
@@ -257,10 +258,11 @@ class SafetyTests(unittest.TestCase):
         validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=drc))
         constraint = Constraint("clear", Scope.SESSION, "clearance", "all nets", .3)
         validator.validate(self.dsn, self.plan, (constraint,))
-        self.assertEqual(len(calls), 2)
-        self.assertNotIn("VelaTrace", calls[0])
-        self.assertIn("stronger", calls[1])
-        self.assertIn("VelaTrace confirmed clearance", calls[1])
+        self.assertEqual(len(calls), 4)  # (baseline, candidate) under project rules, then with the extra rule
+        self.assertNotIn("VelaTrace", calls[0] + calls[1])
+        self.assertTrue(all("stronger" in rules_text for rules_text in calls))
+        self.assertIn("VelaTrace confirmed clearance", calls[2])
+        self.assertIn("VelaTrace confirmed clearance", calls[3])
         self.assertNotIn("VelaTrace", rules.read_text())
 
     def test_rules_change_during_commit_rolls_back(self):
@@ -385,3 +387,30 @@ class EchoTests(unittest.TestCase):
         track = Track(); track.width = 250_000
         other = Track(); other.width = 300_000
         self.assertFalse(_echoes(track, other))
+
+
+class RouteIssueTests(unittest.TestCase):
+    """A route is judged by what it adds to the unrouted board's DRC."""
+    WARN = ("lib_footprint_mismatch", "warning", ("fp-oled",))
+    ERR = ("clearance", "error", ("pad-a", "pad-b"))
+
+    def judge(self, before, after):
+        from velatrace.candidate import route_issues
+        return route_issues(DrcResult(len(before), 0, 0, tuple(before)), DrcResult(len(after), 0, 0, tuple(after)))
+
+    def test_preexisting_warnings_are_reported_not_blocking(self):
+        self.assertEqual(self.judge([self.WARN], [self.WARN]), (0, 1))
+
+    def test_route_added_issue_blocks(self):
+        new = ("clearance", "error", ("pad-a", "track-new"))
+        self.assertEqual(self.judge([self.WARN], [self.WARN, new]), (1, 1))
+        # Same type and pads as before, but involving the new track, is still new.
+        self.assertEqual(self.judge([], [("silk", "warning", ("track-new",))]), (1, 0))
+
+    def test_preexisting_errors_still_block(self):
+        self.assertEqual(self.judge([self.ERR], [self.ERR]), (1, 0))
+
+    def test_duplicates_counted_and_unknown_identities_count_everything(self):
+        self.assertEqual(self.judge([self.WARN], [self.WARN, self.WARN]), (1, 1))
+        from velatrace.candidate import route_issues
+        self.assertEqual(route_issues(DrcResult(3, 0, 0), DrcResult(3, 0, 0)), (3, 0))
