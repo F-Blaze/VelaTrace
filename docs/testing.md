@@ -16,6 +16,8 @@ After the final audit review on 2026-09-23: **105 passed, 63 subtests passed, ze
 
 Release-review fixes on 2026-09-23: **107 passed, 66 subtests passed, zero skips**, plus correctness lint. Routing requires the exact editor/CLI version. Matching schematic context is exported successfully before explicit parity checking; the native CLI test also refuses a malformed matching schematic. A live divergent-schematic parity acceptance test remains required.
 
+Post-merge on `main`, 2026-09-27: **132 passed, 98 subtests passed, zero skips**, with both native integrations enabled and correctness lint passing. Separately, a board generated and DSN-exported by KiCad 10.0.6 (Windows path, `(PN ...)` placements, duplicated SOT-223 pad, 2- and 4-layer with power/mixed planes) was routed by pinned Freerouting 2.1.0 and validated by `kicad-cli`: zero DRC violations and zero unconnected items on the 2-layer board. Freerouting is non-deterministic; one 4-layer run left a dangling B.Cu stub (`track_dangling`), which approval correctly refused.
+
 Coverage includes:
 
 - Authored KiCad-format PCB, project and XML connectivity fixtures: bulk plus decoupling capacitors on one rail do not flag, identical nearby sensors do, and netlist-only ambiguity remains possible redundancy.
