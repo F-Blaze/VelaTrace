@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "filename": "necessity.kicad_pro",
+    "version": 1
+  },
+  "board": {
+    "design_settings": {
+      "defaults": {},
+      "drc_exclusions": [],
+      "rule_severities": {
+        "missing_courtyard": "warning",
+        "track_not_centered_on_via": "warning",
+        "tuning_profile_track_geometries": "warning",
+        "footprint_filters_mismatch": "warning",
+        "footprint_type_mismatch": "warning"
+      },
+      "meta": {
+        "version": 2
+      },
+      "rules": {
+        "min_clearance": 0.2,
+        "min_track_width": 0.2,
+        "min_via_diameter": 0.6,
+        "min_through_hole_diameter": 0.3
+      },
+      "via_dimensions": [
+        {
+          "diameter": 0.6,
+          "drill": 0.3
+        }
+      ]
+    }
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "name": "Default",
+        "clearance": 0.2,
+        "track_width": 0.25,
+        "via_diameter": 0.6,
+        "via_drill": 0.3
+      }
+    ],
+    "meta": {
+      "version": 3
+    }
+  }
+}

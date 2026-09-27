@@ -1,0 +1,49 @@
+# GitHub must REQUIRE code-owner approval; this file alone does not enforce it.
+# RELEASE GATE: add a trusted second owner with repository access on these rules.
+# F-Blaze cannot approve their own PR. No maintainer/admin bypass is permitted.
+* @F-Blaze
+
+# Network calls, DNS, credentials and provider-side search.
+/src/velatrace/provider.py @F-Blaze
+/src/velatrace/network.py @F-Blaze
+/src/velatrace/pricing.py @F-Blaze
+
+# External subprocess calls and external-runtime policy.
+/src/velatrace/freerouting.py @F-Blaze
+/src/velatrace/kicad_cli.py @F-Blaze
+/src/velatrace/router_resources/ @F-Blaze
+
+# Board writes, backup/refusal boundary, IPC and routing evidence.
+/src/velatrace/write_safety.py @F-Blaze
+/src/velatrace/ipc.py @F-Blaze
+/src/velatrace/candidate.py @F-Blaze
+/src/velatrace/routing.py @F-Blaze
+/src/velatrace/dsn.py @F-Blaze
+/src/velatrace/ses.py @F-Blaze
+
+# Writes outside the project: application config, consent, temp reports, demo export.
+/src/velatrace/privacy.py @F-Blaze
+/src/velatrace/constraints.py @F-Blaze
+/src/velatrace/ui.py @F-Blaze
+/src/velatrace/__main__.py @F-Blaze
+
+# Installation, package dependencies, launchers and future shell/install scripts.
+/launch.py @F-Blaze
+/plugin.json @F-Blaze
+/requirements*.txt @F-Blaze
+/pyproject.toml @F-Blaze
+/setup.py @F-Blaze
+/setup.cfg @F-Blaze
+/install* @F-Blaze
+/scripts/ @F-Blaze
+*.sh @F-Blaze
+*.ps1 @F-Blaze
+*.bat @F-Blaze
+*.cmd @F-Blaze
+
+# Tests may execute subprocesses or exercise file/network boundaries.
+/tests/ @F-Blaze
+/.github/ @F-Blaze
+/SECURITY.md @F-Blaze
+/CONTRIBUTING.md @F-Blaze
+/docs/repository-security.md @F-Blaze
