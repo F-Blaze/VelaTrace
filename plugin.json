@@ -1,6 +1,6 @@
 {
   "$schema": "https://go.kicad.org/api/schemas/v1",
-  "identifier": "com.f-blaze.velatrace",
+  "identifier": "com.fblaze.velatrace",
   "name": "VelaTrace",
   "description": "Connectivity-aware component audit and guarded external routing for KiCad 9+.",
   "runtime": {"type": "python", "min_version": "3.11"},
