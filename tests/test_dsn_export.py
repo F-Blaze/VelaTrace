@@ -187,3 +187,34 @@ class QuotingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HyphenatedReferenceTests(unittest.TestCase):
+    """KiCad writes pins of references like Pi-1 as "Pi-1"-3 (quoted part plus tail)."""
+    def test_quoted_reference_pin_is_one_token_and_round_trips(self):
+        root = parse('(pcb b (network (net N (pins OLED_1-1 "Pi-1"-3 "HW-504"-1))))')
+        pins = root[2][1][2][1:]
+        self.assertEqual(pins, ["OLED_1-1", "Pi-1-3", "HW-504-1"])
+        dsn = '(pcb b (unit um) (structure (rule (width 100))) (network (net N (pins "Pi-1"-3 R1-2))))'
+        out = constrained_dsn(dsn, (Constraint("w", Scope.SESSION, "trace-width", "all nets", .2),))
+        self.assertIn('(pins "Pi-1"-3 R1-2)', out)  # Freerouting must see the original spelling.
+
+    def test_accept_export_matches_hyphenated_references(self):
+        with tempfile.TemporaryDirectory() as folder:
+            board = Path(folder) / "board.kicad_pcb"
+            board.write_text("(kicad_pcb)", encoding="utf-8")
+            snapshot = DesignSnapshot((
+                Component("Pi-1", "Pico", "Pico", (Pin("3", "N"),), position_mm=(10, 20)),
+                Component("R1", "10k", "R0805", (Pin("2", "N"),), position_mm=(30, 20))),
+                "ipc-pcb", board, ("F.Cu", "B.Cu"))
+            ticket = ExportTicket.begin(board)
+            dsn = Path(folder) / "board.dsn"
+            dsn.write_text('''(pcb board.dsn (resolution um 10) (unit um)
+ (structure (layer F.Cu (type signal)) (layer B.Cu (type signal)))
+ (placement (component A (place "Pi-1" 10000 -20000 front 0 (PN Pico)))
+  (component B (place R1 30000 -20000 front 0 (PN 10k))))
+ (library) (network (net N (pins "Pi-1"-3 R1-2))) (wiring))''', encoding="utf-8")
+            later = time.time_ns() + 1_000_000
+            os.utime(dsn, ns=(later, later))
+            result = accept_export(ticket, dsn, snapshot, user_confirms_saved_and_exported=True)
+            self.assertEqual(sorted(result.placements), ["Pi-1", "R1"])

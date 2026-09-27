@@ -6,6 +6,15 @@ class QuotedAtom(str):
     """Preserve lexical quoting for safe DSN reserialization."""
 
 
+class JoinedAtom(str):
+    """One Specctra token written as a quoted part plus an unquoted tail.
+
+    KiCad writes pins of hyphenated references as "Pi-1"-3: one pin reference
+    (component Pi-1, pin 3). The value is the joined text; raw is the exact
+    original spelling, which must be written back unchanged."""
+    raw: str
+
+
 # KiCad's own files escape inside quotes; Specctra DSN/SES never does (KiCad's
 # specctraMode lexer and Freerouting both read a backslash literally, and Windows
 # DSN exports embed the full backslashed path). \x/octal are never written by KiCad.
@@ -56,7 +65,15 @@ def parse(text: str, *, kicad: bool = False) -> list:
                 if i == len(text):
                     raise ValidationError("Unterminated Specctra string.")
                 i += 1
-                token = QuotedAtom(token)
+                tail_start = i
+                while not kicad and i < len(text) and not text[i].isspace() and text[i] not in '()"':
+                    i += 1
+                if i > tail_start:
+                    joined = JoinedAtom(token + text[tail_start:i])
+                    joined.raw = '"' + token + '"' + text[tail_start:i]
+                    token = joined
+                else:
+                    token = QuotedAtom(token)
             else:
                 start = i
                 while i < len(text) and not text[i].isspace() and text[i] not in '()':
