@@ -18,3 +18,18 @@ class ThemeTests(unittest.TestCase):
                 self.assertIsNone(saved_kicad_theme(10, config_root=folder, platform="linux"))
             path.write_text("invalid")
             self.assertIsNone(saved_kicad_theme(10, config_root=folder, platform="win32"))
+
+
+class GlassThemeTests(unittest.TestCase):
+    def test_frosted_theme_is_complete_and_popups_stay_solid(self):
+        from velatrace.ui import glass_stylesheet, theme_tokens
+        for dark in (True, False):
+            with self.subTest(dark=dark):
+                tokens = theme_tokens(dark)
+                sheet = glass_stylesheet(tokens)
+                self.assertIn("qlineargradient", tokens["frost"])  # painted frosted backdrop
+                self.assertIn(f"QWidget#glassRoot {{background:{tokens['frost']}}}", sheet)
+                # Dropdown lists and tooltips must never be see-through.
+                self.assertIn(f"QToolTip {{background:{tokens['solid']}", sheet)
+                self.assertNotIn("{", tokens["solid"])
+                self.assertIn("QPushButton#primary:disabled", sheet)
