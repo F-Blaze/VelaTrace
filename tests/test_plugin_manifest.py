@@ -7,6 +7,7 @@ import unittest
 MANIFEST = json.loads((Path(__file__).parents[1] / "plugin.json").read_text(encoding="utf-8"))
 # common/api/api_plugin.cpp, API_PLUGIN::IsValidIdentifier
 KICAD_9_TO_10_0_4 = r"[\w\d]{2,}\.[\w\d]+\.[\w\d]+"  # unanchored: no hyphens anywhere usable
+PNG_SIGNATURE = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
 KICAD_10_0_6 = r"^[a-zA-Z]{2,}(\.([a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]|[a-zA-Z0-9])){2,}$"
 
 
@@ -26,6 +27,16 @@ class ManifestTests(unittest.TestCase):
             self.assertFalse(entry.is_absolute())
             self.assertTrue((root / entry).is_file())
             self.assertIn("pcb", action["scopes"])
+
+    def test_toolbar_button_has_png_icons(self):
+        # KiCad adds the button with the action's icon; without one it is blank and unfindable.
+        root = Path(__file__).parents[1]
+        for action in MANIFEST["actions"]:
+            for key in ("icons-light", "icons-dark"):
+                with self.subTest(action=action["identifier"], key=key):
+                    self.assertTrue(action.get(key))
+                    for icon in action[key]:
+                        self.assertEqual((root / icon).read_bytes()[:8], PNG_SIGNATURE)
 
 
 if __name__ == "__main__":
