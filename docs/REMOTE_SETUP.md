@@ -2,9 +2,9 @@
 
 Repository: [F-Blaze/VelaTrace](https://github.com/F-Blaze/VelaTrace), public.
 
-The user authorized remote setup after the original local release review. `main` was initialized with the MIT license only, then protected before application code was uploaded. All implementation changes are submitted in [PR #1](https://github.com/F-Blaze/VelaTrace/pull/1) on `review/initial-alpha` for independent review. PR #2 was merged into that development branch on September 26; it did not merge the application into `main`. Public commits use the maintainer's GitHub noreply address. The original local development history remains on `bootstrap/foundation`; older local hashes in the build notes are provenance, not public commit links.
+The user authorized remote setup after the original local release review. `main` was initialized with the MIT license only, then protected before application code was uploaded. [PR #1](https://github.com/F-Blaze/VelaTrace/pull/1) merged on September 27, 2026 at 15:19 UTC as `3abfa346bf3394ff40508fb86224fe68de6b7cb4`, including the earlier PR #2 fixes. This review began from `main` revision `49e7278`, including subsequent PRs. Public commits use the maintainer's GitHub noreply address. Original local build hashes are provenance, not public commit links.
 
-Verified repository settings:
+Repository settings rechecked September 27, 2026 (branch protection, secret scanning, push protection and absence of tags); other settings below retain their original setup verification:
 
 - `main` requires a PR and one independent approval, code-owner review, dismissal of stale approvals, approval of the latest push, resolved conversations, and up-to-date required checks.
 - Protection applies to administrators/maintainer. Force pushes and branch deletion are disabled. No PR bypass is configured.
@@ -16,7 +16,7 @@ Verified repository settings:
 Still required:
 
 1. F-Blaze has confirmed account 2FA; the API does not independently disclose its status.
-2. Appoint a trusted second reviewer with repository write access and add them to CODEOWNERS before merging implementation. The author cannot approve their own PR.
+2. Add the maintainer's trusted independent reviewer to CODEOWNERS. The checked file still lists only F-Blaze, who cannot approve their own PR.
 3. Obtain independent approval and passing CI/CodeQL for the current PR revision. No merge is authorized by an agent review.
 4. Complete the live KiCad/provider acceptance and remaining capabilities in [release review](RELEASE_REVIEW.md).
 5. Provision a trusted signing identity and controlled signed-tag release process before changing the tag lock. Never publish or install from main.

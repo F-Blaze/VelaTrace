@@ -6,6 +6,13 @@ from .errors import ValidationError
 from .models import Component, DesignSnapshot, Pin
 
 
+class _NoDeclarations(ET.TreeBuilder):
+    def doctype(self, name, pubid, system):
+        # Parser callbacks see declarations in every supported XML encoding;
+        # an ASCII byte scan alone misses UTF-16 documents.
+        raise ValidationError("Netlist includes unsupported XML declarations.")
+
+
 def read_xml_netlist(path: Path) -> DesignSnapshot:
     if path.stat().st_size > 25_000_000:
         raise ValidationError("Netlist is too large.")
@@ -13,7 +20,7 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
     if len(payload) > 25_000_000 or b"<!DOCTYPE" in payload.upper() or b"<!ENTITY" in payload.upper():
         raise ValidationError("Netlist is too large or includes unsupported XML declarations.")
     try:
-        root = ET.fromstring(payload)
+        root = ET.fromstring(payload, parser=ET.XMLParser(target=_NoDeclarations()))
     except ET.ParseError as exc:
         raise ValidationError("Cannot parse KiCad XML netlist; export again with --format kicadxml.") from exc
     if root.tag != "export" or root.find("components") is None or root.find("nets") is None:

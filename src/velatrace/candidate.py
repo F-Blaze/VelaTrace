@@ -58,6 +58,32 @@ def canonical(root, excluded_ids=frozenset()):
     return tuple(sorted((visit(row) for row in rows), key=repr))
 
 
+def live_board_text(source: str, excluded_ids=frozenset()) -> str:
+    """A candidate-only snapshot without this session's verified temporary items.
+
+    Never writes the editor or saved board. Preserve quoted strings and unknown
+    board fields when serializing the temporary validation file.
+    """
+    root = parse(source, kicad=True)
+    if root[0] != "kicad_pcb":
+        raise ValidationError("Expected a live KiCad PCB snapshot.")
+    if not excluded_ids:
+        return source
+    def retained(row):
+        ids = children(row, "uuid") if isinstance(row, list) else []
+        return not (ids and len(ids[0]) == 2 and ids[0][1] in excluded_ids)
+    root = [root[0], *(row for row in root[1:] if retained(row))]
+    escapes = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r", "\t": "\\t",
+               "\a": "\\a", "\b": "\\b", "\f": "\\f", "\v": "\\v"}
+    def render(value):
+        if isinstance(value, list):
+            return "(" + " ".join(render(item) for item in value) + ")"
+        if isinstance(value, QuotedAtom):
+            return '"' + "".join(escapes.get(char, char) for char in value) + '"'
+        return str(value)
+    return render(root)
+
+
 def project_context(board_path: Path):
     project = board_path.with_suffix(".kicad_pro")
     if not project.is_file() or project.stat().st_size > 16_000_000:
@@ -149,8 +175,8 @@ def board_nets(root) -> dict[str, str]:
             for net in children(pad, "net") if len(net) == 2 and net[1]}
 
 
-def prepare_copper(plan: RoutePlan, dsn: DsnInput) -> tuple[CopperItem, ...]:
-    _, root = read_board(dsn.ticket.board_path)
+def prepare_copper(plan: RoutePlan, dsn: DsnInput, *, source: str | None = None) -> tuple[CopperItem, ...]:
+    root = parse(source, kicad=True) if source is not None else read_board(dsn.ticket.board_path)[1]
     if any(children(root, kind) for kind in ("segment", "arc", "via")):
         raise CapabilityError("This routing adapter requires an unrouted board; existing copper is never replaced.")
     # Inner planes are commonly typed power/mixed; they are still copper layers in the DSN.
@@ -227,13 +253,13 @@ class SafeCandidateValidator:
         if not self.supports(constraints):
             raise CapabilityError("Only all-nets width and clearance constraints are validated.")
         dsn.assert_unchanged()
-        self.safety.assert_matches(dsn)
+        source = self.safety.assert_matches(dsn)
+        snapshot = canonical(parse(source, kicad=True))
         _, context = project_context(dsn.ticket.board_path)
-        items = prepare_copper(plan, dsn)
+        items = prepare_copper(plan, dsn, source=source)
         for constraint in constraints:
             if constraint.kind == "trace-width" and any(item.width + 1e-9 < constraint.minimum_mm for item in items if item.kind == "segment"):
                 raise ValidationError("Router violated the confirmed minimum trace width.")
-        source, _ = read_board(dsn.ticket.board_path)
         content = candidate_text(source, items)
         with tempfile.TemporaryDirectory(prefix="candidate-", dir=self.safety.directory, ignore_cleanup_errors=True) as folder:
             target = Path(folder) / dsn.ticket.board_path.name
@@ -258,7 +284,7 @@ class SafeCandidateValidator:
         dsn.assert_unchanged()
         if not context_matches(context):
             raise ValidationError("Project/rules changed during DRC; route again.")
-        self.safety.assert_matches(dsn)
+        self.safety.assert_matches(dsn, expected_board=snapshot)
         judged = [route_issues(baseline, candidate) for baseline, candidate in passes]
         report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged),
                                   max(candidate.unconnected for _, candidate in passes),
@@ -266,5 +292,5 @@ class SafeCandidateValidator:
                                   details="Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
                                   board_digest=dsn.ticket.board_digest,
                                   preexisting_warnings=max(carried for _, carried in judged))
-        self.evidence = (dsn.digest, plan_digest(plan), report, items, context)
+        self.evidence = (dsn.digest, plan_digest(plan), report, items, context, snapshot)
         return report

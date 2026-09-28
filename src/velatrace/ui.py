@@ -190,7 +190,7 @@ class SettingsDialog(QDialog):
         self.resize(650, 680)
         layout = QVBoxLayout(self)
         layout.addWidget(label("Local tools and your provider", muted=False))
-        layout.addWidget(label("No backend or telemetry. Only your configured endpoint receives remote API requests. Keys stay in memory. Tool paths and provider settings apply to this launch.", muted=True))
+        layout.addWidget(label("No backend or telemetry. Only your configured endpoint receives remote API requests. Tool paths and provider choices are saved locally; keys stay in memory for this launch.", muted=True))
         layout.addWidget(label("Groq or Gemini offer free tiers, subject to current quotas and terms. " + PROVIDER_NOTE, muted=True))
         layout.addWidget(label(f"Local config folder: {parent.config_dir}", muted=True))
         scroll = QScrollArea()
@@ -675,6 +675,16 @@ class MainWindow(QMainWindow):
             return
         settings = dialog.value()
         self.settings = settings  # Reopening Setup after a failure shows what was typed.
+        # An audit owns its provider and key. Retire it as soon as new settings
+        # are accepted, even if independent router verification later fails.
+        # Keep the safety handle until cleanup succeeds so owned graphics remain
+        # recoverable when KiCad is unavailable.
+        self.audit = self.pricing = None
+        self.description.setReadOnly(False)
+        self.audit_step.setText("1 · Describe your project, then read connectivity.")
+        self.next_button.setText("Infer component functions")
+        self.totals.setText("All verdicts are suggestions. Components are never removed automatically.")
+        self.render_cards()
         try:
             settings.save(self.config_dir / "settings.json")
         except OSError:
@@ -990,11 +1000,11 @@ class MainWindow(QMainWindow):
                 self.safety.clear_preview()
                 report = self.routing.run(trusted_via_catalog(self.routing.input))
                 # Preview refusal must remain visible even if validated data exists.
-                self.safety.show_preview(self.routing.input, self.routing.plan)
+                self.safety.show_preview(self.routing.input, self.routing.plan, self.validator.evidence[5])
                 return report
             def done(_):
                 self.preview_shown = True
-                self.route_summary.setText(self.routing.summary)
+                self.route_summary.setText(self.routing.summary + " Review User.9, then approve or reject. No save is required before approval.")
                 self.canvas.plan = self.routing.plan
                 self.canvas.update()
             self.run_work("Freerouting and actual KiCad candidate DRC", operation, done)

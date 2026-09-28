@@ -114,6 +114,46 @@ class UiTests(unittest.TestCase):
         self.assertEqual(self.window.audit.stage, AuditStage.REVIEW_FUNCTIONS)
         count.assert_not_called()
 
+    def test_accepted_setup_retires_old_provider_even_when_router_check_fails(self):
+        from PySide6.QtWidgets import QDialog
+        from velatrace.errors import CapabilityError
+        from velatrace.ui import SettingsDialog
+        new_settings = replace(self.window.settings, model="replacement-model", key="synthetic-new-key")
+        old_audit = self.window.audit
+        safety = SimpleNamespace(clear_preview=lambda: None)
+        self.window.safety = safety
+        with patch.object(SettingsDialog, "exec", return_value=QDialog.DialogCode.Accepted), \
+                patch.object(SettingsDialog, "value", return_value=new_settings), \
+                patch("velatrace.ui.Freerouting.check_startup", side_effect=CapabilityError("Router missing")):
+            self.window.configure()
+            self.wait_idle()
+        self.assertIsNone(self.window.audit)
+        self.assertIsNone(self.window.pricing)
+        self.assertIs(self.window.safety, safety)
+        self.assertFalse(self.window.description.isReadOnly())
+        self.assertFalse(self.window.next_button.isEnabled())
+        self.assertIn("Router missing", self.window.status.text())
+        replacement = self.window.make_audit()
+        self.assertIsNot(replacement, old_audit)
+        self.assertEqual(replacement.provider.config.model, "replacement-model")
+        self.assertEqual(replacement.provider.config.api_key, "synthetic-new-key")
+
+    def test_setup_cleanup_failure_retains_safety_handle_but_not_old_provider(self):
+        from PySide6.QtWidgets import QDialog
+        from velatrace.ui import SettingsDialog
+        def fail_cleanup():
+            raise RuntimeError("Cleanup refused")
+        safety = SimpleNamespace(clear_preview=fail_cleanup)
+        self.window.safety = safety
+        with patch.object(SettingsDialog, "exec", return_value=QDialog.DialogCode.Accepted), \
+                patch("velatrace.ui.Freerouting.check_startup") as startup:
+            self.window.configure()
+            self.wait_idle()
+        startup.assert_not_called()
+        self.assertIs(self.window.safety, safety)
+        self.assertIsNone(self.window.audit)
+        self.assertIn("Cleanup refused", self.window.status.text())
+
     def test_pending_prompt_prevents_routing(self):
         self.window.route_prompt.setText("keep traces away from headers")
         self.window.routing = SimpleNamespace()

@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from velatrace.candidate import (SafeCandidateValidator, candidate_text, canonical,
-                                context_matches, prepare_copper, project_context)
+                                context_matches, live_board_text, prepare_copper, project_context)
 from velatrace.constraints import Constraint, Scope
 from velatrace.dsn import DsnInput, ExportTicket, file_digest
 from velatrace.errors import CapabilityError, ValidationError
@@ -40,7 +40,9 @@ class FakeBoard:
         self.events.append("backup")
         if self.fail == "backup":
             raise OSError("disk full")
-        return self.source
+        graphics = ''.join(f'(gr_line (start 1 1) (end 2 2) (layer "User.9") (uuid "{identifier}"))'
+                           for identifier in self.items)
+        return self.source[:-1] + graphics + ')'
 
     def save_as(self, filename, **options):
         # KiCad rewrites the real project on every copy; it crashed a live project manager.
@@ -112,16 +114,71 @@ class SafetyTests(unittest.TestCase):
     def mutate(self, items, **kwargs):
         return self.safety._mutate(items, remove_owned=True, message="test", **kwargs)
 
-    def test_backup_failure_and_unsaved_edits_prevent_begin(self):
+    def test_backup_failure_prevents_begin_but_unsaved_graphics_are_allowed(self):
         self.board.fail = "backup"
         with self.assertRaises(CapabilityError):
             self.mutate([Item("a")])
         self.assertNotIn("begin", self.board.events)
         self.board.fail = ""
         self.board.source = BOARD.replace("20 20", "21 20")
-        with self.assertRaises(ValidationError):
-            self.mutate([Item("a")])
+        self.mutate([Item("a")], temporary=True)
+        self.assertIn("begin", self.board.events)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), BOARD)
+
+    def test_unsaved_preview_can_apply_against_validated_live_board(self):
+        # The source has a legitimate unsaved outline edit before validation.
+        self.board.source = BOARD.replace("20 20", "21 20")
+        calls = []
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(
+            drc=lambda path: (calls.append(path.read_text()), DrcResult(0, 0, 0))[1]))
+        report = validator.validate(self.dsn, self.plan, ())
+        self.assertTrue(all("21 20" in text for text in calls))
+        self.mutate([Item("preview-a"), Item("preview-b")], temporary=True)
+        self.assertIn("preview-a", self.board.get_as_string())
+        self.board.events.clear()
+        self.safety.factory.copper = lambda items, board: [Item(item.id) for item in items]
+        SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
+        self.assertEqual(self.board.events.count("push"), 1)
+        self.assertNotIn("preview-a", self.board.items)
+        self.assertFalse(self.safety.owned)
+        self.assertIn("21 20", self.board.source)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), BOARD)
+
+    def test_board_changes_after_validation_refuse_but_cleanup_preserves_edits(self):
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(0, 0, 0)))
+        report = validator.validate(self.dsn, self.plan, ())
+        self.mutate([Item("preview")], temporary=True)
+        self.board.source = BOARD.replace("20 20", "22 20")
+        self.board.events.clear()
+        with self.assertRaisesRegex(ValidationError, "changed after routing validation"):
+            SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
         self.assertNotIn("begin", self.board.events)
+        self.safety.clear_preview()
+        self.assertIn("22 20", self.board.source)
+        self.assertFalse(self.safety.owned)
+
+    def test_snapshot_strips_only_owned_graphics_and_preserves_quoted_fields(self):
+        text = BOARD[:-1] + r'(gr_text "quoted \"text\"\nC:\\tmp" (uuid "other")) (gr_line (uuid "ours")))'
+        cleaned = live_board_text(text, {"ours"})
+        self.assertEqual(canonical(parse(text, kicad=True), {"ours"}), canonical(parse(cleaned, kicad=True)))
+        self.assertIn('"other"', cleaned)
+        self.assertNotIn('"ours"', cleaned)
+
+    def test_edit_between_backup_and_commit_cancels_before_copper_creation(self):
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(0, 0, 0)))
+        report = validator.validate(self.dsn, self.plan, ())
+        self.safety.factory.copper = lambda items, board: [Item(item.id) for item in items]
+        begin = self.board.begin_commit
+        def edit_then_begin():
+            self.board.source = BOARD.replace("20 20", "23 20")
+            return begin()
+        self.board.begin_commit = edit_then_begin
+        with self.assertRaises(ValidationError):
+            SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
+        self.assertNotIn("create", self.board.events)
+        self.assertIn("drop", self.board.events)
+        self.assertIn("23 20", self.board.source)
+        self.assertFalse(self.safety.blocked)
 
     def test_partial_create_rolls_back_whole_transaction(self):
         self.board.fail = "partial"

@@ -26,6 +26,27 @@ class KiCadCliTests(unittest.TestCase):
             with self.assertRaisesRegex(CapabilityError, "Install KiCad 9"):
                 KiCadCli()
 
+    def test_incomplete_issue_identity_cannot_exempt_a_candidate_warning(self):
+        from velatrace.candidate import route_issues
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "drc.json"
+            warning = {"type": "clearance", "severity": "warning", "items": [{"uuid": "pad-1"}]}
+            incomplete = [warning | {"items": []}, warning | {"items": [{}]},
+                          warning | {"items": [{"uuid": None}]}, warning | {"type": None},
+                          warning | {"severity": None}]
+            for issue in incomplete:
+                with self.subTest(issue=issue):
+                    path.write_text(json.dumps({"violations": [warning, issue],
+                                               "unconnected_items": [], "schematic_parity": []}))
+                    result = parse_drc_report(path)
+                    self.assertEqual(result.violations, 2)
+                    self.assertEqual(result.issues, ())
+                    self.assertEqual(route_issues(result, result), (2, 0))
+            path.write_text(json.dumps({"violations": [warning], "unconnected_items": [],
+                                       "schematic_parity": []}))
+            result = parse_drc_report(path)
+            self.assertEqual(route_issues(result, result), (0, 1))
+
     def test_incomplete_drc_coverage_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "drc.json"

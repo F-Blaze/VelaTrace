@@ -57,7 +57,9 @@ def redundancy_flags(components: tuple[Component, ...],
         if (not comp.value.strip() or not comp.footprint.strip() or not comp.pins
                 or any(not pin.net or not pin.number for pin in comp.pins)):
             continue
-        key = (_norm(comp.value), _norm(comp.footprint), _norm(comp.kind),
+        # SI prefixes are case-sensitive: 1m and 1M are different values.
+        # Do not turn electrically different parts into duplicate candidates.
+        key = (" ".join(comp.value.strip().split()), _norm(comp.footprint), _norm(comp.kind),
                tuple(sorted((pin.number, pin.net) for pin in comp.pins)))
         groups.setdefault(key, []).append(comp)
     flags = []

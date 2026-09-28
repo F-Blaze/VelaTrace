@@ -9,7 +9,7 @@ from unittest.mock import patch
 from velatrace.constraints import Constraint, Scope
 from velatrace.dsn import DsnInput, ExportTicket, dsn_scale, file_digest
 from velatrace.errors import CapabilityError, ValidationError
-from velatrace.freerouting import (Freerouting, PROBE_SHA256, clean_environment,
+from velatrace.freerouting import (Freerouting, ProcessResult, PROBE_SHA256, clean_environment,
                                   constrained_dsn, run_bounded)
 from velatrace.ses import ViaSpec, parse_ses
 from velatrace.sexpr import children, one, parse
@@ -43,6 +43,23 @@ class FreeroutingTests(unittest.TestCase):
             env = clean_environment(self.root)
         self.assertTrue(set(env) <= {"SYSTEMROOT", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP", "APPDATA", "LOCALAPPDATA", "SystemRoot", "windir"})
         self.assertNotIn("secret", env.values())
+
+    def test_startup_preserves_other_sessions_and_user_directories(self):
+        jar = self.root / "test.jar"
+        jar.write_bytes(b"unit test")
+        router = Freerouting(jar, sys.executable, work_directory=self.root)
+        markers = []
+        for name in ("route-active", "startup-active", "route-user-files"):
+            directory = self.root / name
+            directory.mkdir()
+            marker = directory / "keep.txt"
+            marker.write_text("owned by another session")
+            markers.append(marker)
+        with patch("velatrace.freerouting.JAR_SHA256", hashlib.sha256(jar.read_bytes()).hexdigest()), \
+                patch("velatrace.freerouting.run_bounded", return_value=ProcessResult(0, 'version "21.0.1"')), \
+                patch.object(router, "_prepare"):
+            router.check_startup()
+        self.assertTrue(all(marker.read_text() == "owned by another session" for marker in markers))
 
     def test_bounded_process_output_and_timeout(self):
         result = run_bounded([sys.executable, "-c", "print('a'*100000)"], self.root, 10)
