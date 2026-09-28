@@ -1,6 +1,6 @@
 # Contributing to VelaTrace
 
-VelaTrace is maintained by F-Blaze without a support or response-time guarantee. Contributions and forks are welcome under the MIT license. The public remote and main protections are configured. Application changes await independent PR approval; release acceptance and signing remain pending. See [remote setup status](docs/REMOTE_SETUP.md).
+VelaTrace is maintained by F-Blaze without a support or response-time guarantee. Contributions and forks are welcome under the MIT license. The public remote and main protections are configured, and the alpha has merged. Every new change requires independent PR approval; release acceptance and signing remain pending. See [remote setup status](docs/REMOTE_SETUP.md).
 
 ## Local development
 
@@ -21,7 +21,7 @@ Development checkouts may be used for local review and synthetic tests. Distribu
 
 Create a focused branch and PR with the problem, changed behavior, relevant validation and remaining limitations. Every change to `main`, including maintainer work, requires independent review, passing required CI/CodeQL checks and resolved discussions. Do not bypass protection, directly push to `main`, self-approve or treat an agent's review as a GitHub approval. Bootstrap commits in this local repository still need independent PR review before release.
 
-[CODEOWNERS](.github/CODEOWNERS) names the responsible owner and explicitly covers subprocesses, network transport, filesystem writes and installation surfaces. It only enforces review once GitHub requires code-owner approval. F-Blaze-authored PRs need a trusted second owner/reviewer with the necessary repository access; that person is not yet appointed. Add them before enabling merges, without inventing a username or disabling the requirement.
+[CODEOWNERS](.github/CODEOWNERS) names the responsible owner and explicitly covers subprocesses, network transport, filesystem writes and installation surfaces. GitHub requires code-owner approval. F-Blaze-authored PRs need a trusted second owner/reviewer with the necessary repository access; the current file still lists only F-Blaze. Add the maintainer's trusted reviewer without disabling the requirement.
 
 Changes involving shell/subprocess calls, network calls, writes outside the project folder or install scripts must explain the input trust boundary, allowed destinations, credential handling and failure behavior. Identify new such paths in CODEOWNERS. Runtime subprocesses must use argument arrays, avoid shells, sanitize environments and have deadlines. Provider calls must retain consent, endpoint restrictions, output/call caps and bounded retries. Any broader permission or destination needs an explicit design review.
 
@@ -41,4 +41,4 @@ Tests should target observable behavior and meaningful failure cases. Include bu
 
 Follow [repository security setup](docs/repository-security.md) and record evidence for every gate in [build status](docs/BUILD_STATUS.md). Scan the entire reachable history and release contents for secrets, review dependency changes, verify package license/probe contents and complete live editor/provider acceptance. Only create a signed annotated release tag after all changes have been merged through reviewed PRs. Publish the signing identity through a trusted channel; never fabricate a tag, fingerprint or successful check. A failed or pending gate blocks release.
 
-Do not put security-sensitive details in public issues. [SECURITY.md](SECURITY.md) describes the currently pending private-reporting setup; no working private contact is claimed yet.
+Do not put security-sensitive details in public issues. Use GitHub's enabled private vulnerability reporting, as described in [SECURITY.md](SECURITY.md).

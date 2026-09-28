@@ -79,6 +79,11 @@ class AuditReview(unittest.TestCase):
   self.assertEqual(redundancy_flags(caps,fs),[])
  def test_sensor_duplicate(self):
   flags=redundancy_flags(SENSORS,FUN); self.assertEqual(len(flags),1); self.assertFalse(flags[0].possible)
+ def test_case_sensitive_si_prefixes_do_not_create_duplicate_savings(self):
+  parts=tuple(replace(comp,value=value) for comp,value in zip(SENSORS,('1mOhm','1MOhm')))
+  verdicts={comp.reference:Verdict(comp.reference,Bucket.IMPORTANT,1,'Keep') for comp in parts}
+  self.assertEqual(redundancy_flags(parts,FUN),[])
+  self.assertEqual(compute_flags(parts,FUN,verdicts),[])
  def test_distinct_bulk_roles_even_same_value(self):
   fs={'U1':Function('Bulk storage','bulk capacitor',1),'U2':Function('Local decoupling','decoupling capacitor',1)}
   self.assertEqual(redundancy_flags(SENSORS,fs),[])

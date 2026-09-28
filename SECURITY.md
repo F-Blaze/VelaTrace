@@ -1,6 +1,6 @@
 # Repository security
 
-Upstream: [F-Blaze/VelaTrace](https://github.com/F-Blaze/VelaTrace). Main PR protection, secret scanning, push protection and private vulnerability reporting are enabled. See [verified remote settings](docs/REMOTE_SETUP.md). Independent approval, a second code owner, live acceptance and release signing remain pending.
+Upstream: [F-Blaze/VelaTrace](https://github.com/F-Blaze/VelaTrace). Main PR protection, secret scanning, push protection and private vulnerability reporting are enabled. See [verified remote settings](docs/REMOTE_SETUP.md). The alpha has merged; each new PR still needs independent approval. A second code owner, broader live acceptance and release signing remain gates.
 
 Before release, enable a main branch ruleset: PRs required for everyone including the maintainer, no bypass, approvals required, stale approvals dismissed, code owner review required, resolved discussions and passing CI/CodeQL required. Block branch deletion and force pushes. Enable secret scanning and push protection in repository settings. Enable 2FA on the maintainer account.
 

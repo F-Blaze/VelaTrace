@@ -11,7 +11,8 @@ import shutil
 import threading
 import uuid
 
-from .candidate import canonical, context_matches, file_digest, read_board
+from .candidate import canonical, context_matches, file_digest, live_board_text, read_board
+from .sexpr import parse
 from .errors import CapabilityError, ValidationError, VelaTraceError
 from .routing import plan_digest
 
@@ -246,7 +247,10 @@ class BoardSafety:
             # Never ask KiCad to save a copy (SaveCopyOfDocument): it rewrites the real
             # project file on every call, and KiCad 10.0.4's project manager crashed in
             # _eeschema.dll after repeated copies. The in-memory board text writes nothing.
-            live.write_text(self.board.get_as_string(), encoding="utf-8")
+            with live.open("x", encoding="utf-8") as stream:
+                stream.write(self.board.get_as_string())
+                stream.flush()
+                os.fsync(stream.fileno())
             read_board(live)
         except Exception as exc:
             raise CapabilityError("Cannot create the live board backup; no board mutation was attempted.") from exc
@@ -259,26 +263,28 @@ class BoardSafety:
         self.last_backup = result
         return result
 
-    def _check_snapshot(self, backup, expected_digest=None):
+    def _check_snapshot(self, backup, expected_digest=None, expected_board=None):
         if expected_digest and file_digest(self.path) != expected_digest:
             raise ValidationError("Saved board changed; obtain a fresh export and approval.")
-        _, saved = read_board(backup.saved)
-        _, live = read_board(backup.live)
-        if canonical(saved, frozenset(self.owned)) != canonical(live, frozenset(self.owned)):
-            raise ValidationError("Live board has unsaved changes. Save it, then export and validate again.")
+        return self._check_live_source(backup.live.read_text(encoding="utf-8"), expected_board)
+
+    def _check_live_source(self, text, expected_board=None):
+        self._owned_items()
+        source = live_board_text(text, frozenset(self.owned))
+        if expected_board is not None and canonical(parse(source, kicad=True)) != expected_board:
+            raise ValidationError("The board changed after routing validation. Reject the preview and validate a new route; no save is required to approve an unchanged preview.")
         # Unsaved Board Setup changes cannot be read without KiCad rewriting the project
         # (see backup). Validation uses the saved project, and its digest is re-checked
         # around every commit via the candidate context.
-        # Do not delete an owned preview that the user changed after creation.
-        self._owned_items()
+        return source
 
-    def assert_matches(self, dsn):
+    def assert_matches(self, dsn, *, expected_board=None):
         with self._lock:
             dsn.assert_unchanged()
             if dsn.ticket.board_path != self.path:
                 raise ValidationError("DSN belongs to a different board.")
             backup = self.backup()
-            self._check_snapshot(backup, dsn.ticket.board_digest)
+            return self._check_snapshot(backup, dsn.ticket.board_digest, expected_board)
 
     def _owned_items(self):
         if not self.owned:
@@ -292,12 +298,12 @@ class BoardSafety:
             result.append(item)
         return result
 
-    def _mutate(self, additions, *, remove_owned, message, expected_digest=None, temporary=False, context=None):
+    def _mutate(self, additions, *, remove_owned, message, expected_digest=None, temporary=False, context=None, expected_board=None):
         with self._lock:
             if len(additions) > 100_000:
                 raise ValidationError("Too many items for one safe transaction.")
             backup = self.backup()
-            self._check_snapshot(backup, expected_digest)
+            self._check_snapshot(backup, expected_digest, expected_board)
             removals = self._owned_items() if remove_owned else []
             expected = {item.id.value: _signature(item) for item in additions}
             if len(expected) != len(additions) or "" in expected:
@@ -312,6 +318,11 @@ class BoardSafety:
             commit = None
             try:
                 commit = self.board.begin_commit()
+                if expected_board is not None:
+                    # Close the interval between the backup/journal and transaction.
+                    # Read before adding/removing anything, so our own writes cannot
+                    # hide an intervening editor change.
+                    self._check_live_source(self.board.get_as_string(), expected_board)
                 if removals and not self.factory.delete(self.board, removals):
                     raise ValidationError("KiCad did not remove every owned preview item.")
                 created = self.board.create_items(additions) if additions else []
@@ -367,10 +378,10 @@ class BoardSafety:
             raise CapabilityError("Temporary VelaTrace graphics need the User.9 layer. In KiCad: File > Board Setup > Board Stackup > Board Editor Layers > Add User Defined Layer... > User.9, then save the board. VelaTrace never changes layer settings itself.")
         return BL_User_9
 
-    def show_preview(self, dsn, plan):
-        self.assert_matches(dsn)
+    def show_preview(self, dsn, plan, expected_board):
+        self.assert_matches(dsn, expected_board=expected_board)
         additions = self.factory.preview(plan, self._preview_layer())
-        self._mutate(additions, remove_owned=True, message="VelaTrace routing preview", expected_digest=dsn.ticket.board_digest, temporary=True)
+        self._mutate(additions, remove_owned=True, message="VelaTrace routing preview", expected_digest=dsn.ticket.board_digest, temporary=True, expected_board=expected_board)
 
     def show_annotations(self, rows):
         additions = self.factory.annotations(rows, self._preview_layer())
@@ -395,11 +406,11 @@ class SafeBoardWriter:
         if (evidence is None or evidence[:3] != (dsn.digest, plan_digest(plan), report)
                 or report.drc_violations != 0 or report.unconnected_count != 0):
             raise ValidationError("Approval requires this adapter's complete verified candidate evidence.")
-        _, _, _, items, context = evidence
+        _, _, _, items, context, snapshot = evidence
         if not context_matches(context):
             raise ValidationError("Project rules changed after validation; route again.")
-        self.safety.assert_matches(dsn)
+        self.safety.assert_matches(dsn, expected_board=snapshot)
         additions = self.safety.factory.copper(items, self.safety.board)
         self.safety._mutate(additions, remove_owned=True, message="VelaTrace approved routing",
-                            expected_digest=dsn.ticket.board_digest, context=context)
+                            expected_digest=dsn.ticket.board_digest, context=context, expected_board=snapshot)
         self.validator.evidence = None

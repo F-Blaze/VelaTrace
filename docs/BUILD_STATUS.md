@@ -1,6 +1,8 @@
 # VelaTrace build status
 
-Status updated 2026-09-23. This is a local development alpha, not a signed release. Target upstream: **F-Blaze/VelaTrace**. The public remote now exists with a protected, MIT-license-only `main`. Application code is on `review/initial-alpha` awaiting independent PR review. No release tag exists. The original local `bootstrap/foundation` history is retained. See [remote setup](REMOTE_SETUP.md).
+Current status, 2026-09-27: **development alpha, no signed release**. PR #1 was merged into protected `main` on September 27; the preview-approval fix is being reviewed separately. The [current review](REVIEW_2026_09_27.md) supersedes the historical evidence below for tests, live IPC and fixes. The original local `bootstrap/foundation` history is retained. See [remote setup](REMOTE_SETUP.md).
+
+The phase evidence and verification counts below record the original September 23 build. They are not claims about the latest revision.
 
 ## Phase evidence
 
@@ -31,11 +33,11 @@ The wheel was checked for the MIT license, required runtime modules, independent
 | Fully automatic DSN export | Fresh manual KiCad DSN export required on the supported 9/10 baseline. |
 | General routing support | Only initially unrouted saved boards, straight tracks, through vias and all-net width/clearance. Existing routing, hierarchical schematic context and header/per-net constraints refuse. |
 | Docking and native transient overlays | External window and guarded User.9 graphics. KiCad controls layer color; per-layer dashed violet is available in the panel. |
-| Live candidate validation | Real matching-project/rules candidate DRC and successful complete route acceptance still required. |
-| Live IPC writes and Undo | SaveCopy board/project serialization, server default attributes, in-commit reads, preview cleanup, rollback/disconnection and one Ctrl+Z must be verified in supported editors. |
+| Live candidate validation | Disposable two-pad route passed matching KiCad 10.0.4 candidate DRC; broader geometry/version coverage remains open. |
+| Live IPC writes and Undo | Preview, unsaved approval, reads in a commit, cleanup and one Undo passed KiCad 10.0.4. Live backups use get_as_string, not SaveCopy. Crash/disconnection coverage remains limited. |
 | Privacy/provider integration | Notice and errors tested locally; exact live model token counts/streaming need consented nonconfidential provider integration. Gemini search display remains unimplemented. |
 | Cross-version/OS behavior | No blanket KiCad 9/10/11 or desktop OS certification. Windows CLI and offline SDK/Qt evidence are narrower. |
-| Reviewed PRs and protected main | Protected main and the public remote are configured. Independent PR review remains pending; a trusted second code owner is required for maintainer-authored changes. |
+| Reviewed PRs and protected main | Protected main contains the merged alpha. Each new fix still needs independent review; CODEOWNERS currently lists only the author. |
 | Secret scanning/push protection and CodeQL | Secret scanning and push protection are enabled. PR workflow results are recorded in [remote setup](REMOTE_SETUP.md). |
 | Signed release | No signing identity/fingerprint, signed tag or production install target exists. All prior gates must pass first. |
 

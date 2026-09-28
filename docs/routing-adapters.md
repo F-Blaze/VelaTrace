@@ -14,7 +14,9 @@ matches board basename, saved digest, layer names, pin-to-net membership, refere
 set and placement coordinates. These checks do not prove pad rotation, keepouts or
 pad geometry equivalence; the actual candidate must pass DRC against the real board.
 Any subsequent DSN or saved-board digest change invalidates the export. The live
-adapter must separately refuse unsaved edits or a different open board.
+adapter validates the live board and binds approval to that snapshot. It refuses
+a different open board or changes after validation, excluding verified owned preview
+graphics. No save is required between preview and approval.
 
 The external process adapter implements `Router.check_startup()` and
 `Router.route(dsn, constraints) -> SES text`. It must honor the confirmed numeric

@@ -208,10 +208,8 @@ class Freerouting:
         if not self.java.is_file():
             raise CapabilityError("Java is missing. Install Eclipse Temurin Java 21 (JRE or JDK) and configure its bin/java executable.")
         self.work_directory.mkdir(parents=True, exist_ok=True)
-        # Windows can hold Java's temporary socket files for a moment after exit, so a
-        # previous run's scratch folder may survive its own cleanup. Remove leftovers.
-        for leftover in (*self.work_directory.glob("route-*"), *self.work_directory.glob("startup-*")):
-            shutil.rmtree(leftover, ignore_errors=True)
+        # Only clean up the directory this call creates. Other matching directories
+        # may belong to another running router or contain files owned by the user.
         with tempfile.TemporaryDirectory(prefix="startup-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
             directory = Path(name)
             result = run_bounded([str(self.java), "-version"], directory, 15)

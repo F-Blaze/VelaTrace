@@ -16,7 +16,7 @@ UI integration order:
 2. Construct the routing session with that validator and the external router.
    Obtain a fresh DSN and normal placement/constraint confirmations.
 3. Run `session.run(trusted_via_catalog(dsn))`, display `session.summary`, then
-   `safety.show_preview(dsn, session.plan)` if a plan is available. A shortfall may
+   `safety.show_preview(dsn, session.plan, validator.evidence[5])` if a plan is available. A shortfall may
    be previewed but never approved.
 4. Reject with an explicit reason and call `safety.clear_preview()` before the
    next attempt. Clear owned annotations before obtaining a new saved-board DSN.
@@ -34,7 +34,8 @@ copper it should replace. Hierarchical schematic context, blind/buried/microvias
 per-net constraints and header keepouts currently refuse explicitly. These are
 capability limits, not successful completion of those requirements.
 
-The candidate preserves the complete source PCB text and appends the verified
+The candidate uses the current live PCB text, excludes only this session's verified
+temporary item IDs, and appends the verified
 copper items. Unknown source board geometry is preserved. The real board's nets
 and copper layers are checked; the same integer-nanometre coordinates, widths and
 UUIDs are used for candidate serialization and IPC construction. Via diameter and
@@ -51,28 +52,44 @@ DRC explicitly enables schematic parity; malformed context refuses validation.
 For confirmed extra clearance it runs both the original rules and a second
 pass with a global minimum rule; adding a weaker global rule cannot erase evidence
 from the original stronger rules. Trace-width minima are also measured in code.
-Unknown, nonzero or failed DRC prevents approval. The writer accepts only the exact
+Unknown or failed DRC prevents approval. Every error and newly introduced warning
+blocks approval. Identifiable pre-existing warnings are reported without blocking;
+missing issue identities fall back to counting every candidate issue as blocking.
+The writer accepts only the exact
 evidence produced by its paired validator, then consumes it after application.
 
 Before every live mutation, including annotation creation, preview creation,
 rejection cleanup and approval, VelaTrace creates new immutable copies of the
-saved board and the live board using official `SaveCopyOfDocument`. Copies never
-replace a source file. Live project JSON is compared with saved project JSON;
-missing live project backup or changed settings prevent mutation. Whole-board
-canonical comparison includes all geometry, footprints, pads, fields, zones and
-unknown contents. Only generator metadata, harmless numeric spelling and root
-item ordering are normalized. Unexplained differences stop the operation.
+saved board, the live board obtained through official `get_as_string()`, and the
+saved project when present. Copies never replace a source file. The live board
+copy is flushed to disk before a mutation. `SaveCopyOfDocument` is not used: it
+can rewrite the real project and caused a KiCad 10.0.4 crash during earlier tests.
+
+There is no requirement to save between preview and approval. Candidate DRC uses
+the live board, including unsaved edits made before validation. Approval compares
+that validated snapshot with the live board, excluding only verified owned preview
+items. Changes after validation require a new validation, not a save of the preview.
+Whole-board canonical comparison includes footprints, pads, fields, zones and
+unknown geometry. Generator metadata, harmless numeric spelling and root item
+ordering are normalized. Edited or missing owned previews refuse explicitly.
+
+Board Setup changes not present in the saved project cannot be read safely by this
+adapter. Save the project rules before starting the initial DSN workflow; validation
+uses those saved rules and checks their digests. Do not edit the board or project
+while a routing operation is running. This is not full live Board Setup validation.
 
 A durable `intent.json` lists exact item UUIDs before a transaction begins; a
 `completion.json` records successful commit acknowledgment. Saved board and
 project digests are checked again immediately before and during the transaction.
+The validated live snapshot is re-read after beginning the commit, before any
+removal or addition, to catch edits made during backup/journal creation.
 All requested additions must return their exact IDs and protobuf geometry.
 Partial creation or failed deletion drops the entire transaction. A failed
 rollback or ambiguous begin/commit response blocks retries and reports the backup
 directory: inspect the actual KiCad state before restarting the plugin. An
 acknowledged rollback is not claimed when the connection is lost.
 
-`show_preview(dsn, plan)` creates dashed non-copper graphics on an already enabled
+`show_preview(dsn, plan, expected_board)` creates dashed non-copper graphics on an already enabled
 `User.9` layer; it never changes enabled layers or layer colors. `show_annotations`
 accepts plain `(text, x_mm, y_mm)` rows. `clear_preview()` removes only exact IDs
 created in this service instance, after checking that they have not been edited.
@@ -94,11 +111,10 @@ Failure-injection tests verify ordering, backup refusal, partial-create rollback
 failed-removal rollback, ambiguous IPC blocking, preview ownership, original and
 supplemental DRC passes, changed project rules and single-commit application.
 Official pinned SDK constructors for tracks, through vias, graphics and text are
-checked offline. An isolated official KiCad 10.0.6 CLI runtime passed the authored
-fixture checks for expected violations/unconnected items and refusal of disabled
-checks; see [testing.md](testing.md). KiCad is not installed system-wide, and no
-live editor IPC session has been tested. Real
-candidate DRC, SaveCopy project naming, server attribute normalization, reads during
-an open commit, and actual one-step Ctrl+Z still require live KiCad 9+ acceptance
-testing before release. Exact protobuf comparison may safely refuse a server that
-adds default attributes; do not weaken it without recording those verified defaults.
+checked offline. On 2026-09-27, the installed KiCad 10.0.4 editor and matching CLI
+passed a disposable two-pad routing test with real Freerouting 2.1.0: zero DRC
+violations/unconnected items, User.9 preview, approval without saving, live reads
+inside the commit, preview removal, one-step Undo restoring the preview, and guarded
+cleanup. Saved board bytes were unchanged. See [current review](REVIEW_2026_09_27.md)
+and [testing.md](testing.md). This is one supported geometry case, not blanket
+KiCad-version or operating-system certification.

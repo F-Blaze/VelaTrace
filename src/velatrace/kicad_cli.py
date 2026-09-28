@@ -33,12 +33,18 @@ class DrcResult:
     issues: tuple = ()
 
 
-def _issue(row) -> tuple:
+def _issue(row) -> tuple | None:
     items = row.get("items", [])
     if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
         raise ValueError()
-    return (str(row.get("type", "")), str(row.get("severity", "")),
-            tuple(sorted(str(item.get("uuid", "")) for item in items)))
+    kind, severity = row.get("type"), row.get("severity")
+    uuids = [item.get("uuid") for item in items]
+    # Missing identifiers are not evidence that two warnings concern the same
+    # items. Keep their counts, but make the baseline comparison fail closed.
+    if (not isinstance(kind, str) or not kind or not isinstance(severity, str) or not severity
+            or not uuids or any(not isinstance(value, str) or not value for value in uuids)):
+        return None
+    return kind, severity, tuple(sorted(uuids))
 
 
 def parse_drc_report(path: Path) -> DrcResult:
@@ -63,7 +69,8 @@ def parse_drc_report(path: Path) -> DrcResult:
                     any(not isinstance(item, str) for item in severities) or
                     not {"error", "warning", "exclusion"}.issubset(severities)):
                 raise ValidationError("KiCad omitted DRC severities; a complete report is required.")
-        issues = tuple(sorted(_issue(row) for row in (*rows[0], *rows[2])))
+        identities = [_issue(row) for row in (*rows[0], *rows[2])]
+        issues = () if any(issue is None for issue in identities) else tuple(sorted(identities))
     except (ValueError, KeyError, TypeError) as exc:
         raise ValidationError("KiCad DRC report is incomplete or malformed; approval is unavailable.") from exc
     return DrcResult(*(len(items) for items in rows), issues)
