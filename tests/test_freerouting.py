@@ -68,6 +68,47 @@ class FreeroutingTests(unittest.TestCase):
         with self.assertRaisesRegex(CapabilityError, "exceeded"):
             run_bounded([sys.executable, "-c", "import time; time.sleep(10)"], self.root, .1)
 
+    def test_route_checks_runtime_and_actual_policy_once_before_launch(self):
+        jar = self.root / "router.jar"
+        jar.write_bytes(b"fixture jar")
+        board = self.root / "simple.kicad_pcb"
+        board.write_text("fixture board")
+        path = self.root / "simple.dsn"
+        path.write_text((FIXTURES / "simple.dsn").read_text())
+        dsn = DsnInput(path, file_digest(path), ExportTicket.begin(board),
+                       frozenset({"N"}), frozenset({"F.Cu", "B.Cu"}))
+        router = Freerouting(jar, sys.executable, work_directory=self.root / "processes")
+        for failed_step in (None, "java", "probe"):
+            launches = []
+            def run(args, directory, timeout):
+                step = "java" if "-version" in args else "probe" if "OfflineProbe" in args else "router"
+                launches.append((step, directory))
+                if step == failed_step:
+                    return ProcessResult(1, "failed")
+                if step == "router":
+                    (directory / "result.ses").write_text("fixture result")
+                return ProcessResult(0, 'version "21.0.1"' if step == "java" else "VELATRACE_OFFLINE_POLICY_OK")
+            with self.subTest(failed_step=failed_step), \
+                    patch("velatrace.freerouting.JAR_SHA256", hashlib.sha256(jar.read_bytes()).hexdigest()), \
+                    patch("velatrace.freerouting.run_bounded", side_effect=run):
+                if failed_step:
+                    with self.assertRaises(CapabilityError):
+                        router.route(dsn, ())
+                else:
+                    self.assertEqual(router.route(dsn, ()), "fixture result")
+            expected = ["java"] if failed_step == "java" else ["java", "probe"] if failed_step == "probe" else ["java", "probe", "router"]
+            self.assertEqual([step for step, _ in launches], expected)
+            self.assertEqual(len({directory for _, directory in launches}), 1)
+            self.assertTrue(launches[0][1].name.startswith("route-"))
+            self.assertFalse(list(router.work_directory.iterdir()))
+
+        # Installation identity is checked on every route, before any JVM runs.
+        jar.write_bytes(b"modified")
+        with patch("velatrace.freerouting.run_bounded") as run:
+            with self.assertRaisesRegex(CapabilityError, "hash mismatch"):
+                router.route(dsn, ())
+            run.assert_not_called()
+
     def test_dsn_and_ses_use_different_coordinate_scaling(self):
         root = parse((FIXTURES / "simple.dsn").read_text())
         self.assertEqual(dsn_scale(root), .001)

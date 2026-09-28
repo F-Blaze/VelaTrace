@@ -96,6 +96,13 @@ created in this service instance, after checking that they have not been edited.
 Other user-layer contents are never swept. KiCad owns board-layer colors; set
 User.9 to violet in KiCad if desired. The separate panel can always draw violet.
 
+Before temporary segment creation, a collision check compares the layer and
+undirected endpoints with nonowned existing graphics, and rejects duplicate
+requested segments. This prevents a verified KiCad behavior that replaces an
+existing coincident User.9 line with the new UUID. The board-change check must not
+ignore that disappearance. Approved copper is read back by UUID and exact geometry
+after the commit; missing/mismatched copper blocks retries as an uncertain write.
+
 Approval removes the owned preview and creates all approved copper inside one
 `begin_commit` / `push_commit` pair. It leaves the board unsaved in KiCad; the user
 saves normally. One KiCad Undo is intended to revert that whole commit, restoring

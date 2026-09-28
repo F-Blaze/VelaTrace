@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 import json
 from pathlib import Path
 import os
+import time
 import uuid
 from queue import Queue
 
@@ -123,6 +124,7 @@ class Worker(QThread):
     result = Signal(object)
     error = Signal(str)
     usage = Signal(object)
+    progress = Signal(str)
     idle = Signal()
 
     def __init__(self, parent):
@@ -446,8 +448,13 @@ class MainWindow(QMainWindow):
         self.executor = Worker(self)
         self.executor.usage.connect(self.update_usage)
         self.executor.result.connect(self.work_result)
-        self.executor.error.connect(self.show_error)
+        self.executor.error.connect(self.work_error)
+        self.executor.progress.connect(self.work_progress)
         self.executor.idle.connect(self.work_finished)
+        self._work_started = None
+        self.work_timer = QTimer(self)
+        self.work_timer.setInterval(1000)
+        self.work_timer.timeout.connect(self.update_work_status)
         self.executor.start()
         self.ready = False
         self.preview_shown = False
@@ -566,7 +573,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.export_button)
         row.addWidget(self.import_button)
         route_layout.addLayout(row)
-        self.route_button = QPushButton("3 · Confirm constraints and route")
+        self.route_button = QPushButton("3 · Generate routing preview")
         self.route_button.setObjectName("primary")
         self.route_button.clicked.connect(self.route)
         route_layout.addWidget(self.route_button)
@@ -581,12 +588,18 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         self.reject_button = QPushButton("Reject")
         self.reject_button.clicked.connect(self.reject_route)
-        self.approve_button = QPushButton("Approve route")
+        self.approve_button = QPushButton("4 · Approve and apply copper")
+        self.approve_button.setObjectName("primary")
         self.approve_button.clicked.connect(self.approve_route)
         row.addWidget(self.reject_button)
         row.addWidget(self.approve_button)
         route_layout.addLayout(row)
-        self.pages.addWidget(self.route_page)
+        # Validation details can grow, and small displays must still expose the
+        # approval controls without forcing the whole window off screen.
+        self.route_scroll = QScrollArea()
+        self.route_scroll.setWidgetResizable(True)
+        self.route_scroll.setWidget(self.route_page)
+        self.pages.addWidget(self.route_scroll)
         layout.addWidget(self.pages, 1)
         self.status = label("Setup required.")
         self.usage_label = label("Tokens: idle", muted=True)
@@ -638,18 +651,23 @@ class MainWindow(QMainWindow):
         self.approve_button.setEnabled(self.preview_shown and self.routing is not None and self.routing.stage == RoutingStage.PREVIEW and self.routing.report is not None and self.routing.report.drc_violations == 0)
         self.reject_button.setEnabled(self.routing is not None and self.routing.stage in {RoutingStage.PREVIEW, RoutingStage.SHORTFALL, RoutingStage.NEEDS_REASON})
 
-    def run_work(self, title, operation, success=None):
+    def run_work(self, title, operation, success=None, failure=None):
         if self.worker is not None:
             return
         self.status.setStyleSheet("")
-        self.status.setText(title + " — keep KiCad unchanged until this finishes.")
+        self._work_title = title
+        self._work_started = time.monotonic()
+        self.update_work_status()
+        self.work_timer.start()
         self.worker = self.executor
         self._success = success
+        self._failure = failure
         self.refresh_actions()
         self.executor.jobs.put(operation)
 
     @Slot(object)
     def work_result(self, value):
+        self.work_timer.stop()
         self.status.setText("Ready.")
         try:
             if self._success:
@@ -657,8 +675,28 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.show_error(str(exc))
 
+    @Slot(str)
+    def work_error(self, message):
+        self.work_timer.stop()
+        self.show_error(message)
+        if self._failure:
+            self._failure(message)
+
+    @Slot(str)
+    def work_progress(self, message):
+        self._work_title = message
+        self.update_work_status()
+
+    @Slot()
+    def update_work_status(self):
+        if self._work_started is not None:
+            elapsed = time.monotonic() - self._work_started
+            self.status.setText(f"{self._work_title} · {elapsed:.0f}s — keep KiCad unchanged until this finishes.")
+
     @Slot()
     def work_finished(self):
+        self.work_timer.stop()
+        self._work_started = None
         self.worker = None
         self.refresh_actions()
 
@@ -998,13 +1036,23 @@ class MainWindow(QMainWindow):
             self.preview_shown = False
             def operation(_):
                 self.safety.clear_preview()
+                self.routing.progress = self.executor.progress.emit
                 report = self.routing.run(trusted_via_catalog(self.routing.input))
                 # Preview refusal must remain visible even if validated data exists.
+                self.executor.progress.emit("Showing routing preview")
+                started = time.monotonic()
                 self.safety.show_preview(self.routing.input, self.routing.plan, self.validator.evidence[5])
-                return report
-            def done(_):
+                return report, time.monotonic() - started
+            def done(value):
                 self.preview_shown = True
-                self.route_summary.setText(self.routing.summary + " Review User.9, then approve or reject. No save is required before approval.")
+                timings = self.routing.timings
+                timing_text = (f" Routing {timings['router']:.1f}s; DRC {timings['validation']:.1f}s; "
+                               f"preview {value[1]:.1f}s.")
+                next_step = ("Click ‘Approve and apply copper’ to install this route, or reject it. No save is required before approval."
+                             if self.routing.stage == RoutingStage.PREVIEW and value[0].drc_violations == 0
+                             else "Approval is blocked by the validation result. Review it, then reject and revise the route.")
+                self.route_summary.setText(self.routing.summary + timing_text +
+                    " Preview only: User.9 graphics do not change copper or the ratsnest. " + next_step)
                 self.canvas.plan = self.routing.plan
                 self.canvas.update()
             self.run_work("Freerouting and actual KiCad candidate DRC", operation, done)
@@ -1029,12 +1077,23 @@ class MainWindow(QMainWindow):
             return
         if not ask(self, "Apply validated routing", "Apply this route as one backed-up KiCad undoable commit? The PCB remains unsaved; inspect it in KiCad before saving."):
             return
-        def done(_):
+        def operation(_):
+            self.executor.progress.emit("Applying copper to KiCad")
+            started = time.monotonic()
+            self.routing.approve(self.writer)
+            return time.monotonic() - started
+        def done(elapsed):
             self.preview_shown = False
             self.canvas.plan = None
             self.canvas.update()
-            self.route_summary.setText("Applied to KiCad in one commit, using normal copper layer colors. Inspect and save in KiCad. Refresh before further routing, including after Undo.")
-        self.run_work("Backing up and applying one routing commit", lambda _: self.routing.approve(self.writer), done)
+            plan = self.routing.plan
+            self.route_summary.setText(f"Applied {plan.trace_count} copper track segments and {len(plan.vias)} vias "
+                f"on {', '.join(plan.layers_used)} in {elapsed:.1f}s, as one KiCad commit. "
+                "Temporary preview removed. Inspect and save in KiCad. Refresh before further routing, including after Undo.")
+        def failed(message):
+            self.route_summary.setText("Copper application was not confirmed. The panel retains the previous preview; "
+                "inspect KiCad and the error before retrying, since the live outcome may be uncertain. " + message)
+        self.run_work("Backing up and applying one routing commit", operation, done, failed)
 
     def showEvent(self, event):
         super().showEvent(event)

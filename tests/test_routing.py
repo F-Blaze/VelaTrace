@@ -80,6 +80,22 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(plan.tracks[0].points_mm[0], (1, 2))
         self.assertEqual(plan.layers_used, ("F.Cu",))
 
+    def test_progress_and_timings_do_not_reroute_on_approval(self):
+        self.ready()
+        stages = []
+        self.session.progress = stages.append
+        with patch("velatrace.routing.perf_counter", side_effect=[10, 12, 13, 18]), \
+                patch.object(self.session.router, "route", wraps=self.session.router.route) as route:
+            self.session.run()
+            from unittest.mock import Mock
+            writer = Mock()
+            self.session.approve(writer)
+        self.assertEqual(stages, ["Routing copper paths", "Checking candidate DRC"])
+        self.assertEqual(self.session.timings, {"router": 2, "validation": 5})
+        route.assert_called_once()
+        writer.apply.assert_called_once()
+        self.assertEqual(self.session.stage, RoutingStage.APPROVED)
+
     def test_malformed_ses_and_unknown_geometry_refuse_all(self):
         for text in ("(session", SES.replace("(path", "(arc"), SES.replace("2500", "NaN"), SES.replace("F.Cu", "In1.Cu")):
             with self.assertRaises(ValidationError):

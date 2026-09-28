@@ -7,6 +7,7 @@ boundary, and must re-check the board digest and backup before any mutation.
 from dataclasses import dataclass
 from enum import Enum
 import hashlib
+from time import perf_counter
 from typing import Mapping, Protocol
 
 from .constraints import Constraint, ConstraintStore
@@ -48,6 +49,7 @@ class ValidationReport:
     details: str = ""
     board_digest: str = ""
     preexisting_warnings: int = 0  # Present on the unrouted board too; reported, not blocking.
+    blocking_reasons: tuple[str, ...] = ()
 
     def __post_init__(self):
         for value in (self.drc_violations, self.unconnected_count, self.routed_connections, self.total_connections,
@@ -103,6 +105,8 @@ class RoutingSession:
         self.rejection_reason = ""
         self._needs_reason = False
         self._confirmation: tuple | None = None
+        self.progress = lambda message: None
+        self.timings: dict[str, float] = {}
         self.router.check_startup()
 
     def command(self, command: str) -> Mode:
@@ -163,14 +167,21 @@ class RoutingSession:
             raise ValidationError("Confirm concrete numeric constraints before each route attempt.")
         self._check_confirmation()
         self.stage = RoutingStage.RUNNING
+        self.timings = {}
         try:
+            self.progress("Routing copper paths")
+            started = perf_counter()
             ses = self.router.route(self.input, self.constraints.items)
+            self.timings["router"] = perf_counter() - started
             self._check_confirmation()
             plan = parse_ses(ses, expected_design=self.input.base_design or self.input.path.name, nets=set(self.input.nets),
                              layers=set(self.input.layers), via_catalog=via_catalog,
                              expected_placements=self.input.placements,
                              expected_placement_resolution_mm=self.input.placement_resolution_mm)
+            self.progress("Checking candidate DRC")
+            started = perf_counter()
             report = self.validator.validate(self.input, plan, self.constraints.items)
+            self.timings["validation"] = perf_counter() - started
             self._check_confirmation()
             if report.plan_digest != plan_digest(plan) or report.board_digest != self.input.ticket.board_digest:
                 raise ValidationError("Candidate validator returned evidence for a different route or board.")
@@ -192,6 +203,8 @@ class RoutingSession:
         completion = ("All connections verified" if self.report.unconnected_count == 0 else "Completion unknown") if percent is None else f"{percent:.1f}% routed"
         drc = "unknown" if self.report.drc_violations is None else str(self.report.drc_violations)
         text = f"{self.plan.trace_count} traces; {len(self.plan.vias)} vias; layers: {', '.join(self.plan.layers_used)}; DRC violations: {drc}; {completion}."
+        if self.report.drc_violations:
+            text += " Approval blocked: " + ("; ".join(self.report.blocking_reasons) or "resolve the reported DRC violations") + "."
         if self.report.preexisting_warnings:
             text += (f" {self.report.preexisting_warnings} pre-existing DRC warning(s) on the unrouted board"
                      " were not caused by this route and do not block approval; review them in KiCad.")

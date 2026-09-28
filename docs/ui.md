@@ -5,6 +5,28 @@ window, initially positioned at the right edge of the primary display. Move it
 beside KiCad. KiCad's public IPC interface does not expose docking or the native
 window rectangle. VelaTrace never uses legacy `pcbnew` bindings.
 
+Routing has two separate actions: **Generate routing preview**, then **Approve and
+apply copper**. User.9 graphics are non-copper and do not clear the ratsnest.
+Approval uses the validated route without rerunning Freerouting. Blocking DRC
+types are shown separately from pre-existing warnings. The routing page scrolls
+so approval remains reachable on smaller screens.
+
+The status shows the current stage and elapsed seconds. Finished runs show
+routing, DRC and preview durations separately. Successful approval reports track,
+via and layer counts after reading the copper back from KiCad. Failed approval
+retains the panel preview with an explicit error; that is not a new routing run.
+An uncertain result blocks retry until inspected.
+
+If new preview segments coincide with existing User.9 graphics, preview creation
+refuses before writing: KiCad can replace an existing coincident line. Remove only
+unwanted old preview graphics yourself; the plugin does not assume everything on
+User.9 belongs to it. Never save temporary previews into the board.
+
+Copper text can cause clearance errors if the router crosses it. Use silkscreen
+for printed labels; intentionally copper lettering needs routing clearance. Zone
+filling is separate from track routing and is not automatically performed by
+approval. VelaTrace does not create ground planes or change the stackup.
+
 Setup verifies the exact external Freerouting JAR and Java runtime before enabling
 routing. The audit page works without them; while routing is locked, a red line
 under the header names the reason (including the last Setup error) and points to

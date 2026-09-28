@@ -200,7 +200,7 @@ class Freerouting:
         if result.returncode or "VELATRACE_OFFLINE_POLICY_OK" not in result.output:
             raise CapabilityError("Java network-denial policy verification failed. Install a supported Java 21 runtime; routing refused.")
 
-    def check_startup(self) -> None:
+    def _check_installation(self) -> None:
         if not self.jar.is_file():
             raise CapabilityError(f"Freerouting is missing. Download unmodified freerouting-{VERSION}.jar from {RELEASE_URL} and configure its path.")
         if self.jar.stat().st_size > 100_000_000 or hashlib.sha256(self.jar.read_bytes()).hexdigest() != JAR_SHA256:
@@ -208,17 +208,23 @@ class Freerouting:
         if not self.java.is_file():
             raise CapabilityError("Java is missing. Install Eclipse Temurin Java 21 (JRE or JDK) and configure its bin/java executable.")
         self.work_directory.mkdir(parents=True, exist_ok=True)
+
+    def _check_java(self, directory: Path) -> None:
+        result = run_bounded([str(self.java), "-version"], directory, 15)
+        if result.returncode or not re.search(r'version "21(?:\.|\")', result.output):
+            raise CapabilityError("Java 21 is required for the verified offline policy. Java 24+ removed this mechanism; configure Java 21 explicitly.")
+
+    def check_startup(self) -> None:
+        self._check_installation()
         # Only clean up the directory this call creates. Other matching directories
         # may belong to another running router or contain files owned by the user.
         with tempfile.TemporaryDirectory(prefix="startup-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
             directory = Path(name)
-            result = run_bounded([str(self.java), "-version"], directory, 15)
-            if result.returncode or not re.search(r'version "21(?:\.|\")', result.output):
-                raise CapabilityError("Java 21 is required for the verified offline policy. Java 24+ removed this mechanism; configure Java 21 explicitly.")
+            self._check_java(directory)
             self._prepare(directory)
 
     def route(self, dsn: DsnInput, constraints: tuple[Constraint, ...]) -> str:
-        self.check_startup()
+        self._check_installation()
         local_path(dsn.path)
         local_path(dsn.ticket.board_path)
         dsn.assert_unchanged()
@@ -229,6 +235,9 @@ class Freerouting:
         text = constrained_dsn(dsn.path.read_text(encoding="utf-8"), constraints)
         with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
             directory = Path(name)
+            self._check_java(directory)
+            # Verify the policy in the exact directory used by this run. A second
+            # startup-directory probe adds a JVM launch without additional proof.
             self._prepare(directory)
             copied = directory / dsn.path.name
             copied.write_text(text, encoding="utf-8")

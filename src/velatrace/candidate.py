@@ -240,6 +240,21 @@ def route_issues(baseline, candidate) -> tuple[int, int]:
     return (after - before).total() + errors, carried.total() - errors
 
 
+def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
+    total = candidate.violations + candidate.schematic_parity
+    if not total:
+        return ()
+    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
+        return ("DRC issue identities unavailable; review the full KiCad DRC report",)
+    before, after = Counter(baseline.issues), Counter(candidate.issues)
+    blocked = after - before
+    blocked.update({issue: count for issue, count in (after & before).items() if issue[1] != "warning"})
+    counts = Counter()
+    for (kind, severity, _), count in blocked.items():
+        counts[(kind, severity)] += count
+    return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}" for (kind, severity), count in sorted(counts.items()))
+
+
 class SafeCandidateValidator:
     def __init__(self, safety, cli):
         self.safety, self.cli = safety, cli
@@ -291,6 +306,8 @@ class SafeCandidateValidator:
                                   enforced_constraint_ids=frozenset(c.id for c in constraints),
                                   details="Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
                                   board_digest=dsn.ticket.board_digest,
-                                  preexisting_warnings=max(carried for _, carried in judged))
+                                  preexisting_warnings=max(carried for _, carried in judged),
+                                  blocking_reasons=tuple(dict.fromkeys(reason for baseline, candidate in passes
+                                                                      for reason in blocking_reasons(baseline, candidate))))
         self.evidence = (dsn.digest, plan_digest(plan), report, items, context, snapshot)
         return report

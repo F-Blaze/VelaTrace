@@ -74,6 +74,12 @@ class FakeBoard:
     def get_text(self):
         return []
 
+    def get_tracks(self):
+        return list(self.items.values())
+
+    def get_vias(self):
+        return []
+
     def push_commit(self, commit, message):
         self.events.append("push")
         if self.fail == "push":
@@ -198,6 +204,20 @@ class SafetyTests(unittest.TestCase):
             self.mutate([Item("a")])
         self.assertEqual(len(self.board.events), count)
 
+    def test_acknowledged_commit_without_readable_copper_never_reports_success(self):
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(0, 0, 0)))
+        report = validator.validate(self.dsn, self.plan, ())
+        self.safety.factory.copper = lambda items, board: [Item(item.id) for item in items]
+        self.board.get_tracks = lambda: []
+        writer = SafeBoardWriter(self.safety, validator)
+        with self.assertRaisesRegex(UncertainWriteError, "actual copper could not be verified"):
+            writer.apply(self.dsn, self.plan, report)
+        self.assertTrue(self.safety.blocked)
+        self.assertEqual(self.board.events.count("push"), 1)
+        with self.assertRaises(UncertainWriteError):
+            writer.apply(self.dsn, self.plan, report)
+        self.assertEqual(self.board.events.count("push"), 1)
+
     def test_failed_rollback_is_not_claimed_safe(self):
         self.board.fail = "rollback"
         self.board.create_items = lambda items: []
@@ -255,11 +275,38 @@ class SafetyTests(unittest.TestCase):
 
     def test_creation_without_removals_needs_no_postcommit_read(self):
         def fail_read():
-            raise TimeoutError("No cleanup read should be needed")
+            if "push" in self.board.events:
+                raise TimeoutError("No cleanup read should be needed")
+            return []
         self.board.get_shapes = fail_read
         self.mutate([Item("preview")], temporary=True)
         self.assertEqual(set(self.safety.owned), {"preview"})
         self.assertTrue((self.safety.last_backup.directory / "completion.json").is_file())
+
+    def test_foreign_coincident_preview_refuses_before_commit(self):
+        from kipy.proto.board.board_types_pb2 import BL_User_9
+        from velatrace.write_safety import ItemFactory
+        old = ItemFactory.preview(self.plan, BL_User_9)[0]
+        new = ItemFactory.preview(self.plan, BL_User_9)[0]
+        self.board.get_shapes = lambda: [old]
+        with self.assertRaisesRegex(ValidationError, "overlaps existing graphics"):
+            self.mutate([new], temporary=True)
+        self.assertNotIn("begin", self.board.events)
+
+    def test_collision_check_is_direction_independent_and_preserves_layers(self):
+        from kipy.proto.board.board_types_pb2 import BL_User_9, BL_User_8
+        from velatrace.write_safety import ItemFactory, _check_graphic_collisions
+        old = ItemFactory.preview(self.plan, BL_User_9)[0]
+        new = ItemFactory.preview(self.plan, BL_User_9)[0]
+        start, end = new.start, new.end
+        new.start, new.end = end, start
+        with self.assertRaises(ValidationError):
+            _check_graphic_collisions([new], [old], set())
+        _check_graphic_collisions([new], [old], {old.id.value})
+        old.layer = BL_User_8
+        _check_graphic_collisions([new], [old], set())
+        with self.assertRaisesRegex(ValidationError, "duplicate segments"):
+            _check_graphic_collisions([new, new], [], set())
 
     def test_candidate_preserves_original_geometry_and_quantizes_once(self):
         items = prepare_copper(self.plan, self.dsn)
@@ -476,6 +523,13 @@ class RouteIssueTests(unittest.TestCase):
 
     def test_preexisting_errors_still_block(self):
         self.assertEqual(self.judge([self.ERR], [self.ERR]), (1, 0))
+
+    def test_blocking_reasons_exclude_carried_warnings(self):
+        from velatrace.candidate import blocking_reasons
+        self.assertEqual(blocking_reasons(DrcResult(1, 0, 0, (self.WARN,)),
+                                         DrcResult(2, 0, 0, (self.WARN, self.ERR))),
+                         ("clearance (error): 1",))
+        self.assertTrue(blocking_reasons(DrcResult(1, 0, 0), DrcResult(1, 0, 0)))
 
     def test_duplicates_counted_and_unknown_identities_count_everything(self):
         self.assertEqual(self.judge([self.WARN], [self.WARN, self.WARN]), (1, 1))
