@@ -1,86 +1,84 @@
 # VelaTrace
 
-VelaTrace is a Python companion for KiCad 9+ that audits component necessity and cost using real connectivity, and orchestrates external Freerouting with validation, previews and backups. It uses the official IPC client, never legacy SWIG/`pcbnew` bindings.
+**Cut your BOM cost and autoroute safely — inside KiCad. Bring your own AI key, no telemetry, every change previewed and undoable.**
 
-**Development alpha: no signed release exists.** The public repository is [F-Blaze/VelaTrace](https://github.com/F-Blaze/VelaTrace). Protected `main` contains the reviewed development alpha (PRs #1 and #2). This local checkout is for development and review, not production installation. Live KiCad editor preview, cleanup and approval were accepted on KiCad 10.0.4/10.0.6 (see [review notes](docs/REVIEW_2026_09_26.md)); several requested capabilities and release signing remain release gates. See [build status](docs/BUILD_STATUS.md) and the [completed release review](docs/RELEASE_REVIEW.md).
+[![License: MIT](https://img.shields.io/github/license/F-Blaze/VelaTrace)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/F-Blaze/VelaTrace/ci.yml?branch=main&label=CI)](https://github.com/F-Blaze/VelaTrace/actions/workflows/ci.yml)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/F-Blaze/VelaTrace/codeql.yml?branch=main&label=CodeQL)](https://github.com/F-Blaze/VelaTrace/actions/workflows/codeql.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![KiCad 9+](https://img.shields.io/badge/KiCad-9%2B%20(tested%2010.0)-314cb0)](https://www.kicad.org/)
 
-F-Blaze is the solo maintainer. There is no support or response-time guarantee. The [MIT license](LICENSE), present from the first commit, lets anyone use, modify and fork VelaTrace. Plugin and Content Manager listing is deferred until the features are stable.
+<!-- TODO: hero GIF of audit → route preview → approve -->
 
-## Behavior and current limits
+<p align="center">
+  <img src="docs/ui-demo.png" alt="VelaTrace audit: components classified critical, important, nice-to-have or redundant, with cost estimates" width="340">
+  &nbsp;
+  <img src="docs/ui-demo-routing.png" alt="VelaTrace routing: Freerouting preview per layer with reject and approve" width="340">
+</p>
+<p align="center"><sub>Screenshots use the built-in synthetic demo (<code>python -m velatrace --demo</code>): no API, IPC or board writes.</sub></p>
 
-- Audit requires a project description, reads PCB pad/net connectivity or a saved schematic/XML netlist, infers functions, and waits for corrections and confirmation before classification. Categories are **critical** (the design as built fails or becomes unsafe without it), **important** (quality/reliability suffers), **nice-to-have** (comfort, aesthetic or marginal benefit) and **redundant** (duplicates another function). Every verdict is a suggestion; it never removes components.
-- Redundancy requires matching value, footprint/type and pin connectivity, with role and proximity checks. Sharing a rail alone is insufficient. Ambiguous cases say **possible redundancy — verify**. Code computes flags, Decimal totals, hypothetical savings and token counts; the model supplies judgments only.
-- Classification displays the actual prompt's input-token count and output cap for approval. Pricing has separate consent based on the flagged count, eight-second searches and visible estimate fallback. Calls have a hard budget, output caps and at most two retries. The live usage display concerns the current response; unavailable exact streaming counts remain pending.
-- `/autoroute` and `/autoroute_exit` switch the same window between modes. Session constraints stack across retries; universal constraints persist locally. Numeric constraints require confirmation. Freerouting chooses paths.
-- Current routing accepts **saved, fully placed, initially unrouted boards**, straight traces, through vias, and all-net minimum width/clearance. Fresh manual DSN export is required. Existing routing, hierarchical schematic context, header keepouts and per-net constraints are refused. Incomplete routing stops; the stackup is never changed. Rejecting requires a reason.
-- KiCad's IPC provides neither a dockable panel nor transient canvas overlays. VelaTrace uses an always-on-top external window and temporary `User.9` items. Panel previews are dashed violet; KiCad controls the user-layer color. Approved copper uses normal layer colors. Theme matching reads saved Windows KiCad settings when possible, with manual light/dark fallback.
+VelaTrace is a companion window for KiCad's PCB Editor. It does two things:
 
-The [feasibility report](docs/feasibility.md), [UI guide](docs/ui.md) and [routing boundaries](docs/routing-adapters.md) describe these fallbacks and limitations.
+1. **Audit** — reads real pad/net connectivity and tells you which parts are critical, important, nice-to-have or redundant, with cost and savings estimates.
+2. **Route** — runs [Freerouting](https://github.com/freerouting/freerouting) on your placed board and lets you preview, validate and approve the result before a single track touches your copper.
 
-## Install checklist for a future signed release
+## Why VelaTrace
 
-These steps become usable when an independently reviewed release tag and trusted signing identity are published. **Never install from `main`, an unsigned tag, or this development branch.** No release tag or maintainer signing fingerprint is available yet.
+- **Connectivity-aware, not guesswork.** Classification starts from actual pad/net connectivity (open PCB, or a saved schematic/XML netlist), not just reference designators. Two parts on the same rail are not called duplicates unless value, footprint and pin connectivity match.
+- **Suggestions, never deletions.** Verdicts are advice. VelaTrace never removes a component; you approve everything.
+- **Code does the math.** Flags, Decimal totals, hypothetical savings and token counts are computed in code. The model supplies judgments only.
+- **Safe routing pipeline.** Preview on `User.9` → DRC-validate against your live board (only errors and newly introduced warnings block; pre-existing warnings are reported) → approve → one undoable IPC commit. Rejecting requires a reason.
+- **Backup before every write.** The saved board, live board and project are copied to `.velatrace/backups` beside your board before any live change, including preview creation and cleanup.
+- **Bring your own key.** Gemini or any Groq/OpenAI-compatible endpoint. Token counts and a hard call budget are shown and confirmed before each call.
+- **No backend, no telemetry.** Requests go only to the endpoint you configure. Freerouting runs as a separate process with network access denied.
+- **Official API only.** Uses KiCad's IPC API via [kicad-python](https://pypi.org/project/kicad-python/), never legacy SWIG/`pcbnew` bindings.
 
-1. Install [KiCad](https://www.kicad.org/download/) 9 or newer and Python 3.11 or newer. Routing requires the `kicad-cli` version to exactly match the connected editor, including its patch version. Live editor compatibility still needs the acceptance tests below.
-2. Clone outside KiCad's plugin directory. Verify the chosen signed release against a maintainer key/fingerprint obtained through a trusted independent channel, then check out that tag. A signature from an unknown key is insufficient. Example PowerShell commands, after replacing the placeholder:
+## Quickstart
 
-   ```powershell
-   $releaseTag = 'REPLACE_WITH_PUBLISHED_SIGNED_TAG'
-   git clone --no-checkout https://github.com/F-Blaze/VelaTrace.git VelaTrace
-   Set-Location VelaTrace
-   git fetch --tags origin
-   git verify-tag $releaseTag
-   if ($LASTEXITCODE -ne 0) { throw 'Release signature verification failed' }
-   # Independently compare the reported signer with the trusted release identity.
-   git checkout --detach $releaseTag
-   if ($LASTEXITCODE -ne 0) { throw 'Release checkout failed' }
+> **Status: 0.1.0a1, development alpha.** No signed release exists yet, and the maintainer recommends reviewing the code before installing. Live preview, cleanup and approval were accepted on KiCad 10.0.4/10.0.6. Details: [build status](docs/BUILD_STATUS.md), [release review](docs/RELEASE_REVIEW.md).
+
+**Requirements:** KiCad 9+ (tested on 10.0.4 / 10.0.6) with the IPC API enabled, and Python 3.11+. For routing also: Temurin **Java 21** and the **Freerouting 2.1.0** JAR.
+
+1. **Install the plugin.** Clone into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace`:
+
+   ```sh
+   # Windows: Documents/KiCad/10.0/plugins   Linux: ~/.local/share/KiCad/10.0/plugins
+   git clone https://github.com/F-Blaze/VelaTrace.git VelaTrace
    ```
 
-3. Put the verified checkout in `${KICAD_DOCUMENTS_HOME}/<version>/plugins/VelaTrace`, with `plugin.json` immediately inside `VelaTrace`. Typical roots are `Documents/KiCad` on Windows/macOS and `~/.local/share/KiCad` on Linux; use your version folder such as `10.0`. KiCad creates a separate Python environment and installs `requirements.txt`: **kicad-python 0.8.0** and **PySide6-Essentials 6.10.2**. Wait for dependency installation before looking for the action. [Official IPC installation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
-4. In **Preferences → Plugins**, enable **Enable KiCad API** and select a Python 3.11+ interpreter. Open the PCB Editor and use **Open VelaTrace**. Saved schematic analysis is selected inside the companion. [KiCad preferences](https://docs.kicad.org/10.0/en/kicad/kicad.html#_plugins_preferences).
-5. Download the unmodified **Freerouting 2.1.0 JAR** from its [official release](https://github.com/freerouting/freerouting/releases/tag/v2.1.0) and install **Temurin Java 21** from [Adoptium](https://adoptium.net/temurin/releases/?version=21). Java 21 is mandatory even if a newer runtime is installed. Native tests used **21.0.12.1+1**. Check the JAR SHA-256 below; VelaTrace also verifies it and the offline policy at startup. Missing or mismatched tools visibly block startup. The GPLv3 router runs only as a separate process; its JAR/code is not bundled. See [runtime instructions](docs/freerouting.md).
+   KiCad creates a Python environment and installs `kicad-python 0.8.0` and `PySide6-Essentials 6.10.2` itself; wait for that to finish. To verify a signed release once one exists, use the [full install checklist](docs/install.md).
+2. **Enable the API.** In KiCad **Preferences → Plugins**, tick **Enable KiCad API** and pick a Python 3.11+ interpreter. Open the PCB Editor and click **Open VelaTrace**.
+3. **Add your AI key.** In **Setup**, choose a provider and model and enter your key (kept in memory only).
+   Gemini: protocol `gemini`, `https://generativelanguage.googleapis.com/v1beta`. Groq: protocol `openai`, `https://api.groq.com/openai/v1`.
+4. **For routing only:** install [Temurin Java 21](https://adoptium.net/temurin/releases/?version=21) and download the unmodified [Freerouting 2.1.0 JAR](https://github.com/freerouting/freerouting/releases/tag/v2.1.0). VelaTrace checks the JAR's SHA-256 (`2c07d58f…60d5def`) at startup; enter the JAR, Java and a `kicad-cli` path in **Setup**. `kicad-cli` must match the running editor exactly, patch version included. See [Freerouting setup](docs/freerouting.md).
+5. **Before routing:** save the board and project, enable **User.9** for previews, and set every DRC check to at least *Warning* (VelaTrace refuses to route while any is set to *Ignore*; KiCad's defaults ignore five). Try it on a disposable copy first.
 
-   ```text
-   2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def
-   ```
+Want to look around first? `pip install -e '.[dev]'` then `python -m velatrace --demo` runs the UI on synthetic data.
 
-6. In **Setup**, enter absolute paths to the JAR, Java 21 and matching `kicad-cli`. Choose the provider name, HTTPS base URL, protocol and an exact currently available model ID. Enter the API key there; it stays in memory. Gemini uses protocol `gemini` and `https://generativelanguage.googleapis.com/v1beta`. Groq uses protocol `openai` and `https://api.groq.com/openai/v1`. [Groq endpoint](https://console.groq.com/docs/openai).
-7. Gemini supplies exact `countTokens`. Groq/OpenAI-compatible classification requires the optional `tokenizer` dependency, a locally installed tokenizer/chat template, and verification against that exact provider/model's usage. Install `.[tokenizer]` with the Python executable in **the environment that launches the plugin**; a separate terminal environment does not change KiCad's managed environment. Enter **Local tokenizer folder** and **Verified tokenizer model ID** in Setup. Nothing downloads a tokenizer at runtime; entering a model ID alone is not verification. Without a verified tokenizer, use Gemini's count endpoint or keep classification blocked.
-8. For canvas annotations/previews, save the board and `.kicad_pro`, enable and show **User.9**, and set its KiCad color to `#8B5CF6` for violet graphics. Place all footprints before routing. Use a disposable project copy for live acceptance tests.
-9. **Before routing, enable every DRC check.** KiCad's default project sets five checks to *Ignore* (`footprint_filters_mismatch`, `footprint_type_mismatch`, `missing_courtyard`, `track_not_centered_on_via`, `tuning_profile_track_geometries`). VelaTrace refuses to route while any check is ignored. In **Board Setup → Design Rules → Violation Severity**, set them to *Warning* and save the project. Errors and newly introduced warnings block approval. Identifiable pre-existing warnings are reported without blocking; incomplete identities make every candidate issue blocking.
+## Usage
 
-Setup paths and provider choices are saved locally; API keys stay in memory for the current launch. Optional defaults: `VELATRACE_FREEROUTING_JAR`, `VELATRACE_JAVA`, `VELATRACE_KICAD_CLI`, `VELATRACE_MODEL`, `VELATRACE_API_KEY`. Prefer entering the key in Setup; never put it in the repository or shared scripts. See [provider setup and privacy](docs/privacy.md).
+**Audit.** Describe what the board does → read the open PCB (or a saved schematic/XML netlist) → correct the inferred function cards → confirm → review the token estimate and approve classification → optionally price the flagged parts (separate estimate and consent). Parts without a manufacturer part number show *estimate only — no part number found*.
 
-## Using the companion
+**Route.** Enter `/autoroute` in the box at the top and add any constraints (numeric ones need confirmation). Export a fresh DSN from KiCad, load it, and run routing. Inspect the preview and DRC summary, then **Reject** (with a reason) or **Approve**. Approval swaps the preview for real copper in one IPC commit, leaving the board unsaved so a single Undo reverts it. Currently supported: saved, fully placed, initially unrouted boards with straight traces, through vias and all-net width/clearance.
 
-Enter a description, read the open PCB or select a saved schematic/XML netlist, and infer functions. Correct the cards, confirm functions, review the classification token estimate, then approve classification. Price the flagged/borderline set after its separate estimate. Missing manufacturer part numbers show **estimate only — no part number found**. Bulk and decoupling capacitors on one rail are not interchangeable duplicates.
-
-For routing, enter `/autoroute`, edit session/universal rules using the violet constraint badge, and confirm every numeric interpretation. Request a fresh DSN export in the panel, export DSN from KiCad, and load that new file. Run routing and inspect the preview/validation summary before rejecting with a reason or approving. Reconfirm the full constraint list on each retry. Unsupported constraints stop the run so you can explicitly revise them.
-
-Before every live board mutation, including preview creation/cleanup, the writer backs up the saved board, live board and saved project under `.velatrace/backups` beside the board. Malformed/unsupported SES, stale state, incomplete DRC or backup failure refuses the operation. **No save is required between User.9 preview and approval.** Validation uses the live board; later board edits require revalidation. Approval removes the owned preview and adds copper in one IPC commit, then leaves the board unsaved for normal KiCad saving. One-step Undo passed the disposable KiCad 10.0.4 test. Save project rules before the initial DSN workflow: unsaved Board Setup changes are not validated. **Do not save while temporary graphics are present.** Clear them by closing/rejecting normally. After a crash or uncertain transaction, inspect the backup/journal and KiCad state before retrying; automatic crash cleanup is not implemented. Read [write safety](docs/write-safety.md).
+Full behavior and limits: [docs/behavior-and-limits.md](docs/behavior-and-limits.md). Transaction safety: [docs/write-safety.md](docs/write-safety.md). UI guide: [docs/ui.md](docs/ui.md).
 
 ## Privacy
 
-Bring your own API key. **No backend, no telemetry:** the plugin only sends remote API requests to your configured endpoint. Before first analysis, a notice names the provider and explains that board data is sent with your key. Avoid confidential/NDA designs unless you trust that provider. Changing the endpoint or relevant settings requires fresh consent. Provider-side search follows its own processing terms; local safety backups retain design data.
+No backend, no telemetry. A notice names your provider and explains that component fields, connectivity and your description are sent with your key; it repeats whenever you change the endpoint or search settings. Avoid confidential/NDA designs unless you trust the provider. Note that Gemini's free tier may use prompts to improve its models; Groq's free tier does not make this claim. Provider policies and key handling: [docs/privacy.md](docs/privacy.md).
 
-Groq or Gemini offer free tiers subject to availability and quotas. **Gemini's free tier may use your prompts to improve their models; Groq's free tier does not make this claim.** Read the [Groq data policy](https://console.groq.com/docs/your-data) and [Gemini API terms](https://ai.google.dev/gemini-api/terms), including retention exceptions.
+## Contributing
 
-Gemini analysis works, but its web-search pricing is disabled until the required grounding presentation is implemented. Its pricing uses local illustrative estimates with zero search calls. Groq built-in search requires a supported search model chosen in Setup; search failure/timeout shows a visible reason and estimate fallback. Missing/invalid keys and outages produce explicit errors.
+Contributions, forks and bug reports are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), and look for [good first issues](https://github.com/F-Blaze/VelaTrace/labels/good%20first%20issue). Tests need no key or running KiCad:
 
-## Development, verification and security
-
-For development only, use a local environment in this checkout:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -e '.[dev]'
-.venv\Scripts\python.exe -m velatrace --demo
-.venv\Scripts\python.exe -m ruff check src tests launch.py
-.venv\Scripts\python.exe -m pytest
+```sh
+python -m pip install -e '.[dev]'
+python -m ruff check src tests launch.py
+python -m pytest
 ```
 
-On macOS/Linux use `.venv/bin/python`. Demo data is synthetic, with no provider or IPC calls. Read-only inspection: `python -m velatrace --netlist tests/fixtures/audit/necessity.xml`.
+Security reports: see [SECURITY.md](SECURITY.md). VelaTrace is solo-maintained by F-Blaze with no response-time guarantee.
 
-The [2026-09-27 review](docs/REVIEW_2026_09_27.md) records the current regression suite, complete tracked-file review and live preview-to-approval test. A disposable two-pad board passed real Freerouting, matching KiCad 10.0.4 candidate DRC, approval without saving and one-step Undo. Native tests require the paths in [testing instructions](docs/testing.md); otherwise those two tests skip. Earlier synthetic provider calls did not establish exact token parity or complete live provider acceptance.
+## License
 
-**F-Blaze: enable two-factor authentication on the maintainer account.** Before publishing, enforce PR-only `main` with no maintainer bypass, independent review, required CODEOWNERS/CI/CodeQL checks, secret scanning and push protection, and signed tagged releases. A solo maintainer cannot approve their own PR: `T-boy-review` has write access as the independent reviewer; add them to `.github/CODEOWNERS` so later PRs can be approved. Local policy files do not enable GitHub settings. Main protection, secret scanning and push protection are enabled. Independent PR approval is in place; release signing remains pending. See [remote setup status](docs/REMOTE_SETUP.md) for verified settings and workflow results. See [CONTRIBUTING](CONTRIBUTING.md) and [repository security setup](docs/repository-security.md).
+[MIT](LICENSE). Freerouting is GPLv3 and is run as a separate, unmodified external process; its JAR is not bundled.
