@@ -229,6 +229,19 @@ class UiTests(unittest.TestCase):
         self.assertIn("Approve and apply copper", summary)
         self.assertRegex(summary, r"Routing \d+\.\ds; DRC \d+\.\ds; preview \d+\.\ds")
 
+    def test_preview_layer_refusal_happens_before_freerouting(self):
+        from velatrace.errors import ValidationError
+        session, router, validator, writer = self.ready_route_preview()
+        self.window.safety.prepare_preview.side_effect = ValidationError("User.9 has 1 dashed 0.1 mm line")
+        self.window.placed.setChecked(True)
+        with patch("velatrace.ui.ask", return_value=True):
+            self.window.route_button.click()
+            self.wait_idle()
+        router.route.assert_not_called()
+        validator.validate.assert_not_called()
+        self.window.safety.show_preview.assert_not_called()
+        self.assertIn("User.9 has 1 dashed", self.window.status.text())
+
     def test_failed_approval_keeps_preview_and_reports_unconfirmed_copper(self):
         from velatrace.errors import ValidationError
         from velatrace.write_safety import UncertainWriteError
