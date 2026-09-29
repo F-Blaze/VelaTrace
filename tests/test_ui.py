@@ -7,7 +7,7 @@ import time
 import unittest
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 try:
@@ -162,6 +162,137 @@ class UiTests(unittest.TestCase):
         ask.assert_not_called()
         self.assertIn("pending routing prompt", self.window.status.text())
         self.window.routing = None
+
+    def ready_route_preview(self):
+        from velatrace.dsn import DsnInput, ExportTicket, file_digest
+        from velatrace.routing import RoutingSession, RoutingStage, ValidationReport, plan_digest
+        board = Path(self.temp.name) / "board.kicad_pcb"
+        board.write_text("synthetic board")
+        path = Path(self.temp.name) / "board.dsn"
+        path.write_text("synthetic DSN")
+        dsn = DsnInput(path, file_digest(path), ExportTicket.begin(board),
+                       frozenset({"N"}), frozenset({"F.Cu", "B.Cu"}))
+        router, validator, writer = Mock(), Mock(), Mock()
+        validator.supports.return_value = True
+        session = RoutingSession(self.window.constraints, router, validator)
+        session.command("/autoroute")
+        session.set_input(dsn, all_footprints_placed=True)
+        session.confirm_constraints(self.window.constraints.fingerprint)
+        session.plan = RoutePlan("board", (Track("N", "B.Cu", .25, ((1, 2), (3, 4))),), ())
+        session.report = ValidationReport(plan_digest(session.plan), 0, 0, board_digest=dsn.ticket.board_digest)
+        session.stage = RoutingStage.PREVIEW
+        self.window.routing, self.window.writer = session, writer
+        self.window.safety = Mock()
+        self.window.preview_shown = True
+        self.window.canvas.plan = session.plan
+        self.window.pages.setCurrentIndex(1)
+        self.window.refresh_actions()
+        return session, router, validator, writer
+
+    def test_approve_button_applies_once_without_regenerating_preview(self):
+        from velatrace.routing import RoutingStage
+        session, router, validator, writer = self.ready_route_preview()
+        with patch("velatrace.ui.ask", return_value=True):
+            self.window.approve_button.click()
+            self.wait_idle()
+        writer.apply.assert_called_once_with(session.input, session.plan, session.report)
+        router.route.assert_not_called()
+        validator.validate.assert_not_called()
+        self.window.safety.show_preview.assert_not_called()
+        self.assertEqual(session.stage, RoutingStage.APPROVED)
+        self.assertIsNone(self.window.canvas.plan)
+        self.assertFalse(self.window.preview_shown)
+        self.assertFalse(self.window.approve_button.isEnabled())
+        self.assertIn("Applied 1 copper track segments and 0 vias on B.Cu", self.window.route_summary.text())
+
+    def test_generate_button_reports_preview_timings_without_applying_copper(self):
+        from velatrace.routing import ValidationReport, plan_digest
+        session, router, validator, writer = self.ready_route_preview()
+        router.route.return_value = """(session board (base_design board.dsn)
+            (routes (resolution um 10) (network_out
+            (net N (wire (path F.Cu 2500 10000 20000 30000 40000))))))"""
+        validator.validate.side_effect = lambda dsn, plan, constraints: ValidationReport(
+            plan_digest(plan), 0, 0, board_digest=dsn.ticket.board_digest)
+        validator.evidence = (None, None, None, None, None, "snapshot")
+        self.window.validator = validator
+        self.window.placed.setChecked(True)
+        with patch("velatrace.ui.ask", return_value=True), patch("velatrace.ui.trusted_via_catalog", return_value={}):
+            self.window.route_button.click()
+            self.wait_idle()
+        router.route.assert_called_once()
+        validator.validate.assert_called_once()
+        self.window.safety.show_preview.assert_called_once_with(session.input, session.plan, "snapshot")
+        writer.apply.assert_not_called()
+        self.assertTrue(self.window.approve_button.isEnabled())
+        summary = self.window.route_summary.text()
+        self.assertIn("Preview only", summary)
+        self.assertIn("Approve and apply copper", summary)
+        self.assertRegex(summary, r"Routing \d+\.\ds; DRC \d+\.\ds; preview \d+\.\ds")
+
+    def test_failed_approval_keeps_preview_and_reports_unconfirmed_copper(self):
+        from velatrace.errors import ValidationError
+        from velatrace.write_safety import UncertainWriteError
+        for failure in (ValidationError("Board changed; export again"),
+                        UncertainWriteError("IPC commit result is uncertain; do not retry")):
+            with self.subTest(failure=type(failure).__name__):
+                session, router, validator, writer = self.ready_route_preview()
+                writer.apply.side_effect = failure
+                with patch("velatrace.ui.ask", return_value=True):
+                    self.window.approve_button.click()
+                    self.wait_idle()
+                writer.apply.assert_called_once()
+                router.route.assert_not_called()
+                validator.validate.assert_not_called()
+                self.window.safety.show_preview.assert_not_called()
+                self.assertIs(self.window.canvas.plan, session.plan)
+                self.assertTrue(self.window.preview_shown)
+                self.assertIn("Copper application was not confirmed", self.window.route_summary.text())
+                self.assertIn(str(failure), self.window.route_summary.text())
+                self.assertIn(str(failure), self.window.status.text())
+
+    def test_worker_stage_and_elapsed_status_stop_after_completion(self):
+        gate = threading.Event()
+        self.addCleanup(gate.set)
+        def operation(_):
+            self.window.executor.progress.emit("Checking candidate DRC")
+            gate.wait(3)
+        self.window.run_work("Routing copper paths", operation)
+        deadline = time.monotonic() + 2
+        while "Checking candidate DRC" not in self.window.status.text() and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(.005)
+        self.window._work_started -= 2
+        self.window.update_work_status()
+        self.assertRegex(self.window.status.text(), r"Checking candidate DRC · [2-9]s")
+        gate.set()
+        self.wait_idle()
+        self.assertFalse(self.window.work_timer.isActive())
+        self.assertEqual(self.window.status.text(), "Ready.")
+
+    def test_route_approval_is_reachable_in_a_small_window(self):
+        self.ready_route_preview()
+        self.window.route_summary.setText("A detailed validation warning for review. " * 12)
+        self.window.resize(700, 650)
+        self.window.show()
+        self.app.processEvents()
+        self.assertLessEqual(self.window.height(), 650)
+        self.window.route_scroll.ensureWidgetVisible(self.window.approve_button)
+        self.app.processEvents()
+        viewport = self.window.route_scroll.viewport()
+        center = self.window.approve_button.mapTo(viewport, self.window.approve_button.rect().center())
+        self.assertTrue(viewport.rect().contains(center))
+        self.assertGreater(self.window.route_scroll.verticalScrollBar().value(), 0)
+        self.assertTrue(self.window.approve_button.isEnabled())
+        # Busy gating must disable the inner controls even though the stack now
+        # contains a scroll area around them.
+        self.window.worker = self.window.executor
+        try:
+            self.window.refresh_actions()
+            self.assertFalse(self.window.route_page.isEnabled())
+            self.assertFalse(self.window.approve_button.isEnabled())
+        finally:
+            self.window.worker = None
+            self.window.refresh_actions()
 
     def test_cleanup_failure_keeps_window_and_safety_handle(self):
         class Safety:

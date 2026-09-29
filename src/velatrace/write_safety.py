@@ -141,6 +141,30 @@ def _signature(item):
     return proto.SerializeToString(deterministic=True)
 
 
+def _check_graphic_collisions(additions, existing, removed_ids):
+    """KiCad may replace an existing coincident graphic when creating a segment."""
+    from kipy.board_types import BoardShape
+    def key(item):
+        if not isinstance(item, BoardShape) or item.proto.shape.WhichOneof("geometry") != "segment":
+            return None
+        segment = item.proto.shape.segment
+        ends = sorted(((segment.start.x_nm, segment.start.y_nm),
+                       (segment.end.x_nm, segment.end.y_nm)))
+        return (item.proto.layer, *ends)
+    foreign = {key(item) for item in existing if item.id.value not in removed_ids}
+    foreign.discard(None)
+    seen = set()
+    for item in additions:
+        value = key(item)
+        if value is None:
+            continue
+        if value in foreign:
+            raise ValidationError("Preview overlaps existing graphics on User.9. KiCad may replace those items. Remove only unwanted old preview graphics, then retry; no preview was written.")
+        if value in seen:
+            raise ValidationError("Preview contains duplicate segments that KiCad may merge; no preview was written.")
+        seen.add(value)
+
+
 def _echoes(sent, got) -> bool:
     """Every field VelaTrace set comes back exactly; KiCad-filled defaults are allowed.
 
@@ -298,13 +322,15 @@ class BoardSafety:
             result.append(item)
         return result
 
-    def _mutate(self, additions, *, remove_owned, message, expected_digest=None, temporary=False, context=None, expected_board=None):
+    def _mutate(self, additions, *, remove_owned, message, expected_digest=None, temporary=False, context=None, expected_board=None, verify_copper=False):
         with self._lock:
             if len(additions) > 100_000:
                 raise ValidationError("Too many items for one safe transaction.")
             backup = self.backup()
             self._check_snapshot(backup, expected_digest, expected_board)
             removals = self._owned_items() if remove_owned else []
+            if temporary:
+                _check_graphic_collisions(additions, self.board.get_shapes(), {item.id.value for item in removals})
             expected = {item.id.value: _signature(item) for item in additions}
             if len(expected) != len(additions) or "" in expected:
                 raise ValidationError("Mutation item IDs must be unique and explicit.")
@@ -352,6 +378,15 @@ class BoardSafety:
             except Exception as exc:
                 self.blocked = True
                 raise UncertainWriteError(f"IPC commit result is uncertain; do not retry. Inspect KiCad and backups: {backup.directory}") from exc
+            if verify_copper:
+                try:
+                    committed = {item.id.value: item for item in [*self.board.get_tracks(), *self.board.get_vias()]}
+                    if not all(item.id.value in committed and _echoes(item, committed[item.id.value])
+                               for item in additions):
+                        raise ValidationError("The committed copper does not match the approved route.")
+                except Exception as exc:
+                    self.blocked = True
+                    raise UncertainWriteError(f"KiCad acknowledged approval, but the actual copper could not be verified. Do not retry; inspect KiCad and backups: {backup.directory}") from exc
             removed = {item.id.value for item in removals}
             if removed:
                 try:
@@ -412,5 +447,6 @@ class SafeBoardWriter:
         self.safety.assert_matches(dsn, expected_board=snapshot)
         additions = self.safety.factory.copper(items, self.safety.board)
         self.safety._mutate(additions, remove_owned=True, message="VelaTrace approved routing",
-                            expected_digest=dsn.ticket.board_digest, context=context, expected_board=snapshot)
+                            expected_digest=dsn.ticket.board_digest, context=context, expected_board=snapshot,
+                            verify_copper=True)
         self.validator.evidence = None
