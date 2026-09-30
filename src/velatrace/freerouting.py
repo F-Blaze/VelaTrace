@@ -3,10 +3,12 @@
 Java 21's process-local security policy denies Java networking. This is not an
 OS sandbox for hostile native code: the immutable official JAR is a trust anchor.
 """
+import atexit
 from dataclasses import dataclass
 import hashlib
 import os
 from pathlib import Path
+from queue import Empty, Queue
 import re
 import shutil
 import subprocess
@@ -23,7 +25,32 @@ VERSION = "2.1.0"
 JAR_SHA256 = "2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def"
 RELEASE_URL = "https://github.com/freerouting/freerouting/releases/tag/v2.1.0"
 PROBE_SHA256 = "c27481d8f2e0505ec21b8ba375888343dfcc06406d9e62e4ab6c7c63929ef6de"
+WARM_SHA256 = "4283bd5219bf2bf1f85ea7ae07a28d0fa41121f8d8bb9020ae381db4a284adae"
 MAX_SES = 32_000_000
+WARM_START_SECONDS = 60
+WARM_MAX_FAILURES = 2
+# Two crossing nets on SMD pads (needs vias): routed once at warm start-up to load
+# and JIT-compile the router before the user's first route, and to self-test it.
+WARMUP_DSN = """(pcb warmup
+ (parser (string_quote ") (space_in_quoted_tokens on) (host_cad KiCad) (host_version 9.0))
+ (resolution um 10) (unit um)
+ (structure
+  (layer F.Cu (type signal) (property (index 0)))
+  (layer B.Cu (type signal) (property (index 1)))
+  (boundary (path pcb 0 0 0 30000 0 30000 20000 0 20000 0 0))
+  (via Via[0-1]_600:300_um)
+  (rule (width 250) (clearance 200)))
+ (placement (component Pad1
+  (place J1 5000 10000 front 0) (place J2 25000 10000 front 0)
+  (place J3 15000 3000 front 0) (place J4 15000 17000 front 0)))
+ (library
+  (image Pad1 (pin Pad 1 0 0))
+  (padstack Pad (shape (circle F.Cu 1500)) (attach off))
+  (padstack Via[0-1]_600:300_um (shape (circle F.Cu 600)) (shape (circle B.Cu 600)) (attach off)))
+ (network (net A (pins J1-1 J2-1)) (net B (pins J3-1 J4-1))
+  (class Default A B (circuit (use_via Via[0-1]_600:300_um)) (rule (width 250) (clearance 200))))
+ (wiring))
+"""
 
 
 def local_path(path: Path) -> Path:
@@ -48,6 +75,14 @@ class ProcessResult:
     output: str
 
 
+def _drain(stream, chunks: bytearray) -> None:
+    """Read until EOF, retaining only the final 64 KiB."""
+    while data := stream.read1(4096):
+        chunks.extend(data)
+        if len(chunks) > 65_536:
+            del chunks[:-65_536]
+
+
 def run_bounded(args: list[str], directory: Path, timeout: float) -> ProcessResult:
     """Drain output continuously, retain only final 64 KiB, kill on timeout."""
     chunks = bytearray()
@@ -58,12 +93,7 @@ def run_bounded(args: list[str], directory: Path, timeout: float) -> ProcessResu
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except OSError as exc:
         raise CapabilityError("Cannot start Java. Install Java 21 and configure its executable path.") from exc
-    def drain():
-        while data := process.stdout.read(4096):
-            chunks.extend(data)
-            if len(chunks) > 65_536:
-                del chunks[:-65_536]
-    reader = threading.Thread(target=drain, daemon=True)
+    reader = threading.Thread(target=_drain, args=(process.stdout, chunks), daemon=True)
     reader.start()
     try:
         process.wait(timeout=timeout)
@@ -167,9 +197,138 @@ def _policy(directory: Path, jar: Path) -> str:
 '''
 
 
+def _locked_jar(path: Path):
+    """Return (handle, sha256) with the JAR hashed through a Windows handle that
+    shares read access only: while it is open nobody can write, rename or delete
+    the file, and opening fails if a writer already has it open. So the verified
+    bytes stay the bytes a long-lived JVM reads. Elsewhere returns (None, sha256)
+    and callers must re-hash before every use."""
+    if os.name != "nt":
+        return None, hashlib.sha256(path.read_bytes()).hexdigest()
+    import ctypes
+    from ctypes import wintypes
+    import msvcrt
+    create = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
+    create.restype = wintypes.HANDLE
+    create.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID,
+                       wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    # GENERIC_READ, FILE_SHARE_READ only, OPEN_EXISTING.
+    handle = create(str(path), 0x80000000, 0x1, None, 3, 0, None)
+    if handle in (None, wintypes.HANDLE(-1).value):
+        raise OSError(ctypes.get_last_error(), "Cannot lock the Freerouting JAR")
+    locked = os.fdopen(msvcrt.open_osfhandle(handle, os.O_RDONLY), "rb")
+    try:
+        return locked, hashlib.file_digest(locked, "sha256").hexdigest()
+    except BaseException:
+        locked.close()
+        raise
+
+
+class _WarmFailure(Exception):
+    """The reusable JVM failed; the caller falls back to a one-shot run."""
+
+
+class _WarmRouter:
+    """One long-lived JVM running router_resources/WarmRouter under the offline policy.
+
+    Start-up does everything a one-shot route does before launching Freerouting:
+    pinned JAR hash, Java 21 check and the OfflineProbe in this exact directory.
+    """
+    def __init__(self, owner: "Freerouting"):
+        owner.work_directory.mkdir(parents=True, exist_ok=True)
+        self.directory = Path(tempfile.mkdtemp(prefix="warm-", dir=owner.work_directory))
+        self.jar_lock = self.process = None
+        self.log = bytearray()
+        self.replies: Queue = Queue()
+        atexit.register(self.close)
+        try:
+            self.jar_lock, digest = _locked_jar(owner.jar)
+            if digest != JAR_SHA256:
+                raise CapabilityError(f"Freerouting version/hash mismatch. Install exactly {VERSION} from {RELEASE_URL}; other JARs are refused.")
+            owner._check_java(self.directory)
+            owner._prepare(self.directory)
+            launcher = (Path(__file__).parent / "router_resources" / "WarmRouter.class").read_bytes()
+            if hashlib.sha256(launcher).hexdigest() != WARM_SHA256:
+                raise _WarmFailure("WarmRouter.class is missing or modified")
+            (self.directory / "WarmRouter.class").write_bytes(launcher)
+            self.process = subprocess.Popen(
+                owner._args(self.directory) + ["-cp", f"{self.directory}{os.pathsep}{owner.jar}",
+                                               "WarmRouter", str(self.directory)],
+                cwd=self.directory, env=clean_environment(self.directory), stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            threading.Thread(target=self._pump, daemon=True, name="velatrace-warm-replies").start()
+            threading.Thread(target=self._drain_log, daemon=True, name="velatrace-warm-log").start()
+            if self._reply(WARM_START_SECONDS) != "VELATRACE_WARM_READY":
+                raise _WarmFailure("Warm router did not start")
+            warmup = self.directory / "warmup"
+            warmup.mkdir()
+            (warmup / "warmup.dsn").write_text(WARMUP_DSN, encoding="utf-8")
+            self.run(owner._router_args(warmup, warmup / "warmup.dsn", warmup / "warmup.ses"), WARM_START_SECONDS)
+            shutil.rmtree(warmup, ignore_errors=True)
+        except BaseException:
+            self.close()
+            raise
+
+    # Reader threads own and close their pipes at EOF (process exit).
+    def _pump(self):
+        with self.process.stdout as replies:
+            for line in replies:
+                self.replies.put(line.decode("utf-8", errors="replace").strip())
+        self.replies.put(None)
+
+    def _drain_log(self):
+        with self.process.stderr as log:
+            _drain(log, self.log)
+
+    def _reply(self, timeout: float) -> str:
+        try:
+            reply = self.replies.get(timeout=timeout)
+        except Empty:
+            raise TimeoutError from None
+        if reply is None:
+            raise _WarmFailure("Warm router exited")
+        return reply
+
+    def alive(self) -> bool:
+        return self.process is not None and self.process.poll() is None
+
+    def run(self, args: list[str], timeout: float) -> str:
+        """Submit one job; return the log tail. Raises TimeoutError or _WarmFailure."""
+        if any(ch in arg for arg in args for ch in "\t\r\n"):
+            raise _WarmFailure("Argument cannot be sent to the warm router")
+        del self.log[:]
+        try:
+            self.process.stdin.write(("\t".join(args) + "\n").encode("utf-8"))
+            self.process.stdin.flush()
+        except OSError as exc:
+            raise _WarmFailure("Warm router pipe closed") from exc
+        reply = self._reply(timeout)
+        if reply != "VELATRACE_JOB COMPLETED":
+            raise _WarmFailure(reply)
+        return self.log.decode("utf-8", errors="replace")
+
+    def close(self, kill: bool = False):
+        atexit.unregister(self.close)
+        if self.process is not None:
+            if kill:
+                self.process.kill()
+            try:
+                self.process.stdin.close()  # WarmRouter exits when stdin closes.
+                self.process.wait(timeout=5)
+            except (OSError, subprocess.TimeoutExpired):
+                self.process.kill()
+                self.process.wait()
+        if self.jar_lock is not None:
+            self.jar_lock.close()
+        shutil.rmtree(self.directory, ignore_errors=True)
+
+
 class Freerouting:
     def __init__(self, jar: Path, java: str | Path = "java", *, work_directory: Path,
-                 timeout_seconds: float = 300):
+                 timeout_seconds: float = 300, warm: bool = False):
+        """warm=True keeps one verified router JVM for the session (started by
+        check_startup, restarted if it dies); any failure falls back to one-shot."""
         self.jar = local_path(jar)
         self.work_directory = local_path(work_directory)
         located = shutil.which(str(java))
@@ -178,6 +337,11 @@ class Freerouting:
             raise ValidationError("Router timeout must be between 1 and 3600 seconds.")
         self.timeout = timeout_seconds
         self.last_log = ""
+        self.warm = warm
+        self._warm: _WarmRouter | None = None
+        self._warm_lock = threading.Lock()
+        self._warm_failures = 0
+        self._closed = False
 
     def _args(self, directory: Path) -> list[str]:
         return [str(self.java), "-Xmx1024m", "-Djava.security.manager",
@@ -222,9 +386,93 @@ class Freerouting:
             directory = Path(name)
             self._check_java(directory)
             self._prepare(directory)
+        if self.warm:
+            # Pre-warm so the first route click does not pay JVM and router start-up.
+            threading.Thread(target=self._prewarm, daemon=True, name="velatrace-router-prewarm").start()
+
+    def close(self) -> None:
+        """Stop the warm router JVM, if any. Idempotent; safe from any thread."""
+        self._closed = True
+        self._stop_warm()
+
+    @staticmethod
+    def _router_args(directory: Path, copied: Path, output: Path) -> list[str]:
+        # The one-shot CLI and the warm launcher receive exactly the same router arguments.
+        return ["-de", str(copied), "-do", str(output),
+                "-da", "-dl", "--gui.enabled=false", "--api_server.enabled=false",
+                "--profile.allow_telemetry=false", "--feature_flags.save_jobs=false",
+                "--user_data_path=" + str(directory), "-mp", "100", "-mt", "1"]
+
+    @staticmethod
+    def _read_ses(output: Path, dsn: DsnInput) -> str:
+        if not output.is_file():
+            raise CapabilityError("Freerouting failed or produced no SES. Inspect the local router log; nothing was applied.")
+        if output.stat().st_size > MAX_SES:
+            raise ValidationError("Freerouting SES exceeds the 32 MB limit; nothing was applied.")
+        dsn.assert_unchanged()
+        try:
+            return output.read_text(encoding="utf-8")
+        except UnicodeError:
+            raise ValidationError("Freerouting output is not valid UTF-8; nothing was applied.") from None
+
+    def _stop_warm(self, kill: bool = False) -> None:
+        warm, self._warm = self._warm, None
+        if warm is not None:
+            warm.close(kill)
+
+    def _ensure_warm(self) -> "_WarmRouter | None":
+        """Caller holds _warm_lock. Returns a live warm router or None (use one-shot)."""
+        if self._warm is not None and self._warm.alive():
+            return self._warm
+        self._stop_warm()
+        if self._closed or self._warm_failures >= WARM_MAX_FAILURES:
+            return None
+        try:
+            self._warm = _WarmRouter(self)
+        except Exception:
+            self._warm_failures += 1
+            return None
+        if self._closed:  # close() raced with start-up.
+            self._stop_warm()
+        return self._warm
+
+    def _prewarm(self) -> None:
+        with self._warm_lock:
+            self._ensure_warm()
+
+    def _route_warm(self, dsn: DsnInput, text: str) -> str | None:
+        """Route in the warm JVM. None means use the one-shot path instead."""
+        with self._warm_lock:
+            warm = self._ensure_warm()
+            if warm is None:
+                return None
+            if warm.jar_lock is None:
+                # No OS lock pins the JAR bytes on this platform: re-verify before every job.
+                try:
+                    self._check_installation()
+                except BaseException:
+                    self._stop_warm()
+                    raise
+            with tempfile.TemporaryDirectory(prefix="job-", dir=warm.directory, ignore_cleanup_errors=True) as name:
+                directory = Path(name)
+                copied = directory / dsn.path.name
+                copied.write_text(text, encoding="utf-8")
+                output = directory / "result.ses"
+                try:
+                    self.last_log = warm.run(self._router_args(directory, copied, output), self.timeout)
+                    if not output.is_file():
+                        raise _WarmFailure("No SES")
+                except TimeoutError:
+                    self._stop_warm(kill=True)
+                    raise CapabilityError(f"Freerouting/Java exceeded {self.timeout:g} seconds and was stopped; nothing applied.") from None
+                except _WarmFailure:
+                    self._warm_failures += 1
+                    self._stop_warm(kill=True)
+                    return None
+                self._warm_failures = 0
+                return self._read_ses(output, dsn)
 
     def route(self, dsn: DsnInput, constraints: tuple[Constraint, ...]) -> str:
-        self._check_installation()
         local_path(dsn.path)
         local_path(dsn.ticket.board_path)
         dsn.assert_unchanged()
@@ -233,6 +481,9 @@ class Freerouting:
         if any(ch in dsn.path.name for ch in ('+', '\n', '\r')):
             raise ValidationError("DSN filename contains unsupported characters; export using a simple filename.")
         text = constrained_dsn(dsn.path.read_text(encoding="utf-8"), constraints)
+        if self.warm and (ses := self._route_warm(dsn, text)) is not None:
+            return ses
+        self._check_installation()
         with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
             directory = Path(name)
             self._check_java(directory)
@@ -242,18 +493,9 @@ class Freerouting:
             copied = directory / dsn.path.name
             copied.write_text(text, encoding="utf-8")
             output = directory / "result.ses"
-            args = self._args(directory) + ["-jar", str(self.jar), "-de", str(copied), "-do", str(output),
-                    "-da", "-dl", "--gui.enabled=false", "--api_server.enabled=false",
-                    "--profile.allow_telemetry=false", "--feature_flags.save_jobs=false",
-                    "--user_data_path=" + str(directory), "-mp", "100", "-mt", "1"]
+            args = self._args(directory) + ["-jar", str(self.jar)] + self._router_args(directory, copied, output)
             result = run_bounded(args, directory, self.timeout)
             self.last_log = result.output  # Local only; never transmitted or included in provider prompts.
-            if result.returncode or not output.is_file():
+            if result.returncode:
                 raise CapabilityError("Freerouting failed or produced no SES. Inspect the local router log; nothing was applied.")
-            if output.stat().st_size > MAX_SES:
-                raise ValidationError("Freerouting SES exceeds the 32 MB limit; nothing was applied.")
-            dsn.assert_unchanged()
-            try:
-                return output.read_text(encoding="utf-8")
-            except UnicodeError:
-                raise ValidationError("Freerouting output is not valid UTF-8; nothing was applied.") from None
+            return self._read_ses(output, dsn)

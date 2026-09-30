@@ -748,13 +748,15 @@ class MainWindow(QMainWindow):
             if self.safety:
                 self.safety.clear_preview()
             try:
-                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work")
+                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work", warm=True)
                 router.check_startup()
             except Exception as exc:
                 self._setup_error = str(exc) or type(exc).__name__
                 raise
             return router
         def success(router):
+            if self.router is not None:
+                self.router.close()  # Stop the replaced router's warm JVM.
             self.settings, self.router, self.ready = settings, router, True
             self.audit = self.pricing = self.routing = None
             self.reader = self.safety = self.validator = self.writer = None
@@ -1213,6 +1215,8 @@ class MainWindow(QMainWindow):
         for worker in (self.executor, self.drc_executor):
             worker.jobs.put(None)
             worker.wait(2000)
+        if self.router is not None:
+            self.router.close()  # No java.exe outlives the window.
         event.accept()
 
     def close_after_cleanup(self):
