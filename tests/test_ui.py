@@ -42,6 +42,7 @@ class UiTests(unittest.TestCase):
         self.app.processEvents()
         # Collect the closed window here, on the Qt thread: the window's own callbacks
         # form reference cycles, and cyclic GC on a worker thread would abort Qt.
+        self.window.deleteLater()  # free Qt objects on the Qt thread before GC
         self.window = None
         gc.collect()
         self.temp.cleanup()
@@ -216,7 +217,9 @@ class UiTests(unittest.TestCase):
         self.assertIsNone(self.window.canvas.plan)
         self.assertFalse(self.window.preview_shown)
         self.assertFalse(self.window.approve_button.isEnabled())
-        self.assertIn("Applied 1 copper track segments and 0 vias on B.Cu", self.window.route_summary.text())
+        self.assertIn("Applied 1 copper track segments and 0 vias on B.Cu", self.window.canvas.toolTip())
+        self.assertIn("Applied 1 copper", self.window.canvas.accessibleDescription())
+        self.assertTrue(self.window.route_summary.isHidden())
 
     def start_route(self, validate=None, snapshot="snapshot"):
         """Click Generate; returns once the preview is shown, with DRC gated on `release`."""
@@ -257,7 +260,6 @@ class UiTests(unittest.TestCase):
         self.assertFalse(self.window.approve_anyway_button.isEnabled())
         self.assertTrue(self.window.route_page.isEnabled())  # reroute/reject stay usable
         self.assertIn("Checking DRC", self.window.status.text())
-        self.assertIn("Checking DRC", self.window.route_summary.text())
         release.set()
         self.wait_drc()
         validator.validate.assert_called_once()
@@ -265,7 +267,7 @@ class UiTests(unittest.TestCase):
         self.assertEqual(session.stage, RoutingStage.PREVIEW)
         self.assertTrue(self.window.approve_button.isEnabled())
         self.assertFalse(self.window.approve_anyway_button.isEnabled())
-        summary = self.window.route_summary.text()
+        summary = self.window.canvas.toolTip()
         self.assertIn("Preview only", summary)
         self.assertIn("Approve and apply copper", summary)
         self.assertRegex(summary, r"Routing \d+\.\ds; preview \d+\.\ds; DRC \d+\.\ds")
@@ -284,7 +286,7 @@ class UiTests(unittest.TestCase):
         self.assertEqual(session.stage, RoutingStage.REJECTED)
         self.assertIsNone(session.report)
         self.assertFalse(self.window.approve_button.isEnabled())
-        self.assertIn("Rejected: Wrong side", self.window.route_summary.text())
+        self.assertIn("Rejected: Wrong side", self.window.canvas.toolTip())
         # Reroute while the first DRC is still running: only the newest result counts.
         session, router, validator, writer, release = self.start_route()
         first = session.plan
@@ -349,7 +351,7 @@ class UiTests(unittest.TestCase):
             self.wait_idle()
         writer.apply.assert_called_once_with(session.input, session.plan, session.report, drc_override=True)
         self.assertEqual(session.stage, RoutingStage.APPROVED)
-        self.assertIn("despite 7 DRC issue(s)", self.window.route_summary.text())
+        self.assertIn("despite 7 DRC issue(s)", self.window.canvas.toolTip())
         self.assertFalse(self.window.approve_anyway_button.isEnabled())
 
     def test_drc_findings_offer_approve_anyway_after_background_check(self):
