@@ -141,28 +141,51 @@ def _signature(item):
     return proto.SerializeToString(deterministic=True)
 
 
+def _segment_key(item):
+    from kipy.board_types import BoardShape
+    if not isinstance(item, BoardShape) or item.proto.shape.WhichOneof("geometry") != "segment":
+        return None
+    segment = item.proto.shape.segment
+    ends = sorted(((segment.start.x_nm, segment.start.y_nm),
+                   (segment.end.x_nm, segment.end.y_nm)))
+    return (item.proto.layer, *ends)
+
+
+def _describe_lines(keys, limit=5):
+    """KiCad-coordinate list of up to `limit` segment keys, for the user to find them."""
+    keys = sorted(keys)
+    text = "; ".join(f"({a[0]/1e6:g}, {a[1]/1e6:g})-({b[0]/1e6:g}, {b[1]/1e6:g}) mm" for _, a, b in keys[:limit])
+    return text + (f"; and {len(keys) - limit} more" if len(keys) > limit else "")
+
+
+def _preview_like(item, layer):
+    """A dashed 0.1 mm segment on the preview layer: what ItemFactory.preview draws."""
+    from kipy.proto.common.types.enums_pb2 import SLS_DASH
+    key = _segment_key(item)
+    stroke = item.proto.shape.attributes.stroke if key else None
+    return bool(key and key[0] == layer and stroke.style == SLS_DASH and stroke.width.value_nm == 100_000)
+
+
 def _check_graphic_collisions(additions, existing, removed_ids):
     """KiCad may replace an existing coincident graphic when creating a segment."""
-    from kipy.board_types import BoardShape
-    def key(item):
-        if not isinstance(item, BoardShape) or item.proto.shape.WhichOneof("geometry") != "segment":
-            return None
-        segment = item.proto.shape.segment
-        ends = sorted(((segment.start.x_nm, segment.start.y_nm),
-                       (segment.end.x_nm, segment.end.y_nm)))
-        return (item.proto.layer, *ends)
-    foreign = {key(item) for item in existing if item.id.value not in removed_ids}
+    foreign = {_segment_key(item) for item in existing if item.id.value not in removed_ids}
     foreign.discard(None)
     seen = set()
+    hits = set()
     for item in additions:
-        value = key(item)
+        value = _segment_key(item)
         if value is None:
             continue
         if value in foreign:
-            raise ValidationError("Preview overlaps existing graphics on User.9. KiCad may replace those items. Remove only unwanted old preview graphics, then retry; no preview was written.")
+            hits.add(value)
         if value in seen:
             raise ValidationError("Preview contains duplicate segments that KiCad may merge; no preview was written.")
         seen.add(value)
+    if hits:
+        raise ValidationError(f"Preview would overlap {len(hits)} User.9 line(s) that VelaTrace did not create "
+                              f"and cannot prove are its own: {_describe_lines(hits)}. KiCad may replace them, so "
+                              "no preview was written. Delete them in KiCad if they are old previews, or move "
+                              "your own drawings off User.9, then retry.")
 
 
 def _echoes(sent, got) -> bool:
@@ -412,6 +435,42 @@ class BoardSafety:
         if not any(isinstance(row, list) and len(row) > 1 and row[1] == "User.9" for row in one_layers(root)):
             raise CapabilityError("Temporary VelaTrace graphics need the User.9 layer. In KiCad: File > Board Setup > Board Stackup > Board Editor Layers > Add User Defined Layer... > User.9, then save the board. VelaTrace never changes layer settings itself.")
         return BL_User_9
+
+    def _journaled_ids(self):
+        """Temporary-graphic UUIDs committed by any VelaTrace run on this board (completion.json)."""
+        ids = set()
+        for path in self.directory.glob("*/completion.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                if data.get("status") == "committed":
+                    ids.update(value for value in data.get("owned_ids", ()) if isinstance(value, str))
+            except (OSError, ValueError, AttributeError, TypeError):
+                continue
+        return ids
+
+    def prepare_preview(self):
+        """Before routing, fail fast on everything that would refuse the later preview.
+
+        Old VelaTrace previews (saved into the board, restored by Undo, or left by an
+        earlier run) are recognised by journaled UUID on User.9 and removed through the
+        normal backed-up transaction. Unjournaled look-alikes are never deleted.
+        """
+        layer = self._preview_layer()
+        with self._lock:
+            self._identity()
+            journaled = self._journaled_ids()
+            for item in [*self.board.get_shapes(), *self.board.get_text()]:
+                if item.id.value in journaled and item.proto.layer == layer:
+                    self.owned.setdefault(item.id.value, _signature(item))
+            self.clear_preview()
+            # ponytail: pre-route we cannot know the route, so refuse on preview-styled
+            # foreign lines (the only realistic exact overlap); the post-route check stays.
+            orphans = {_segment_key(item) for item in self.board.get_shapes() if _preview_like(item, layer)}
+        if orphans:
+            raise ValidationError(f"User.9 has {len(orphans)} dashed 0.1 mm line(s) that look like old VelaTrace "
+                                  f"previews, but no VelaTrace journal beside this board proves it created them, so "
+                                  f"they were left untouched: {_describe_lines(orphans)}. Delete them in KiCad if they "
+                                  "are old previews, or move your own drawings off User.9, then retry. Routing was not started.")
 
     def show_preview(self, dsn, plan, expected_board):
         self.assert_matches(dsn, expected_board=expected_board)

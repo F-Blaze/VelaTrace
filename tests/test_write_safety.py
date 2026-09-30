@@ -289,8 +289,60 @@ class SafetyTests(unittest.TestCase):
         old = ItemFactory.preview(self.plan, BL_User_9)[0]
         new = ItemFactory.preview(self.plan, BL_User_9)[0]
         self.board.get_shapes = lambda: [old]
-        with self.assertRaisesRegex(ValidationError, "overlaps existing graphics"):
+        with self.assertRaisesRegex(ValidationError, r"overlap 1 User.9 line.*\(1, 2\)-\(10, 2\) mm"):
             self.mutate([new], temporary=True)
+        self.assertNotIn("begin", self.board.events)
+
+    def preview_items(self, plan, layer):
+        from velatrace.write_safety import ItemFactory
+        items = ItemFactory.preview(plan, layer)
+        for item in items:
+            item.signature = item.id.value.encode()
+        return items
+
+    def routed_preview(self):
+        """The UI order: prepare before routing, validate, then show the preview."""
+        self.safety.factory.preview = self.preview_items
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(0, 0, 0)))
+        self.safety.prepare_preview()
+        validator.validate(self.dsn, self.plan, ())
+        self.safety.show_preview(self.dsn, self.plan, validator.evidence[5])
+
+    def test_stale_own_preview_from_earlier_run_is_replaced(self):
+        self.routed_preview()
+        stale = set(self.board.items)
+        self.assertTrue(stale)
+        # Plugin restarted (or the preview was saved/restored by Undo): only the journal knows it.
+        self.safety = BoardSafety(self.board, self.path)
+        self.routed_preview()
+        self.assertFalse(stale & set(self.board.items))
+        self.assertEqual(len(self.board.items), len(stale))
+        self.assertEqual(set(self.board.items), set(self.safety.owned))
+
+    def test_unjournaled_preview_lookalike_blocks_before_routing_and_is_kept(self):
+        from kipy.proto.board.board_types_pb2 import BL_User_9, BL_User_8
+        orphan = self.preview_items(self.plan, BL_User_9)[0]
+        mine = self.preview_items(self.plan, BL_User_9)[0]
+        mine.attributes.stroke.width = 150_000  # the user's own drawing, not preview-styled
+        elsewhere = self.preview_items(self.plan, BL_User_8)[0]
+        for item in (mine, elsewhere):
+            self.board.items[item.id.value] = item
+        self.safety.prepare_preview()  # foreign non-preview graphics do not block
+        self.board.items[orphan.id.value] = orphan
+        with self.assertRaisesRegex(ValidationError, r"1 dashed 0.1 mm line.*\(1, 2\)-\(10, 2\) mm.*not started"):
+            self.safety.prepare_preview()
+        self.assertNotIn("begin", self.board.events)
+        self.assertEqual(set(self.board.items), {orphan.id.value, mine.id.value, elsewhere.id.value})
+
+    def test_journaled_ids_on_other_layers_are_never_adopted(self):
+        from kipy.proto.board.board_types_pb2 import BL_User_8
+        other = self.preview_items(self.plan, BL_User_8)[0]
+        self.board.items[other.id.value] = other
+        folder = self.safety.directory / "old"
+        folder.mkdir()
+        (folder / "completion.json").write_text(json.dumps({"status": "committed", "owned_ids": [other.id.value]}))
+        self.safety.prepare_preview()
+        self.assertIn(other.id.value, self.board.items)
         self.assertNotIn("begin", self.board.events)
 
     def test_collision_check_is_direction_independent_and_preserves_layers(self):
