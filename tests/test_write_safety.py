@@ -408,6 +408,57 @@ class SafetyTests(unittest.TestCase):
             SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
         self.assertNotIn("begin", self.board.events)
 
+    def test_drc_override_bypasses_only_the_drc_gate_and_is_journaled(self):
+        self.safety.factory = SimpleNamespace(copper=lambda items, board: [Item(item.id) for item in items])
+        # Unconnected items still refuse, even with the override.
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(1, 1, 0)))
+        report = validator.validate(self.dsn, self.plan, ())
+        with self.assertRaises(ValidationError):
+            SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report, drc_override=True)
+        # A board change after validation still refuses, even with the override.
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(1, 0, 0)))
+        report = validator.validate(self.dsn, self.plan, ())
+        self.board.source = BOARD.replace("20 20", "22 20")
+        with self.assertRaisesRegex(ValidationError, "changed after routing validation"):
+            SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report, drc_override=True)
+        self.assertNotIn("begin", self.board.events)
+        self.board.source = BOARD
+        report = validator.validate(self.dsn, self.plan, ())
+        self.assertEqual(report.drc_violations, 1)
+        SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report, drc_override=True)
+        self.assertEqual(self.board.events.count("push"), 1)
+        for name in ("intent.json", "completion.json"):
+            record = json.loads((self.safety.last_backup.directory / name).read_text())["drc_override"]
+            self.assertEqual(record, {"violations": 1, "blocking_reasons": list(report.blocking_reasons)})
+            self.assertTrue(record["blocking_reasons"])
+
+    def test_clean_approval_journals_no_override(self):
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(0, 0, 0)))
+        report = validator.validate(self.dsn, self.plan, ())
+        self.safety.factory = SimpleNamespace(copper=lambda items, board: [Item(item.id) for item in items])
+        SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report, drc_override=True)
+        self.assertNotIn("drc_override", json.loads((self.safety.last_backup.directory / "completion.json").read_text()))
+
+    def test_preview_before_drc_binds_the_board_it_was_drawn_on(self):
+        """The UI order: prepare, show the preview, then validate in the background."""
+        self.safety.factory.preview = self.preview_items
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=lambda path: DrcResult(0, 0, 0)))
+        self.safety.prepare_preview()
+        snapshot = self.safety.show_preview(self.dsn, self.plan)
+        self.assertTrue(self.safety.owned)
+        report = validator.validate(self.dsn, self.plan, ())
+        self.assertEqual(validator.evidence[5], snapshot)  # the preview is excluded from validation
+        self.safety.factory.copper = lambda items, board: [Item(item.id) for item in items]
+        self.board.events.clear()
+        SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
+        self.assertEqual(self.board.events.count("push"), 1)
+        self.assertFalse(self.safety.owned)
+        # An edit between preview and validation is visible as a different snapshot.
+        snapshot = self.safety.show_preview(self.dsn, self.plan)
+        self.board.source = BOARD.replace("20 20", "21 20")
+        validator.validate(self.dsn, self.plan, ())
+        self.assertNotEqual(validator.evidence[5], snapshot)
+
     def test_clearance_runs_original_and_supplemental_rules(self):
         rules = self.path.with_suffix(".kicad_dru")
         rules.write_text('(version 1)\n(rule "stronger" (constraint clearance (min 1.0)))')

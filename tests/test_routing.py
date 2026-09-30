@@ -183,6 +183,52 @@ class RoutingTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 self.session.approve(None)
 
+    def test_approve_anyway_lifts_only_the_known_drc_gate(self):
+        from unittest.mock import Mock
+        for missing, violations in ((1, 2), (0, None)):
+            self.ready()
+            self.validator.missing, self.validator.violations = missing, violations
+            self.session.run()
+            with self.assertRaises(ValidationError):
+                self.session.approve(Mock(), drc_override=True)
+        self.ready()
+        self.validator.missing, self.validator.violations = 0, 2
+        self.session.run()
+        writer = Mock()
+        with self.assertRaisesRegex(ValidationError, "Approve anyway"):
+            self.session.approve(writer)
+        writer.apply.assert_not_called()
+        self.session.approve(writer, drc_override=True)
+        writer.apply.assert_called_once_with(self.dsn, self.session.plan, self.session.report, drc_override=True)
+        self.assertEqual(self.session.stage, RoutingStage.APPROVED)
+
+    def test_background_check_is_discarded_after_reroute_or_reject(self):
+        self.ready()
+        plan = self.session.route()
+        generation = self.session.generation
+        self.assertEqual(self.session.stage, RoutingStage.VALIDATING)
+        with self.assertRaises(ValidationError):
+            self.session.approve(None)  # previewable, not approvable, before DRC
+        report = self.session.check(plan)
+        self.session.reject("Wrong layer")  # while DRC was running
+        self.assertFalse(self.session.accept(plan, report, generation))
+        self.assertEqual(self.session.stage, RoutingStage.REJECTED)
+        self.assertIsNone(self.session.report)
+        self.session.confirm_constraints(self.store.fingerprint)
+        old = self.session.route()
+        stale = self.session.generation
+        self.session.confirm_constraints(self.store.fingerprint)  # reroute
+        new = self.session.route()
+        self.assertFalse(self.session.accept(old, self.session.check(old), stale))
+        self.assertEqual(self.session.stage, RoutingStage.VALIDATING)
+        self.assertTrue(self.session.accept(new, self.session.check(new), self.session.generation))
+        self.assertEqual(self.session.stage, RoutingStage.PREVIEW)
+        # A failed check (None) for the current plan invalidates it.
+        self.session.confirm_constraints(self.store.fingerprint)
+        plan = self.session.route()
+        self.assertTrue(self.session.accept(plan, None, self.session.generation))
+        self.assertEqual(self.session.stage, RoutingStage.SETUP)
+
     def test_board_change_invalidates_run(self):
         self.ready()
         self.dsn.ticket.board_path.write_text("changed")

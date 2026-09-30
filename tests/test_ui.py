@@ -1,4 +1,5 @@
 """Offscreen UI gates and worker-boundary tests; no provider or KiCad writes."""
+import gc
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import tempfile
@@ -39,6 +40,10 @@ class UiTests(unittest.TestCase):
         self.wait_idle()
         self.window.close()
         self.app.processEvents()
+        # Collect the closed window here, on the Qt thread: the window's own callbacks
+        # form reference cycles, and cyclic GC on a worker thread would abort Qt.
+        self.window = None
+        gc.collect()
         self.temp.cleanup()
 
     def wait_idle(self):
@@ -48,6 +53,14 @@ class UiTests(unittest.TestCase):
             time.sleep(.005)
         self.assertIsNone(self.window.worker)
         self.app.processEvents()
+
+    def wait_drc(self):
+        deadline = time.monotonic() + 5
+        while (self.window._drc_pending or self.window.worker is not None) and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(.005)
+        self.assertEqual(self.window._drc_pending, 0)
+        self.wait_idle()
 
     def test_model_and_board_text_never_becomes_html(self):
         card = ComponentCard(Component("<b>R1</b>", "<img src=x>", "test", ()),
@@ -195,7 +208,7 @@ class UiTests(unittest.TestCase):
         with patch("velatrace.ui.ask", return_value=True):
             self.window.approve_button.click()
             self.wait_idle()
-        writer.apply.assert_called_once_with(session.input, session.plan, session.report)
+        writer.apply.assert_called_once_with(session.input, session.plan, session.report, drc_override=False)
         router.route.assert_not_called()
         validator.validate.assert_not_called()
         self.window.safety.show_preview.assert_not_called()
@@ -205,29 +218,163 @@ class UiTests(unittest.TestCase):
         self.assertFalse(self.window.approve_button.isEnabled())
         self.assertIn("Applied 1 copper track segments and 0 vias on B.Cu", self.window.route_summary.text())
 
-    def test_generate_button_reports_preview_timings_without_applying_copper(self):
+    def start_route(self, validate=None, snapshot="snapshot"):
+        """Click Generate; returns once the preview is shown, with DRC gated on `release`."""
         from velatrace.routing import ValidationReport, plan_digest
         session, router, validator, writer = self.ready_route_preview()
         router.route.return_value = """(session board (base_design board.dsn)
             (routes (resolution um 10) (network_out
             (net N (wire (path F.Cu 2500 10000 20000 30000 40000))))))"""
-        validator.validate.side_effect = lambda dsn, plan, constraints: ValidationReport(
-            plan_digest(plan), 0, 0, board_digest=dsn.ticket.board_digest)
-        validator.evidence = (None, None, None, None, None, "snapshot")
+        release = threading.Event()
+        self.addCleanup(release.set)
+        def gated(dsn, plan, constraints):
+            # Never capture `self` here: a TestCase<->window reference cycle lets Python's
+            # cyclic GC destroy the window's widgets later on a worker thread, which aborts Qt.
+            if not release.wait(5):
+                raise AssertionError("DRC gate was never released")
+            if validate:
+                return validate(dsn, plan, constraints)
+            return ValidationReport(plan_digest(plan), 0, 0, board_digest=dsn.ticket.board_digest)
+        validator.validate.side_effect = gated
+        validator.evidence = (None, None, None, None, None, snapshot)
         self.window.validator = validator
+        self.window.safety.show_preview.return_value = "snapshot"
         self.window.placed.setChecked(True)
         with patch("velatrace.ui.ask", return_value=True), patch("velatrace.ui.trusted_via_catalog", return_value={}):
             self.window.route_button.click()
             self.wait_idle()
+        return session, router, validator, writer, release
+
+    def test_preview_shows_before_drc_and_approval_waits_for_it(self):
+        from velatrace.routing import RoutingStage
+        session, router, validator, writer, release = self.start_route()
+        # Preview drawn (no expected board: DRC has not run yet); approval still locked.
         router.route.assert_called_once()
+        self.window.safety.show_preview.assert_called_once_with(session.input, session.plan)
+        self.assertIs(self.window.canvas.plan, session.plan)
+        self.assertEqual(session.stage, RoutingStage.VALIDATING)
+        self.assertFalse(self.window.approve_button.isEnabled())
+        self.assertFalse(self.window.approve_anyway_button.isEnabled())
+        self.assertTrue(self.window.route_page.isEnabled())  # reroute/reject stay usable
+        self.assertIn("Checking DRC", self.window.status.text())
+        self.assertIn("Checking DRC", self.window.route_summary.text())
+        release.set()
+        self.wait_drc()
         validator.validate.assert_called_once()
-        self.window.safety.show_preview.assert_called_once_with(session.input, session.plan, "snapshot")
         writer.apply.assert_not_called()
+        self.assertEqual(session.stage, RoutingStage.PREVIEW)
         self.assertTrue(self.window.approve_button.isEnabled())
+        self.assertFalse(self.window.approve_anyway_button.isEnabled())
         summary = self.window.route_summary.text()
         self.assertIn("Preview only", summary)
         self.assertIn("Approve and apply copper", summary)
-        self.assertRegex(summary, r"Routing \d+\.\ds; DRC \d+\.\ds; preview \d+\.\ds")
+        self.assertRegex(summary, r"Routing \d+\.\ds; preview \d+\.\ds; DRC \d+\.\ds")
+
+    def test_reject_or_reroute_during_drc_discards_the_stale_result(self):
+        from velatrace.routing import RoutingStage
+        session, router, validator, writer, release = self.start_route()
+        self.window.reason.setText("Wrong side of the board")
+        self.window.reject_button.click()
+        self.wait_idle()
+        self.assertEqual(session.stage, RoutingStage.REJECTED)
+        self.window.safety.clear_preview.assert_called_once()
+        release.set()
+        self.wait_drc()
+        validator.validate.assert_called_once()
+        self.assertEqual(session.stage, RoutingStage.REJECTED)
+        self.assertIsNone(session.report)
+        self.assertFalse(self.window.approve_button.isEnabled())
+        self.assertIn("Rejected: Wrong side", self.window.route_summary.text())
+        # Reroute while the first DRC is still running: only the newest result counts.
+        session, router, validator, writer, release = self.start_route()
+        first = session.plan
+        with patch("velatrace.ui.ask", return_value=True), patch("velatrace.ui.trusted_via_catalog", return_value={}):
+            self.window.route_button.click()
+            self.wait_idle()
+        self.assertIsNot(session.plan, first)
+        release.set()
+        self.wait_drc()
+        self.assertEqual(validator.validate.call_count, 2)
+        self.assertEqual(session.stage, RoutingStage.PREVIEW)
+        self.assertEqual(session.report.plan_digest, __import__("velatrace.routing", fromlist=["plan_digest"]).plan_digest(session.plan))
+
+    def test_drc_failure_or_board_change_removes_preview_and_blocks_approval(self):
+        from velatrace.errors import ValidationError
+        from velatrace.routing import RoutingStage
+        def fail(*args):
+            raise ValidationError("KiCad CLI failed (exit 3)")
+        for kwargs, message in (({"validate": fail}, "KiCad CLI failed"),
+                                ({"snapshot": "other board"}, "board changed after the preview")):
+            with self.subTest(message=message):
+                session, router, validator, writer, release = self.start_route(**kwargs)
+                release.set()
+                self.wait_drc()
+                self.assertEqual(session.stage, RoutingStage.SETUP)
+                self.assertFalse(self.window.preview_shown)
+                self.assertIsNone(self.window.canvas.plan)
+                self.window.safety.clear_preview.assert_called_once()
+                self.assertFalse(self.window.approve_button.isEnabled())
+                self.assertFalse(self.window.approve_anyway_button.isEnabled())
+                self.assertIn(message, self.window.status.text())
+                self.assertIn(message, self.window.route_summary.text())
+
+    def test_approve_anyway_confirms_drc_items_with_cancel_default(self):
+        from PySide6.QtWidgets import QMessageBox
+        from velatrace.routing import RoutingStage
+        session, router, validator, writer = self.ready_route_preview()
+        reasons = tuple(f"kind {n} (error): 1" for n in range(7))
+        session.report = replace(session.report, drc_violations=7, blocking_reasons=reasons)
+        self.window.refresh_actions()
+        self.assertFalse(self.window.approve_button.isEnabled())
+        self.assertTrue(self.window.approve_anyway_button.isEnabled())
+        self.assertNotEqual(self.window.approve_anyway_button.objectName(), "primary")
+        seen = []
+        def exec_(box, answer):
+            seen.append((box.defaultButton() is box.button(QMessageBox.StandardButton.Cancel), box.text()))
+            return answer
+        with patch.object(QMessageBox, "exec", lambda box: exec_(box, QMessageBox.StandardButton.Cancel)):
+            self.window.approve_anyway_button.click()
+            self.wait_idle()
+        writer.apply.assert_not_called()
+        cancel_default, text = seen[0]
+        self.assertTrue(cancel_default)
+        self.assertIn("7 blocking issue", text)
+        self.assertIn("kind 0 (error): 1", text)
+        self.assertIn("kind 4 (error): 1", text)
+        self.assertNotIn("kind 5", text)
+        self.assertIn("and 2 more", text)
+        self.assertIn("DESPITE", text)
+        with patch.object(QMessageBox, "exec", lambda box: exec_(box, QMessageBox.StandardButton.Ok)):
+            self.window.approve_anyway_button.click()
+            self.wait_idle()
+        writer.apply.assert_called_once_with(session.input, session.plan, session.report, drc_override=True)
+        self.assertEqual(session.stage, RoutingStage.APPROVED)
+        self.assertIn("despite 7 DRC issue(s)", self.window.route_summary.text())
+        self.assertFalse(self.window.approve_anyway_button.isEnabled())
+
+    def test_drc_findings_offer_approve_anyway_after_background_check(self):
+        from velatrace.routing import ValidationReport, plan_digest
+        def violations(dsn, plan, constraints):
+            return ValidationReport(plan_digest(plan), 2, 0, board_digest=dsn.ticket.board_digest,
+                                    blocking_reasons=("clearance (error): 2",))
+        session, router, validator, writer, release = self.start_route(violations)
+        self.assertFalse(self.window.approve_anyway_button.isEnabled())
+        release.set()
+        self.wait_drc()
+        self.assertFalse(self.window.approve_button.isEnabled())
+        self.assertTrue(self.window.approve_anyway_button.isEnabled())
+        summary = self.window.route_summary.text()
+        self.assertIn("Approval blocked: clearance (error): 2", summary)
+        self.assertIn("Approve anyway", summary)
+
+    def test_approve_anyway_is_never_offered_for_shortfall(self):
+        from velatrace.routing import RoutingStage
+        session, *_ = self.ready_route_preview()
+        session.report = replace(session.report, drc_violations=1, unconnected_count=2)
+        session.stage = RoutingStage.SHORTFALL
+        self.window.refresh_actions()
+        self.assertFalse(self.window.approve_button.isEnabled())
+        self.assertFalse(self.window.approve_anyway_button.isEnabled())
 
     def test_preview_layer_refusal_happens_before_freerouting(self):
         from velatrace.errors import ValidationError

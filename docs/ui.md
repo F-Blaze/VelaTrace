@@ -11,8 +11,27 @@ Approval uses the validated route without rerunning Freerouting. Blocking DRC
 types are shown separately from pre-existing warnings. The routing page scrolls
 so approval remains reachable on smaller screens.
 
+The User.9 preview is drawn as soon as Freerouting's result is imported. Candidate
+KiCad DRC then runs on a separate background thread while the status reads
+**Checking DRC…**; approval stays disabled until it finishes. Reject and
+**Generate routing preview** stay usable meanwhile: rejecting, rerouting, changing
+mode or loading new input makes the running check stale, and its result is
+discarded (the routing session's generation counter). If DRC fails, or the board
+changed between drawing the preview and validating it, the preview is removed and
+the route cannot be approved. Closing waits for a running DRC check.
+
+**Approve anyway (DRC errors)…** is a separate, red, non-default button, enabled
+only when a complete preview (zero unconnected items) is blocked by known DRC
+findings. Its confirmation lists the blocking count and the first five DRC issue
+types, states that copper will be written despite them, and defaults to Cancel.
+It bypasses only the DRC gate: backup, the single undoable commit, board-unchanged,
+stale-preview and preview-collision checks, and the Freerouting JAR pin all still
+apply, and incomplete routes or unknown DRC still refuse. The override and the
+blocking issues are written to that commit's `intent.json` and `completion.json`,
+and the result line says the route was applied despite DRC errors.
+
 The status shows the current stage and elapsed seconds. Finished runs show
-routing, DRC and preview durations separately. Successful approval reports track,
+routing, preview and DRC durations separately. Successful approval reports track,
 via and layer counts after reading the copper back from KiCad. Failed approval
 retains the panel preview with an explicit error; that is not a new routing run.
 An uncertain result blocks retry until inspected.
@@ -77,7 +96,8 @@ clearance and width on saved, placed, initially unrouted boards.
 The fresh DSN handshake is explicit because KiCad 9/10's pinned IPC and CLI do
 not expose DSN export. Request an export, export in KiCad, then load the freshly
 written file. The complete numeric constraint list needs confirmation before
-each route. Freerouting and actual candidate CLI DRC run on the service worker.
+each route. Freerouting and the preview run on the service worker; candidate CLI
+DRC follows on its own background worker.
 The panel draws a separate dashed-violet preview for each used copper layer;
 board graphics are dashed on `User.9`, whose color remains under KiCad's control.
 Set that user layer to violet manually if desired. Preview failure disables
@@ -86,7 +106,8 @@ Reject requires a reason; manually adjust numeric constraints before retrying.
 Approved copper uses the real KiCad layer colors through the guarded writer.
 
 All blocking operations run serially on one persistent thread, including IPC
-connection creation and subsequent access. Results and token updates return to
+connection creation and subsequent access, except candidate DRC, which runs on a
+second persistent thread; its board reads go through the same `BoardSafety` lock. Results and token updates return to
 Qt's main thread. Closing during work refuses until it completes; failed cleanup
 keeps the window open and displays the error. The application never silently
 discards an uncertain board-write outcome. See [write safety](write-safety.md) for

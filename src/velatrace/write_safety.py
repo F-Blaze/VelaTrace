@@ -345,7 +345,8 @@ class BoardSafety:
             result.append(item)
         return result
 
-    def _mutate(self, additions, *, remove_owned, message, expected_digest=None, temporary=False, context=None, expected_board=None, verify_copper=False):
+    def _mutate(self, additions, *, remove_owned, message, expected_digest=None, temporary=False, context=None, expected_board=None, verify_copper=False, record=None):
+        """record: extra audit fields journaled in intent.json and completion.json."""
         with self._lock:
             if len(additions) > 100_000:
                 raise ValidationError("Too many items for one safe transaction.")
@@ -360,7 +361,8 @@ class BoardSafety:
             _durable_json(backup.directory / "intent.json", {
                 "board": str(self.path), "operation": message, "add": list(expected),
                 "remove": [item.id.value for item in removals], "temporary": temporary,
-                "saved_digest": file_digest(backup.saved), "status": "intent; inspect completion.json"})
+                "saved_digest": file_digest(backup.saved), "status": "intent; inspect completion.json",
+                **(record or {})})
             self._identity()
             if file_digest(self.path) != file_digest(backup.saved) or (context is not None and not context_matches(context)):
                 raise ValidationError("Saved board/project changed before transaction.")
@@ -424,7 +426,8 @@ class BoardSafety:
             if temporary:
                 self.owned.update(received)
             try:
-                _durable_json(backup.directory / "completion.json", {"status": "committed", "owned_ids": list(self.owned)})
+                _durable_json(backup.directory / "completion.json",
+                              {"status": "committed", "owned_ids": list(self.owned), **(record or {})})
             except OSError as exc:
                 self.blocked = True
                 raise UncertainWriteError("Board commit succeeded but its recovery journal failed; inspect KiCad before continuing.") from exc
@@ -472,10 +475,16 @@ class BoardSafety:
                                   f"they were left untouched: {_describe_lines(orphans)}. Delete them in KiCad if they "
                                   "are old previews, or move your own drawings off User.9, then retry. Routing was not started.")
 
-    def show_preview(self, dsn, plan, expected_board):
-        self.assert_matches(dsn, expected_board=expected_board)
+    def show_preview(self, dsn, plan, expected_board=None):
+        """Draw the preview; returns the live-board snapshot it was drawn against.
+
+        Without expected_board (preview before DRC) the current live board is the
+        snapshot; the caller must require that validation later saw the same board."""
+        source = self.assert_matches(dsn, expected_board=expected_board)
+        snapshot = expected_board if expected_board is not None else canonical(parse(source, kicad=True))
         additions = self.factory.preview(plan, self._preview_layer())
-        self._mutate(additions, remove_owned=True, message="VelaTrace routing preview", expected_digest=dsn.ticket.board_digest, temporary=True, expected_board=expected_board)
+        self._mutate(additions, remove_owned=True, message="VelaTrace routing preview", expected_digest=dsn.ticket.board_digest, temporary=True, expected_board=snapshot)
+        return snapshot
 
     def show_annotations(self, rows):
         additions = self.factory.annotations(rows, self._preview_layer())
@@ -495,11 +504,16 @@ class SafeBoardWriter:
     def __init__(self, safety: BoardSafety, validator):
         self.safety, self.validator = safety, validator
 
-    def apply(self, dsn, plan, report):
+    def apply(self, dsn, plan, report, *, drc_override=False):
+        """drc_override (the user's explicit 'Approve anyway') lifts only the gate on
+        known DRC violations; they are journaled with the commit as an audit trail."""
         evidence = self.validator.evidence
         if (evidence is None or evidence[:3] != (dsn.digest, plan_digest(plan), report)
-                or report.drc_violations != 0 or report.unconnected_count != 0):
+                or report.drc_violations is None or report.unconnected_count != 0
+                or (report.drc_violations and not drc_override)):
             raise ValidationError("Approval requires this adapter's complete verified candidate evidence.")
+        record = {"drc_override": {"violations": report.drc_violations,
+                                   "blocking_reasons": list(report.blocking_reasons)}} if report.drc_violations else None
         _, _, _, items, context, snapshot = evidence
         if not context_matches(context):
             raise ValidationError("Project rules changed after validation; route again.")
@@ -507,5 +521,5 @@ class SafeBoardWriter:
         additions = self.safety.factory.copper(items, self.safety.board)
         self.safety._mutate(additions, remove_owned=True, message="VelaTrace approved routing",
                             expected_digest=dsn.ticket.board_digest, context=context, expected_board=snapshot,
-                            verify_copper=True)
+                            verify_copper=True, record=record)
         self.validator.evidence = None

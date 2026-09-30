@@ -4,7 +4,7 @@ Adapters must validate a candidate copy with actual KiCad DRC before approval.
 No method here edits a board or invokes a shell. The writer is the sole mutation
 boundary, and must re-check the board digest and backup before any mutation.
 """
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from enum import Enum
 import hashlib
@@ -26,6 +26,7 @@ class RoutingStage(str, Enum):
     SETUP = "setup"
     CONFIRMED = "confirmed"
     RUNNING = "running"
+    VALIDATING = "validating"  # Routed; the preview may show while candidate DRC runs.
     PREVIEW = "preview"
     SHORTFALL = "shortfall"
     NEEDS_REASON = "needs-rejection-reason"
@@ -92,8 +93,10 @@ class CandidateValidator(Protocol):
 
 
 class BoardWriter(Protocol):
-    def apply(self, dsn: DsnInput, plan: RoutePlan, report: ValidationReport) -> None:
-        """Revalidate, backup, then one undoable IPC commit. Fail without partial writes."""
+    def apply(self, dsn: DsnInput, plan: RoutePlan, report: ValidationReport, *,
+              drc_override: bool = False) -> None:
+        """Revalidate, backup, then one undoable IPC commit. Fail without partial writes.
+        drc_override lifts only the DRC-violation gate, and must be journaled."""
         ...
 
 
@@ -111,6 +114,10 @@ class RoutingSession:
         self._confirmation: tuple | None = None
         self.progress = lambda message: None
         self.timings: dict[str, float] = {}
+        # Bumped whenever the current plan is replaced or dropped, so a background
+        # check() started for an older plan can never be accepted.
+        self.generation = 0
+        self._warmup = None
         self.router.check_startup()
 
     def command(self, command: str) -> Mode:
@@ -124,6 +131,7 @@ class RoutingSession:
         return self.mode
 
     def _invalidate(self):
+        self.generation += 1
         self._confirmation = None
         self.plan, self.report = None, None
         self.stage = RoutingStage.SETUP
@@ -167,43 +175,77 @@ class RoutingSession:
         self.input.assert_unchanged()
 
     def run(self, via_catalog: Mapping[str, ViaSpec] | None = None) -> ValidationReport:
+        """Route and validate in one call. The UI calls route(), shows the preview,
+        then runs check() off the UI thread and accept() back on it."""
+        plan = self.route(via_catalog)
+        generation = self.generation
+        self.progress("Checking candidate DRC")
+        try:
+            report = self.check(plan)
+        except Exception:
+            self._invalidate()
+            raise
+        self.accept(plan, report, generation)
+        return report
+
+    def route(self, via_catalog: Mapping[str, ViaSpec] | None = None) -> RoutePlan:
+        """Run the router and parse its result. Leaves stage VALIDATING: previewable,
+        never approvable until check() evidence is accepted."""
         if self.stage != RoutingStage.CONFIRMED:
             raise ValidationError("Confirm concrete numeric constraints before each route attempt.")
         self._check_confirmation()
         self.stage = RoutingStage.RUNNING
+        self.generation += 1
+        self.plan, self.report = None, None
         self.timings = {}
         try:
             self.progress("Routing copper paths")
             started = perf_counter()
             prepare = getattr(self.validator, "prepare", None)
-            with ThreadPoolExecutor(1) as pool:
-                warmup = pool.submit(prepare, self.input, self.constraints.items) if prepare else None
-                ses = self.router.route(self.input, self.constraints.items)
-                self.timings["router"] = perf_counter() - started
-                if warmup is not None and not warmup.done():
-                    self.progress("Finishing unrouted-board DRC")
-            # Leaving the pool waits for the warm-up; validate() never overlaps it.
+            pool = ThreadPoolExecutor(1)
+            self._warmup = pool.submit(prepare, self.input, self.constraints.items) if prepare else None
+            pool.shutdown(wait=False)  # check() waits for the warm-up; the preview does not.
+            ses = self.router.route(self.input, self.constraints.items)
+            self.timings["router"] = perf_counter() - started
             self._check_confirmation()
             plan = parse_ses(ses, expected_design=self.input.base_design or self.input.path.name, nets=set(self.input.nets),
                              layers=set(self.input.layers), via_catalog=via_catalog,
                              expected_placements=self.input.placements,
                              expected_placement_resolution_mm=self.input.placement_resolution_mm)
-            self.progress("Checking candidate DRC")
-            started = perf_counter()
-            report = self.validator.validate(self.input, plan, self.constraints.items)
-            self.timings["validation"] = perf_counter() - started
-            self._check_confirmation()
-            if report.plan_digest != plan_digest(plan) or report.board_digest != self.input.ticket.board_digest:
-                raise ValidationError("Candidate validator returned evidence for a different route or board.")
-            if report.enforced_constraint_ids != frozenset(item.id for item in self.constraints.items):
-                raise ValidationError("Not every confirmed constraint was validated.")
-            self.plan, self.report = plan, report
-            self.stage = (RoutingStage.SHORTFALL if report.unconnected_count is None or
-                          report.unconnected_count > 0 else RoutingStage.PREVIEW)
-            return report
+            self.plan = plan
+            self.stage = RoutingStage.VALIDATING
+            return plan
         except Exception:
             self._invalidate()
             raise
+
+    def check(self, plan: RoutePlan) -> ValidationReport:
+        """Candidate DRC for a routed plan. Safe off the UI thread: session state is
+        only read here; the caller hands the result to accept() on its own thread."""
+        if self._warmup is not None:
+            wait([self._warmup])  # validate() never overlaps the baseline warm-up.
+        started = perf_counter()
+        report = self.validator.validate(self.input, plan, self.constraints.items)
+        self.timings["validation"] = perf_counter() - started
+        self._check_confirmation()
+        if report.plan_digest != plan_digest(plan) or report.board_digest != self.input.ticket.board_digest:
+            raise ValidationError("Candidate validator returned evidence for a different route or board.")
+        if report.enforced_constraint_ids != frozenset(item.id for item in self.constraints.items):
+            raise ValidationError("Not every confirmed constraint was validated.")
+        return report
+
+    def accept(self, plan: RoutePlan, report: ValidationReport | None, generation: int) -> bool:
+        """Adopt check() evidence (None: the check failed). False, with nothing changed,
+        when the plan was rerouted, rejected or otherwise invalidated meanwhile."""
+        if generation != self.generation or self.stage != RoutingStage.VALIDATING or plan is not self.plan:
+            return False
+        if report is None:
+            self._invalidate()
+            return True
+        self.report = report
+        self.stage = (RoutingStage.SHORTFALL if report.unconnected_count is None or
+                      report.unconnected_count > 0 else RoutingStage.PREVIEW)
+        return True
 
     @property
     def summary(self) -> str:
@@ -225,7 +267,8 @@ class RoutingSession:
         return text
 
     def reject(self, reason: str):
-        if not self._needs_reason and self.stage not in {RoutingStage.PREVIEW, RoutingStage.SHORTFALL, RoutingStage.NEEDS_REASON}:
+        if not self._needs_reason and self.stage not in {RoutingStage.PREVIEW, RoutingStage.SHORTFALL,
+                                                         RoutingStage.NEEDS_REASON, RoutingStage.VALIDATING}:
             raise ValidationError("No routing result is available to reject.")
         if not isinstance(reason, str) or not reason.strip():
             self.stage = RoutingStage.NEEDS_REASON
@@ -234,14 +277,21 @@ class RoutingSession:
         self.rejection_reason = reason.strip()
         self._needs_reason = False
         self.plan, self.report, self._confirmation = None, None, None
+        self.generation += 1
         self.stage = RoutingStage.REJECTED
         # Constraints intentionally remain stacked. User supplies/reviews numeric adjustments.
 
-    def approve(self, writer: BoardWriter):
+    def approve(self, writer: BoardWriter, *, drc_override: bool = False):
+        """drc_override is the user's explicit 'Approve anyway': it lifts only the
+        known-DRC-violation gate. Unknown DRC, unconnected items and every board,
+        preview and evidence check still refuse."""
         if self.stage != RoutingStage.PREVIEW or self.plan is None or self.report is None:
             raise ValidationError("Only a complete, validated preview may be approved.")
         self._check_confirmation()
-        if self.report.drc_violations != 0 or self.report.unconnected_count != 0:
-            raise ValidationError("Approval requires verified zero DRC violations and zero unconnected items.")
-        writer.apply(self.input, self.plan, self.report)
+        if self.report.unconnected_count != 0 or self.report.drc_violations is None:
+            raise ValidationError("Approval requires known DRC results and zero unconnected items.")
+        if self.report.drc_violations and not drc_override:
+            raise ValidationError("Approval requires verified zero DRC violations; "
+                                  "use ‘Approve anyway’ to override them explicitly.")
+        writer.apply(self.input, self.plan, self.report, drc_override=drc_override)
         self.stage = RoutingStage.APPROVED

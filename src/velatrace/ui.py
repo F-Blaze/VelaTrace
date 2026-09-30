@@ -87,6 +87,7 @@ def glass_stylesheet(t: dict) -> str:
         QPushButton#primary {{background:{gloss}; color:white; border:1px solid rgba(255,255,255,90); font-weight:600}}
         QPushButton#primary:hover {{border-color:white}}
         QPushButton#primary:disabled {{background:{t['card']}; color:{t['muted']}; border:1px solid {t['rim']}}}
+        QPushButton#danger:enabled {{color:#D45A67; border-color:#D45A67}}
         QPushButton#textButton {{border:0; color:{ACCENT}; padding:4px 0px; background:transparent}}
         QLineEdit,QTextEdit,QComboBox,QSpinBox,QDoubleSpinBox,QListWidget {{background:{t['field']};
                       border:1px solid {t['rim']}; border-radius:9px; padding:6px}}
@@ -456,6 +457,12 @@ class MainWindow(QMainWindow):
         self.work_timer.setInterval(1000)
         self.work_timer.timeout.connect(self.update_work_status)
         self.executor.start()
+        # Candidate DRC runs here after the preview is drawn, so routing controls stay
+        # usable; a reroute or rejection makes its result stale (session generation).
+        self.drc_executor = Worker(self)
+        self.drc_executor.result.connect(self.drc_finished)
+        self.drc_executor.start()
+        self._drc_pending = 0
         self.ready = False
         self.preview_shown = False
         self._cleanup_failed = False
@@ -591,7 +598,12 @@ class MainWindow(QMainWindow):
         self.approve_button = QPushButton("4 · Approve and apply copper")
         self.approve_button.setObjectName("primary")
         self.approve_button.clicked.connect(self.approve_route)
+        # Deliberately not the primary action: enabled only when DRC findings block approval.
+        self.approve_anyway_button = QPushButton("Approve anyway (DRC errors)…")
+        self.approve_anyway_button.setObjectName("danger")
+        self.approve_anyway_button.clicked.connect(self.approve_anyway_route)
         row.addWidget(self.reject_button)
+        row.addWidget(self.approve_anyway_button)
         row.addWidget(self.approve_button)
         route_layout.addLayout(row)
         # Validation details can grow, and small displays must still expose the
@@ -648,8 +660,12 @@ class MainWindow(QMainWindow):
         self.annotations.setEnabled(not self.demo and stage == AuditStage.CLASSIFIED and self.safety is not None)
         self.import_button.setEnabled(self.ticket is not None)
         self.route_button.setEnabled(self.routing is not None and self.routing.input is not None)
-        self.approve_button.setEnabled(self.preview_shown and self.routing is not None and self.routing.stage == RoutingStage.PREVIEW and self.routing.report is not None and self.routing.report.drc_violations == 0)
-        self.reject_button.setEnabled(self.routing is not None and self.routing.stage in {RoutingStage.PREVIEW, RoutingStage.SHORTFALL, RoutingStage.NEEDS_REASON})
+        report = self.routing.report if self.routing is not None else None
+        validated = report is not None and self.preview_shown and self.routing.stage == RoutingStage.PREVIEW
+        self.approve_button.setEnabled(validated and report.drc_violations == 0)
+        self.approve_anyway_button.setEnabled(validated and bool(report.drc_violations))
+        self.reject_button.setEnabled(self.routing is not None and self.routing.stage in {
+            RoutingStage.PREVIEW, RoutingStage.SHORTFALL, RoutingStage.NEEDS_REASON, RoutingStage.VALIDATING})
 
     def run_work(self, title, operation, success=None, failure=None):
         if self.worker is not None:
@@ -1039,27 +1055,71 @@ class MainWindow(QMainWindow):
                 self.executor.progress.emit("Checking the User.9 preview layer")
                 self.safety.prepare_preview()
                 self.routing.progress = self.executor.progress.emit
-                report = self.routing.run(trusted_via_catalog(self.routing.input))
-                # Preview refusal must remain visible even if validated data exists.
+                plan = self.routing.route(trusted_via_catalog(self.routing.input))
+                generation = self.routing.generation
+                # The preview is drawn before DRC; approval waits for the DRC result.
                 self.executor.progress.emit("Showing routing preview")
                 started = time.monotonic()
-                self.safety.show_preview(self.routing.input, self.routing.plan, self.validator.evidence[5])
-                return report, time.monotonic() - started
+                snapshot = self.safety.show_preview(self.routing.input, plan)
+                return plan, generation, snapshot, time.monotonic() - started
             def done(value):
+                plan, generation, snapshot, preview_seconds = value
                 self.preview_shown = True
-                timings = self.routing.timings
-                timing_text = (f" Routing {timings['router']:.1f}s; DRC {timings['validation']:.1f}s; "
-                               f"preview {value[1]:.1f}s.")
-                next_step = ("Click ‘Approve and apply copper’ to install this route, or reject it. No save is required before approval."
-                             if self.routing.stage == RoutingStage.PREVIEW and value[0].drc_violations == 0
-                             else "Approval is blocked by the validation result. Review it, then reject and revise the route.")
-                self.route_summary.setText(self.routing.summary + timing_text +
-                    " Preview only: User.9 graphics do not change copper or the ratsnest. " + next_step)
-                self.canvas.plan = self.routing.plan
+                self._route_timing = f"Routing {self.routing.timings['router']:.1f}s; preview {preview_seconds:.1f}s"
+                self.route_summary.setText(
+                    f"{plan.trace_count} traces; {len(plan.vias)} vias; layers: {', '.join(plan.layers_used)}. "
+                    f"{self._route_timing}. Preview only: User.9 graphics do not change copper or the ratsnest. "
+                    "Checking DRC… approval unlocks when it finishes.")
+                self.canvas.plan = plan
                 self.canvas.update()
-            self.run_work("Freerouting and actual KiCad candidate DRC", operation, done)
+                self.check_drc(self.routing, self.validator, plan, generation, snapshot)
+            self.run_work("Freerouting, then the User.9 preview", operation, done)
         except Exception as exc:
             self.show_error(str(exc))
+
+    def check_drc(self, session, validator, plan, generation, snapshot):
+        """Candidate DRC off the Qt thread; drc_finished discards a stale result."""
+        def operation(_):
+            try:
+                report = session.check(plan)
+                if validator.evidence is None or validator.evidence[5] != snapshot:
+                    raise ValidationError("The board changed after the preview was drawn. Generate a new routing preview.")
+                return session, plan, generation, report, ""
+            except Exception as exc:
+                return session, plan, generation, None, str(exc) or type(exc).__name__
+        self._drc_pending += 1
+        self.status.setStyleSheet("")
+        self.status.setText("Checking DRC… Approve unlocks when it finishes; keep KiCad unchanged.")
+        self.drc_executor.jobs.put(operation)
+
+    @Slot(object)
+    def drc_finished(self, value):
+        self._drc_pending -= 1
+        session, plan, generation, report, error = value
+        # A reroute, rejection, mode or input change bumps the generation: discard.
+        if session is not self.routing or not session.accept(plan, report, generation):
+            return
+        if report is None:
+            self.preview_shown = False
+            self.canvas.plan = None
+            self.canvas.update()
+            message = "DRC could not validate this route: " + error
+            self.show_error(message)
+            self.route_summary.setText(message + " It cannot be approved; generate a new routing preview.")
+            self.run_work("Removing the unvalidated preview", lambda _: self.safety.clear_preview(),
+                          lambda _: self.show_error(message))
+        else:
+            timing = f" {self._route_timing}; DRC {session.timings['validation']:.1f}s."
+            next_step = ("Click ‘Approve and apply copper’ to install this route, or reject it. No save is required before approval."
+                         if session.stage == RoutingStage.PREVIEW and report.drc_violations == 0
+                         else "Approval is blocked by the validation result. Review it, then reject and revise the route"
+                         + (", or use ‘Approve anyway’ to apply it despite the DRC errors after an explicit confirmation."
+                            if session.stage == RoutingStage.PREVIEW else "."))
+            self.route_summary.setText(session.summary + timing +
+                " Preview only: User.9 graphics do not change copper or the ratsnest. " + next_step)
+            if self.worker is None:
+                self.status.setText("DRC finished.")
+        self.refresh_actions()
 
     def reject_route(self):
         try:
@@ -1079,18 +1139,41 @@ class MainWindow(QMainWindow):
             return
         if not ask(self, "Apply validated routing", "Apply this route as one backed-up KiCad undoable commit? The PCB remains unsaved; inspect it in KiCad before saving."):
             return
+        self.apply_route(drc_override=False)
+
+    def approve_anyway_route(self):
+        """Explicit override of the DRC gate only; every other approval check still applies."""
+        report = self.routing.report if self.routing else None
+        if not self.preview_shown or report is None or not report.drc_violations:
+            self.show_error("‘Approve anyway’ applies only to a displayed preview blocked by DRC findings.")
+            return
+        reasons = report.blocking_reasons or ("DRC issue details unavailable; review the full KiCad DRC report",)
+        listed = "\n".join(f"• {reason}" for reason in reasons[:5])
+        if len(reasons) > 5:
+            listed += f"\n• … and {len(reasons) - 5} more"
+        text = (f"KiCad DRC found {report.drc_violations} blocking issue(s) for this route:\n{listed}\n\n"
+                "Approve anyway writes the routed copper to the board DESPITE these DRC errors. It is still one "
+                "backed-up KiCad commit that a single Undo reverts, and the override and these issues are recorded "
+                "in the backup journal. Fix them in KiCad before manufacturing.\n\nWrite the copper anyway?")
+        if not ask(self, "Approve despite DRC errors", text):
+            return
+        self.apply_route(drc_override=True)
+
+    def apply_route(self, *, drc_override):
         def operation(_):
             self.executor.progress.emit("Applying copper to KiCad")
             started = time.monotonic()
-            self.routing.approve(self.writer)
+            self.routing.approve(self.writer, drc_override=drc_override)
             return time.monotonic() - started
         def done(elapsed):
             self.preview_shown = False
             self.canvas.plan = None
             self.canvas.update()
             plan = self.routing.plan
+            override = (f" Applied despite {self.routing.report.drc_violations} DRC issue(s); the override is "
+                        "recorded in the backup journal." if drc_override else "")
             self.route_summary.setText(f"Applied {plan.trace_count} copper track segments and {len(plan.vias)} vias "
-                f"on {', '.join(plan.layers_used)} in {elapsed:.1f}s, as one KiCad commit. "
+                f"on {', '.join(plan.layers_used)} in {elapsed:.1f}s, as one KiCad commit.{override} "
                 "Temporary preview removed. Inspect and save in KiCad. Refresh before further routing, including after Undo.")
         def failed(message):
             self.route_summary.setText("Copper application was not confirmed. The panel retains the previous preview; "
@@ -1107,9 +1190,9 @@ class MainWindow(QMainWindow):
             self.move(max(screen.left(), screen.right() - frame.width() + 1), screen.top() + 30)
 
     def closeEvent(self, event):
-        if self.worker is not None:
+        if self.worker is not None or self._drc_pending:
             event.ignore()
-            self.show_error("Wait for the current operation to finish before closing.")
+            self.show_error("Wait for the current operation, including any DRC check, to finish before closing.")
             return
         if self.safety:
             event.ignore()
@@ -1127,8 +1210,9 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(0, self.close_after_cleanup)
             self.run_work("Cleaning owned temporary graphics before closing", lambda _: self.safety.clear_preview(), done)
             return
-        self.executor.jobs.put(None)
-        self.executor.wait(2000)
+        for worker in (self.executor, self.drc_executor):
+            worker.jobs.put(None)
+            worker.wait(2000)
         event.accept()
 
     def close_after_cleanup(self):

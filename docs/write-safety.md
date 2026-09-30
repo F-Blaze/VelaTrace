@@ -15,12 +15,21 @@ UI integration order:
    `writer = SafeBoardWriter(safety, validator)`.
 2. Construct the routing session with that validator and the external router.
    Obtain a fresh DSN and normal placement/constraint confirmations.
-3. Run `session.run(trusted_via_catalog(dsn))`, display `session.summary`, then
-   `safety.show_preview(dsn, session.plan, validator.evidence[5])` if a plan is available. A shortfall may
-   be previewed but never approved.
+3. Run `plan = session.route(trusted_via_catalog(dsn))` (stage `validating`), note
+   `session.generation`, and draw `snapshot = safety.show_preview(dsn, plan)`. Then run
+   `session.check(plan)` off the UI thread, require `validator.evidence[5] == snapshot`
+   (the board did not change after the preview was drawn), and hand the report (or
+   `None` on failure) to `session.accept(plan, report, generation)` on the UI thread.
+   `accept` returns False for a stale result after a reroute, rejection or
+   invalidation. `session.run()` does route, check and accept in one call. A
+   shortfall may be previewed but never approved.
 4. Reject with an explicit reason and call `safety.clear_preview()` before the
    next attempt. Clear owned annotations before obtaining a new saved-board DSN.
-5. Call `session.approve(writer)` only after the user's approval. Its single
+5. Call `session.approve(writer)` only after the user's approval. The explicit
+   **Approve anyway** override is `session.approve(writer, drc_override=True)`: it lifts
+   only the gate on known DRC violations. The writer records
+   `{"drc_override": {"violations": n, "blocking_reasons": [...]}}` in that commit's
+   `intent.json` and `completion.json`. Its single
    transaction removes the preview and adds the candidate copper. Do not call
    `board.save()` afterward: saving is the user's explicit KiCad action.
 6. On normal close or `/autoroute_exit`, clear temporary graphics. If cleanup
@@ -60,7 +69,8 @@ For confirmed extra clearance it runs both the original rules and a second
 pass with a global minimum rule; adding a weaker global rule cannot erase evidence
 from the original stronger rules. Trace-width minima are also measured in code.
 Unknown or failed DRC prevents approval. Every error and newly introduced warning
-blocks approval. Identifiable pre-existing warnings are reported without blocking;
+blocks approval unless the user explicitly overrides known DRC violations with
+**Approve anyway**; unconnected items are never overridable. Identifiable pre-existing warnings are reported without blocking;
 missing issue identities fall back to counting every candidate issue as blocking.
 The writer accepts only the exact
 evidence produced by its paired validator, then consumes it after application.
@@ -96,8 +106,9 @@ rollback or ambiguous begin/commit response blocks retries and reports the backu
 directory: inspect the actual KiCad state before restarting the plugin. An
 acknowledged rollback is not claimed when the connection is lost.
 
-`show_preview(dsn, plan, expected_board)` creates dashed non-copper graphics on an already enabled
-`User.9` layer; it never changes enabled layers or layer colors. `show_annotations`
+`show_preview(dsn, plan, expected_board=None)` creates dashed non-copper graphics on an already enabled
+`User.9` layer and returns the live-board snapshot it was drawn against; it never
+changes enabled layers or layer colors. `show_annotations`
 accepts plain `(text, x_mm, y_mm)` rows. `clear_preview()` removes only exact IDs
 created in this service instance, after checking that they have not been edited.
 Other user-layer contents are never swept. KiCad owns board-layer colors; set
