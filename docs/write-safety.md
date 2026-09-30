@@ -49,6 +49,13 @@ files, refuses DRC exclusions/ignored checks, and invokes official `kicad-cli`
 DRC. The routing UI requires an exact editor/CLI version match before creating the
 routing session. Matching saved schematic context must export successfully before
 DRC explicitly enables schematic parity; malformed context refuses validation.
+That export proof depends only on the exact schematic and project bytes, so it
+runs once per content within a session rather than once per candidate copy.
+The unrouted-board baseline DRC does not depend on the route: it runs while
+Freerouting runs, and a baseline result is reused only for byte-identical board,
+project, rules and schematic files. Validation still re-reads the live board and
+project after routing; any difference simply runs the baseline again. Baseline and
+candidate DRC passes run concurrently, each in its own temporary folder.
 For confirmed extra clearance it runs both the original rules and a second
 pass with a global minimum rule; adding a weaker global rule cannot erase evidence
 from the original stronger rules. Trace-width minima are also measured in code.
@@ -98,7 +105,11 @@ User.9 to violet in KiCad if desired. The separate panel can always draw violet.
 
 Before temporary segment creation, a collision check compares the layer and
 undirected endpoints with nonowned existing graphics, and rejects duplicate
-requested segments. This prevents a verified KiCad behavior that replaces an
+requested segments. `prepare_preview()` runs before routing: it verifies User.9,
+adopts User.9 items whose UUIDs appear in committed `completion.json` journals
+beside the board (earlier runs, saved or Undo-restored previews) and removes them
+with the usual backup, then refuses before routing if unjournaled dashed 0.1 mm
+User.9 lines remain. This prevents a verified KiCad behavior that replaces an
 existing coincident User.9 line with the new UUID. The board-change check must not
 ignore that disappearance. Approved copper is read back by UUID and exact geometry
 after the commit; missing/mismatched copper blocks retries as an uncertain write.

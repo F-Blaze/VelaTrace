@@ -61,6 +61,17 @@ Timeout kills the Java process. Per-run scratch data is removed on return/error.
 The retained log may contain design names; it stays local and must never enter
 provider prompts or telemetry.
 
+Router run time on small boards is mostly fixed cost inside the unmodified JAR:
+JVM and logging start-up (about 1.5-2 s), an unconditional 1 s sleep in 2.1.0
+start-up, and 500 ms job-state polling before the SES is written. Measured on
+Windows with Temurin 21.0.12 (2026-09-29): `-XX:TieredStopAtLevel=1` saved about
+0.8 s on 4-6 footprint boards but doubled routing time on a 100-footprint board
+(47 s to 99 s), `-XX:+UseSerialGC` and an AppCDS archive gave no gain, and the
+post-route optimizer is already off in 2.1.0 CLI mode. None are used. Routing stops
+on its own once passes stop improving, so `-mp 100` only bounds unroutable boards.
+The JAR is re-hashed on every route (about 0.25 s for 67 MB); a size/mtime cache
+was rejected because it would let an equal-size replacement skip the pin.
+
 Numeric `clearance` and `trace-width` constraints targeting **`all nets`** are
 supported. Every DSN width/clearance rule is raised to at least the confirmed
 minimum; existing stronger rules remain. The DSN must have a structure rule.

@@ -18,6 +18,8 @@ Release-review fixes on 2026-09-23: **107 passed, 66 subtests passed, zero skips
 
 Post-merge on `main`, 2026-09-27: **132 passed, 98 subtests passed, zero skips**, with both native integrations enabled and correctness lint passing. Separately, a board generated and DSN-exported by KiCad 10.0.6 (Windows path, `(PN ...)` placements, duplicated SOT-223 pad, 2- and 4-layer with power/mixed planes) was routed by pinned Freerouting 2.1.0 and validated by `kicad-cli`: zero DRC violations and zero unconnected items on the 2-layer board. Freerouting is non-deterministic; one 4-layer run left a dangling B.Cu stub (`track_dangling`), which approval correctly refused.
 
+Routing-speed branch, 2026-09-29: **175 passed, 114 subtests passed, zero skips** (three consecutive runs) with both native integrations enabled; correctness lint passed. On scratch copies of a 4-footprint practice board and the 6-footprint Prod_v2 board (real Freerouting 2.1.0, Java 21 and KiCad 10.0.6 CLI; file-backed stand-in for IPC), post-router DRC time fell from 2.9-8.9 s to 1.4-1.9 s median because the unrouted-board baseline DRC now overlaps Freerouting, the schematic export proof runs once per content, and DRC passes run concurrently. DRC verdicts were unchanged.
+
 Coverage includes:
 
 - Authored KiCad-format PCB, project and XML connectivity fixtures: bulk plus decoupling capacitors on one rail do not flag, identical nearby sensors do, and netlist-only ambiguity remains possible redundancy.

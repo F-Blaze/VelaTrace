@@ -4,6 +4,7 @@ Adapters must validate a candidate copy with actual KiCad DRC before approval.
 No method here edits a board or invokes a shell. The writer is the sole mutation
 boundary, and must re-check the board digest and backup before any mutation.
 """
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 import hashlib
@@ -78,6 +79,9 @@ class Router(Protocol):
 
 
 class CandidateValidator(Protocol):
+    """May also define prepare(dsn, constraints): route-independent warm-up (e.g. the
+    unrouted-board baseline DRC) run concurrently with the router. It is a cache only;
+    its errors are ignored because validate() re-derives and reports everything."""
     def supports(self, constraints: tuple[Constraint, ...]) -> bool:
         """True only when every numeric constraint can be enforced and checked."""
         ...
@@ -171,8 +175,14 @@ class RoutingSession:
         try:
             self.progress("Routing copper paths")
             started = perf_counter()
-            ses = self.router.route(self.input, self.constraints.items)
-            self.timings["router"] = perf_counter() - started
+            prepare = getattr(self.validator, "prepare", None)
+            with ThreadPoolExecutor(1) as pool:
+                warmup = pool.submit(prepare, self.input, self.constraints.items) if prepare else None
+                ses = self.router.route(self.input, self.constraints.items)
+                self.timings["router"] = perf_counter() - started
+                if warmup is not None and not warmup.done():
+                    self.progress("Finishing unrouted-board DRC")
+            # Leaving the pool waits for the warm-up; validate() never overlaps it.
             self._check_confirmation()
             plan = parse_ses(ses, expected_design=self.input.base_design or self.input.path.name, nets=set(self.input.nets),
                              layers=set(self.input.layers), via_catalog=via_catalog,

@@ -17,10 +17,15 @@ via and layer counts after reading the copper back from KiCad. Failed approval
 retains the panel preview with an explicit error; that is not a new routing run.
 An uncertain result blocks retry until inspected.
 
-If new preview segments coincide with existing User.9 graphics, preview creation
-refuses before writing: KiCad can replace an existing coincident line. Remove only
-unwanted old preview graphics yourself; the plugin does not assume everything on
-User.9 belongs to it. Never save temporary previews into the board.
+Before Freerouting starts, **Generate routing preview** checks User.9. Old
+VelaTrace previews (saved into the board, restored by Undo, or left by an earlier
+run) are recognised by the UUIDs in `.velatrace/backups/*/completion.json` and
+removed through the normal backed-up transaction. Dashed 0.1 mm User.9 lines that
+no journal proves are VelaTrace's are never deleted: routing refuses immediately and
+lists their coordinates so you can delete or move them. If a new preview segment
+still coincides with a foreign User.9 line, preview creation refuses before writing
+(KiCad can replace a coincident line) and names the lines. Never save temporary
+previews into the board.
 
 Copper text can cause clearance errors if the router crosses it. Use silkscreen
 for printed labels; intentionally copper lettering needs routing clearance. Zone
