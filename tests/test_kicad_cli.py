@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -78,6 +79,7 @@ class KiCadCliTests(unittest.TestCase):
 
     def test_schematic_parity_is_explicit_and_export_failure_refuses_drc(self):
         cli = object.__new__(KiCadCli)
+        cli._exportable, cli._export_lock = set(), threading.Lock()
         with tempfile.TemporaryDirectory() as directory:
             board = Path(directory) / "board.kicad_pcb"
             board.write_text("fixture")
@@ -96,6 +98,10 @@ class KiCadCliTests(unittest.TestCase):
                 cli.drc(board)
                 self.assertIn("--schematic-parity", calls[-1])
                 export.assert_called_once_with(board.with_suffix(".kicad_sch"), saved_confirmed=True)
+                # Byte-identical context was already proven exportable; changed bytes are proven again.
+                cli.drc(board)
+                export.assert_called_once()
+                board.with_suffix(".kicad_sch").write_text("edited schematic")
                 export.side_effect = ValidationError("unreadable schematic")
                 before = len(calls)
                 with self.assertRaisesRegex(ValidationError, "unreadable schematic"):

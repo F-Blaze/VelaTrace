@@ -1,5 +1,6 @@
 """Official CLI fallbacks. Only temporary reports/netlists are written here."""
 from dataclasses import dataclass, replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 
 from .errors import CapabilityError, ValidationError
 from .models import DesignSnapshot
@@ -88,6 +90,8 @@ class KiCadCli:
             raise ValidationError("KiCad CLI timeout must be between 0 and 600 seconds.")
         self.timeout = timeout
         self.version: tuple[int, int, int] | None = None
+        self._exportable: set[tuple] = set()  # (schematic, project) digests proven exportable
+        self._export_lock = threading.Lock()
 
     def check_startup(self) -> tuple[int, int, int]:
         try:
@@ -144,6 +148,19 @@ class KiCadCli:
             return replace(snapshot, source="kicad-cli-schematic", path=schematic,
                            warnings=("Analysis uses the saved schematic; unsaved edits are not included.",))
 
+    def _prove_exportable(self, schematic: Path) -> None:
+        """KiCad may skip parity if it cannot fetch a schematic netlist. Prove that
+        the saved context is exportable before requesting that check. The proof is
+        a function of the exact schematic and project bytes, so it runs once per
+        content, not once per candidate copy (concurrent DRCs wait for it)."""
+        project = schematic.with_suffix(".kicad_pro")
+        key = tuple(hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+                    for path in (schematic, project))
+        with self._export_lock:
+            if key not in self._exportable:
+                self.schematic_snapshot(schematic, saved_confirmed=True)
+                self._exportable.add(key)
+
     def drc(self, candidate: Path) -> DrcResult:
         """Caller must supply a candidate copy with its matching project/rules files."""
         candidate = Path(candidate).resolve(strict=True)
@@ -152,9 +169,7 @@ class KiCadCli:
         parity = []
         schematic = candidate.with_suffix(".kicad_sch")
         if schematic.exists():
-            # KiCad may skip parity if it cannot fetch a schematic netlist. Prove
-            # that the saved context is exportable before requesting that check.
-            self.schematic_snapshot(schematic, saved_confirmed=True)
+            self._prove_exportable(schematic)
             parity = ["--schematic-parity"]
         with tempfile.TemporaryDirectory(prefix="velatrace-drc-", ignore_cleanup_errors=True) as directory:
             output = Path(directory) / "drc.json"
