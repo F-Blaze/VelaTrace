@@ -14,11 +14,11 @@ import uuid
 from queue import Queue
 
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QStandardPaths, QTimer
-from PySide6.QtGui import QColor, QPainter, QPen, QFontDatabase, QPalette
+from PySide6.QtGui import QCursor, QColor, QPainter, QPen, QFontDatabase, QPalette
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSpinBox, QStackedWidget,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSpinBox, QStackedWidget, QToolTip,
     QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -318,6 +318,10 @@ class RouteCanvas(QWidget):
         self.plan = None
         self.setMinimumHeight(230)
 
+    def mousePressEvent(self, event):
+        if self.toolTip():
+            QToolTip.showText(QCursor.pos(), self.toolTip(), self)
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -513,7 +517,8 @@ class MainWindow(QMainWindow):
         self.theme.currentTextChanged.connect(self.apply_theme)
         options.addWidget(self.theme)
         layout.addLayout(options)
-        self.banner = label("No backend. No telemetry. Your key, your provider.", muted=True)
+        self.banner = label(muted=True)
+        self.banner.hide()
         layout.addWidget(self.banner)
         self.setup_hint = label()
         self.setup_hint.setStyleSheet("color:#D45A67")
@@ -568,7 +573,6 @@ class MainWindow(QMainWindow):
         route_layout = QVBoxLayout(self.route_page)
         route_layout.setContentsMargins(0, 0, 0, 0)
         route_layout.addWidget(label("Route placed footprints", muted=False))
-        route_layout.addWidget(label("Freerouting computes paths. KiCad validates the candidate before approval. Save an unrouted board and project first; keep the current stackup.", muted=True))
         self.placed = QCheckBox("Every footprint is already placed; no autoplacement")
         route_layout.addWidget(self.placed)
         self.route_prompt = QLineEdit()
@@ -591,7 +595,8 @@ class MainWindow(QMainWindow):
         route_layout.addWidget(self.route_button)
         self.canvas = RouteCanvas()
         route_layout.addWidget(self.canvas, 1)
-        self.route_summary = label("No routing result.")
+        self.route_summary = label()  # errors and blocking messages only; info goes to note()
+        self.route_summary.hide()
         route_layout.addWidget(self.route_summary)
         route_layout.addWidget(label("Panel traces are dashed violet on each layer. Board previews use enabled User.9; KiCad controls its color. Set User.9 to violet for a matching preview.", muted=True))
         self.reason = QLineEdit()
@@ -640,6 +645,18 @@ class MainWindow(QMainWindow):
     def refresh_badge(self):
         self.badge.setText(f"● {len(self.constraints.items)} constraints")
         self.badge.setStyleSheet(f"color:{ACCENT}")
+
+    def note(self, text):
+        """Informational result: hover/click/screen-reader text on the preview, not visible copy."""
+        self.route_summary.hide()
+        self.route_summary.setText("")
+        self.canvas.setToolTip(text)
+        self.canvas.setAccessibleName("Routing preview")
+        self.canvas.setAccessibleDescription(text)
+
+    def blocking(self, text):
+        self.route_summary.setText(text)
+        self.route_summary.show()
 
     def show_error(self, message):
         self.status.setText("Stopped: " + message)
@@ -958,7 +975,7 @@ class MainWindow(QMainWindow):
                  comp.position_mm[0] + 2, comp.position_mm[1] + 2)
                 for comp in self.audit.snapshot.components if comp.position_mm]
         self.run_work("Showing guarded temporary annotations", lambda _: self.safety.show_annotations(rows),
-                      lambda _: self.status.setText("Annotations shown on User.9. Do not save temporary graphics; close or enter routing to clean them up."))
+                      lambda _: self.status.setText("Ready."))
 
     def open_constraints(self):
         ConstraintsDialog(self).exec()
@@ -968,7 +985,7 @@ class MainWindow(QMainWindow):
         self.preview_shown = False
         self.canvas.plan = None
         self.canvas.update()
-        self.route_summary.setText("Constraints changed. Confirm the full list and reroute; any old board preview will be removed before the next run.")
+        self.note("Constraints changed. Confirm the full list and reroute; any old board preview will be removed before the next run.")
         self.refresh_actions()
 
     def run_command(self):
@@ -1031,7 +1048,7 @@ class MainWindow(QMainWindow):
             self.reader, self.snapshot, self.safety, self.validator, self.routing, self.ticket = value
             self.apply_theme(self.theme.currentText())
             self.writer = SafeBoardWriter(self.safety, self.validator)
-            self.route_summary.setText("Now export Specctra DSN using KiCad File → Export, then select ‘Load fresh DSN’. Do not edit or save changes after this request.")
+            self.blocking("Now export Specctra DSN using KiCad File → Export, then select ‘Load fresh DSN’. Do not edit or save changes after this request.")
         self.run_work("Preparing a fresh DSN request", operation, done)
 
     def load_dsn(self):
@@ -1045,7 +1062,7 @@ class MainWindow(QMainWindow):
             self.routing.set_input(dsn, all_footprints_placed=True)
             return dsn
         self.run_work("Checking DSN connectivity and placements", operation,
-                      lambda dsn: self.route_summary.setText(f"Fresh DSN verified: {dsn.path.name}. Review all numeric constraints before routing."))
+                      lambda dsn: self.note(f"Fresh DSN verified: {dsn.path.name}. Review all numeric constraints before routing."))
 
     def route(self):
         try:
@@ -1073,10 +1090,10 @@ class MainWindow(QMainWindow):
                 plan, generation, snapshot, preview_seconds = value
                 self.preview_shown = True
                 self._route_timing = f"Routing {self.routing.timings['router']:.1f}s; preview {preview_seconds:.1f}s"
-                self.route_summary.setText(
+                self.note(
                     f"{plan.trace_count} traces; {len(plan.vias)} vias; layers: {', '.join(plan.layers_used)}. "
                     f"{self._route_timing}. Preview only: User.9 graphics do not change copper or the ratsnest. "
-                    "Checking DRC… approval unlocks when it finishes.")
+                    "DRC check follows; approval unlocks when it finishes.")
                 self.canvas.plan = plan
                 self.canvas.update()
                 self.check_drc(self.routing, self.validator, plan, generation, snapshot)
@@ -1112,7 +1129,7 @@ class MainWindow(QMainWindow):
             self.canvas.update()
             message = "DRC could not validate this route: " + error
             self.show_error(message)
-            self.route_summary.setText(message + " It cannot be approved; generate a new routing preview.")
+            self.blocking(message + " It cannot be approved; generate a new routing preview.")
             self.run_work("Removing the unvalidated preview", lambda _: self.safety.clear_preview(),
                           lambda _: self.show_error(message))
         else:
@@ -1122,8 +1139,12 @@ class MainWindow(QMainWindow):
                          else "Approval is blocked by the validation result. Review it, then reject and revise the route"
                          + (", or use ‘Approve anyway’ to apply it despite the DRC errors after an explicit confirmation."
                             if session.stage == RoutingStage.PREVIEW else "."))
-            self.route_summary.setText(session.summary + timing +
+            text = (session.summary + timing +
                 " Preview only: User.9 graphics do not change copper or the ratsnest. " + next_step)
+            if session.stage == RoutingStage.PREVIEW and report.drc_violations == 0:
+                self.note(text)
+            else:
+                self.blocking(text)  # approval blocked: the reason stays visible
             if self.worker is None:
                 self.status.setText("DRC finished.")
         self.refresh_actions()
@@ -1135,7 +1156,7 @@ class MainWindow(QMainWindow):
             def done(_):
                 self.canvas.plan = None
                 self.canvas.update()
-                self.route_summary.setText("Rejected: " + self.routing.rejection_reason + ". Adjust the numeric constraints explicitly, then confirm and retry.")
+                self.note("Rejected: " + self.routing.rejection_reason + ". Adjust the numeric constraints explicitly, then confirm and retry.")
             self.run_work("Removing rejected preview", lambda _: self.safety.clear_preview(), done)
         except Exception as exc:
             self.show_error(str(exc))
@@ -1179,11 +1200,11 @@ class MainWindow(QMainWindow):
             plan = self.routing.plan
             override = (f" Applied despite {self.routing.report.drc_violations} DRC issue(s); the override is "
                         "recorded in the backup journal." if drc_override else "")
-            self.route_summary.setText(f"Applied {plan.trace_count} copper track segments and {len(plan.vias)} vias "
+            self.note(f"Applied {plan.trace_count} copper track segments and {len(plan.vias)} vias "
                 f"on {', '.join(plan.layers_used)} in {elapsed:.1f}s, as one KiCad commit.{override} "
                 "Temporary preview removed. Inspect and save in KiCad. Refresh before further routing, including after Undo.")
         def failed(message):
-            self.route_summary.setText("Copper application was not confirmed. The panel retains the previous preview; "
+            self.blocking("Copper application was not confirmed. The panel retains the previous preview; "
                 "inspect KiCad and the error before retrying, since the live outcome may be uncertain. " + message)
         self.run_work("Backing up and applying one routing commit", operation, done, failed)
 
@@ -1232,6 +1253,7 @@ class MainWindow(QMainWindow):
 
     def load_demo(self):
         self.description.setPlainText("Battery-powered environmental monitor with a status LED and two temperature sensors on a shared bus.")
+        self.banner.show()
         self.banner.setText("DEMO · synthetic data · no API, IPC or board writes")
         self.description.setReadOnly(True)
         self.settings.model = "demo"
