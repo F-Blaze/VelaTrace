@@ -49,6 +49,13 @@ files, refuses DRC exclusions/ignored checks, and invokes official `kicad-cli`
 DRC. The routing UI requires an exact editor/CLI version match before creating the
 routing session. Matching saved schematic context must export successfully before
 DRC explicitly enables schematic parity; malformed context refuses validation.
+That export proof depends only on the exact schematic and project bytes, so it
+runs once per content within a session rather than once per candidate copy.
+The unrouted-board baseline DRC does not depend on the route: it runs while
+Freerouting runs, and a baseline result is reused only for byte-identical board,
+project, rules and schematic files. Validation still re-reads the live board and
+project after routing; any difference simply runs the baseline again. Baseline and
+candidate DRC passes run concurrently, each in its own temporary folder.
 For confirmed extra clearance it runs both the original rules and a second
 pass with a global minimum rule; adding a weaker global rule cannot erase evidence
 from the original stronger rules. Trace-width minima are also measured in code.

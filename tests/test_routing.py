@@ -1,6 +1,7 @@
 from pathlib import Path
 from dataclasses import replace
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -95,6 +96,29 @@ class RoutingTests(unittest.TestCase):
         route.assert_called_once()
         writer.apply.assert_called_once()
         self.assertEqual(self.session.stage, RoutingStage.APPROVED)
+
+    def test_validator_warmup_overlaps_router_and_its_errors_do_not_leak(self):
+        self.ready()
+        started, order = threading.Event(), []
+        def prepare(dsn, constraints):
+            order.append("prepare")
+            started.set()
+            raise ValidationError("warm-up only")
+        def route(dsn, constraints):
+            # Deadlocks (and fails) if the warm-up were run before or after routing.
+            self.assertTrue(started.wait(5))
+            order.append("route")
+            return SES
+        original = self.validator.validate
+        def validate(*args):
+            order.append("validate")
+            return original(*args)
+        with patch.object(self.validator, "prepare", side_effect=prepare, create=True), \
+                patch.object(self.session.router, "route", side_effect=route), \
+                patch.object(self.validator, "validate", side_effect=validate):
+            self.session.run()
+        self.assertEqual(order, ["prepare", "route", "validate"])
+        self.assertEqual(self.session.stage, RoutingStage.PREVIEW)
 
     def test_malformed_ses_and_unknown_geometry_refuse_all(self):
         for text in ("(session", SES.replace("(path", "(arc"), SES.replace("2500", "NaN"), SES.replace("F.Cu", "In1.Cu")):
