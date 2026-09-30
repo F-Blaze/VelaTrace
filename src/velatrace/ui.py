@@ -158,6 +158,7 @@ class Settings:
     key: str = field(default="", repr=False)
     search_model: str = ""
     search: bool = False
+    warm_router: bool = False
     tokenizer: str = ""
     verified_model: str = ""
     cap: int = 40
@@ -236,6 +237,10 @@ class SettingsDialog(QDialog):
         self.output_cap.setRange(1, 65536)
         self.output_cap.setValue(settings.output_cap)
         form.addRow("Output token cap per analysis", self.output_cap)
+        self.warm_router = QCheckBox("Keep Freerouting running between routes (faster)")
+        self.warm_router.setChecked(settings.warm_router)
+        form.addRow(self.warm_router)
+        form.addRow(label("Opt-in: runs VelaTrace's MIT launcher and the GPLv3 Freerouting JAR in one Java process. Off starts a fresh Freerouting per route.", muted=True))
         scroll.setWidget(content)
         layout.addWidget(scroll)
         layout.addWidget(label("Gemini uses exact countTokens. Groq/OpenAI-compatible models require a local tokenizer whose chat template you have verified against that exact provider/model. Built-in search must be supported by your selected provider/model.", muted=True))
@@ -246,7 +251,7 @@ class SettingsDialog(QDialog):
 
     def value(self):
         values = {name: field.text().strip() for name, field in self.fields.items()}
-        return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(),
+        return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(), warm_router=self.warm_router.isChecked(),
                         cap=self.cap.value(), output_cap=self.output_cap.value())
 
 
@@ -748,7 +753,7 @@ class MainWindow(QMainWindow):
             if self.safety:
                 self.safety.clear_preview()
             try:
-                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work", warm=True)
+                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work", warm=settings.warm_router)
                 router.check_startup()
             except Exception as exc:
                 self._setup_error = str(exc) or type(exc).__name__

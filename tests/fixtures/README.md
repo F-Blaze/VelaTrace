@@ -1,6 +1,6 @@
 # Test fixtures
 
-These small, self-contained fixtures were authored for VelaTrace and are covered by the repository's MIT license. They contain no user designs or third-party library footprints.
+These small, self-contained fixtures were authored for VelaTrace and are covered by the repository's MIT license. They contain no third-party library footprints. `routing/freerouting-2.1.0-duplicate-stubs.ses` is router output from the maintainer's own practice board, published with their permission.
 
 - `audit/necessity.kicad_pcb` is a placed, unrouted two-layer board with an outline and embedded footprint geometry. `necessity.kicad_pro` supplies matching project rules; `necessity.xml` independently records the same pin-to-net connectivity.
 - C1 is bulk capacitance and C2 is local decoupling on the same VCC/GND rail; they must not be flagged as duplicates.

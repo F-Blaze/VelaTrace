@@ -77,7 +77,7 @@ the pin.
 
 ## Warm router
 
-`Freerouting(..., warm=True)` (used by the plugin UI) removes those fixed costs
+`Freerouting(..., warm=True)` (used by the plugin UI only when **Keep Freerouting running between routes** is ticked in Setup; off by default) removes those fixed costs
 from each route. `check_startup()` pre-warms one JVM in the background running
 `router_resources/WarmRouter.class`, under the same offline policy, arguments,
 clean environment and heap limit. Its start-up does what a one-shot route does
