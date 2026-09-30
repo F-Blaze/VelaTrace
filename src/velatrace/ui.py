@@ -1035,7 +1035,9 @@ class MainWindow(QMainWindow):
             self.routing.confirm_constraints(self.constraints.fingerprint)
             self.preview_shown = False
             def operation(_):
-                self.safety.clear_preview()
+                # Every preview refusal that can be known before routing fails here, not after it.
+                self.executor.progress.emit("Checking the User.9 preview layer")
+                self.safety.prepare_preview()
                 self.routing.progress = self.executor.progress.emit
                 report = self.routing.run(trusted_via_catalog(self.routing.input))
                 # Preview refusal must remain visible even if validated data exists.
