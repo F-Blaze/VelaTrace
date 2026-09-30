@@ -1,13 +1,15 @@
 """Non-destructive candidate construction and independent official CLI validation."""
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+import hashlib
 import json
 import math
 from pathlib import Path
 import re
-import shutil
 import tempfile
+import threading
 import uuid
 
 from .dsn import DsnInput, dsn_scale, file_digest
@@ -255,13 +257,81 @@ def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
     return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}" for (kind, severity), count in sorted(counts.items()))
 
 
+def _parallel(function, values):
+    """Run independent kicad-cli checks concurrently; results keep input order."""
+    values = list(values)
+    with ThreadPoolExecutor(max(1, len(values))) as pool:
+        return list(pool.map(function, values))
+
+
 class SafeCandidateValidator:
     def __init__(self, safety, cli):
         self.safety, self.cli = safety, cli
         self.evidence = None
+        # Baseline DRC of the unrouted board, keyed by the exact bytes KiCad checked.
+        # ponytail: unbounded per-session cache, one small entry per board/rules revision.
+        self._baselines = {}
+        self._lock = threading.Lock()
 
     def supports(self, constraints):
         return all(item.kind in {"clearance", "trace-width"} and item.target == "all nets" for item in constraints)
+
+    @staticmethod
+    def _rule_sets(constraints):
+        clearance = max((c.minimum_mm for c in constraints if c.kind == "clearance"), default=0)
+        # The confirmed-clearance pass supplements, never replaces, proof under the original rules.
+        return (0, clearance) if clearance else (0,)
+
+    @staticmethod
+    def _context_files(context):
+        """Exact bytes of the digest-verified project context copied beside each candidate."""
+        files = {}
+        for path, digest in context.items():
+            if digest is not None:
+                data = path.read_bytes()
+                if hashlib.sha256(data).hexdigest() != digest:
+                    raise ValidationError("Project/rules changed during DRC; route again.")
+                files[path.name] = data
+        return files
+
+    @staticmethod
+    def _with_rule(files, board_name, clearance):
+        if not clearance:
+            return files
+        rules = Path(board_name).with_suffix(".kicad_dru").name
+        extra = f'\n(rule "VelaTrace confirmed clearance" (constraint clearance (min {clearance:.6f})))\n'
+        return {**files, rules: files.get(rules, b"(version 1)\n") + extra.encode("utf-8")}
+
+    def _drc(self, board_name, board_text, files, baseline):
+        files = {**files, board_name: board_text.encode("utf-8")}
+        key = hashlib.sha256(repr(sorted((name, hashlib.sha256(data).hexdigest())
+                                         for name, data in files.items())).encode()).hexdigest()
+        if baseline:
+            with self._lock:
+                if key in self._baselines:
+                    return self._baselines[key]
+        with tempfile.TemporaryDirectory(prefix="candidate-", dir=self.safety.directory, ignore_cleanup_errors=True) as folder:
+            for name, data in files.items():
+                (Path(folder) / name).write_bytes(data)
+            result = self.cli.drc(Path(folder) / board_name)
+        if baseline:
+            with self._lock:
+                self._baselines[key] = result
+        return result
+
+    def prepare(self, dsn, constraints):
+        """Warm the unrouted-board baseline DRC while the router runs.
+
+        Only a cache warm-up: validate() re-reads the live board and project and
+        reuses a result solely for byte-identical board, project and rules files.
+        """
+        if not self.supports(constraints):
+            return
+        source = self.safety.assert_matches(dsn)
+        _, context = project_context(dsn.ticket.board_path)
+        files, name = self._context_files(context), dsn.ticket.board_path.name
+        _parallel(lambda clearance: self._drc(name, source, self._with_rule(files, name, clearance), True),
+                  self._rule_sets(constraints))
 
     def validate(self, dsn, plan, constraints):
         self.evidence = None
@@ -276,26 +346,14 @@ class SafeCandidateValidator:
             if constraint.kind == "trace-width" and any(item.width + 1e-9 < constraint.minimum_mm for item in items if item.kind == "segment"):
                 raise ValidationError("Router violated the confirmed minimum trace width.")
         content = candidate_text(source, items)
-        with tempfile.TemporaryDirectory(prefix="candidate-", dir=self.safety.directory, ignore_cleanup_errors=True) as folder:
-            target = Path(folder) / dsn.ticket.board_path.name
-            target.write_text(content, encoding="utf-8")
-            for path, digest in context.items():
-                if digest is not None:
-                    shutil.copy2(path, Path(folder) / path.name)
-            def drc_pair():
-                """DRC of the unrouted board and of the candidate, under identical rules."""
-                target.write_text(source, encoding="utf-8")
-                baseline = self.cli.drc(target)
-                target.write_text(content, encoding="utf-8")
-                return baseline, self.cli.drc(target)
-            passes = [drc_pair()]
-            clearance = max((c.minimum_mm for c in constraints if c.kind == "clearance"), default=0)
-            if clearance:
-                rules = target.with_suffix(".kicad_dru")
-                previous = rules.read_text(encoding="utf-8") if rules.exists() else "(version 1)\n"
-                # Second pass supplements, never replaces proof under the original rules.
-                rules.write_text(previous + f'\n(rule "VelaTrace confirmed clearance" (constraint clearance (min {clearance:.6f})))\n', encoding="utf-8")
-                passes.append(drc_pair())
+        files, name = self._context_files(context), dsn.ticket.board_path.name
+        # (unrouted baseline, candidate) under identical rules, per rule set; independent, so concurrent.
+        jobs = []
+        for clearance in self._rule_sets(constraints):
+            rules = self._with_rule(files, name, clearance)
+            jobs += [(source, rules, True), (content, rules, False)]
+        results = _parallel(lambda job: self._drc(name, *job), jobs)
+        passes = list(zip(results[::2], results[1::2]))
         dsn.assert_unchanged()
         if not context_matches(context):
             raise ValidationError("Project/rules changed during DRC; route again.")

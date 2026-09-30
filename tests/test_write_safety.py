@@ -338,9 +338,10 @@ class SafetyTests(unittest.TestCase):
         cli = SimpleNamespace(drc=lambda path: (calls.append(path.read_text()), DrcResult(0, 0, 0))[1])
         validator = SafeCandidateValidator(self.safety, cli)
         report = validator.validate(self.dsn, self.plan, ())
-        self.assertEqual(len(calls), 2)  # unrouted baseline, then the candidate
-        self.assertNotIn("(segment", calls[0])
-        self.assertIn("(segment", calls[1])
+        self.assertEqual(len(calls), 2)  # unrouted baseline and the candidate (run concurrently)
+        baseline, routed = sorted(calls, key=lambda text: "(segment" in text)
+        self.assertNotIn("(segment", baseline)
+        self.assertIn("(segment", routed)
         self.safety.factory = SimpleNamespace(copper=lambda items, board: [Item(item.id) for item in items])
         SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
         self.assertIsNone(validator.evidence)
@@ -366,11 +367,29 @@ class SafetyTests(unittest.TestCase):
         constraint = Constraint("clear", Scope.SESSION, "clearance", "all nets", .3)
         validator.validate(self.dsn, self.plan, (constraint,))
         self.assertEqual(len(calls), 4)  # (baseline, candidate) under project rules, then with the extra rule
-        self.assertNotIn("VelaTrace", calls[0] + calls[1])
+        self.assertEqual(sum("VelaTrace confirmed clearance" in rules_text for rules_text in calls), 2)
         self.assertTrue(all("stronger" in rules_text for rules_text in calls))
-        self.assertIn("VelaTrace confirmed clearance", calls[2])
-        self.assertIn("VelaTrace confirmed clearance", calls[3])
         self.assertNotIn("VelaTrace", rules.read_text())
+
+    def test_baseline_drc_is_reused_only_for_identical_board_and_rules(self):
+        calls = []
+        def drc(path):
+            calls.append((path.read_text(), path.with_suffix(".kicad_dru").read_text()
+                          if path.with_suffix(".kicad_dru").exists() else ""))
+            return DrcResult(0, 0, 0)
+        validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=drc))
+        validator.prepare(self.dsn, ())  # Warm-up while the router would run.
+        self.assertEqual(len(calls), 1)
+        validator.validate(self.dsn, self.plan, ())
+        self.assertEqual(sum("(segment" not in board for board, _ in calls), 1)  # baseline reused
+        self.assertEqual(len(calls), 2)
+        # Changed rules or an unsaved live edit are different inputs: the baseline runs again.
+        self.path.with_suffix(".kicad_dru").write_text('(version 1)\n(rule "new" (constraint clearance (min 0.5)))')
+        validator.validate(self.dsn, self.plan, ())
+        self.board.source = BOARD.replace("20 20", "21 20")
+        validator.validate(self.dsn, self.plan, ())
+        self.assertEqual(sum("(segment" not in board for board, _ in calls), 3)
+        self.assertIn('"new"', calls[-1][1])
 
     def test_rules_change_during_commit_rolls_back(self):
         _, context = project_context(self.path)
