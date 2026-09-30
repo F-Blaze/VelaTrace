@@ -212,8 +212,6 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                     raise ValidationError("Invalid SES track width.")
                 points = tuple((coordinate(path[i], scale), coordinate(path[i+1], scale))
                                for i in range(3, len(path), 2))
-                if any(a == b for a, b in zip(points, points[1:])):
-                    raise ValidationError("Zero-length SES track segment.")
                 tracks.append(Track(net[1], path[1], width, points))
             else:
                 if len(geometry) not in {4, 5} or not isinstance(geometry[1], str):
@@ -224,4 +222,33 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                 if spec is None or not 0 < spec.drill_mm < spec.diameter_mm <= 100 or not set(spec.layers) <= layers:
                     raise ValidationError("SES via lacks a verified board padstack/drill mapping.")
                 vias.append(Via(net[1], (coordinate(geometry[2], scale), coordinate(geometry[3], scale)), spec))
-    return RoutePlan(base[1], tuple(tracks), tuple(vias))
+    return RoutePlan(base[1], *_normalised(tracks, vias))
+
+
+def _normalised(tracks, vias):
+    """The one plan that preview, candidate DRC and applied copper all use.
+
+    Freerouting 2.1.0 intermittently emits a pad-escape stub twice, once per
+    direction. Drop exact repeats (same net, layer, width and endpoints in either
+    direction) and zero-length steps, splitting a polyline where a repeat is cut.
+    Identical vias are dropped likewise. Collinear steps that only overlap are
+    kept: same-net overlap is harmless, DRC-checked copper, and merging them would
+    change the router's geometry. Different nets are never merged.
+    """
+    seen, output = set(), []
+    for track in tracks:
+        run = [track.points_mm[0]]
+        for a, b in zip(track.points_mm, track.points_mm[1:]):
+            if a == b:
+                continue
+            key = (track.net, track.layer, track.width_mm, frozenset((a, b)))
+            if key not in seen:
+                seen.add(key)
+                run.append(b)
+                continue
+            if len(run) > 1:
+                output.append(Track(track.net, track.layer, track.width_mm, tuple(run)))
+            run = [b]
+        if len(run) > 1:
+            output.append(Track(track.net, track.layer, track.width_mm, tuple(run)))
+    return tuple(output), tuple(dict.fromkeys(vias))

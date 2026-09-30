@@ -138,6 +138,34 @@ class RoutingTests(unittest.TestCase):
     def test_quote_parser_metadata(self):
         self.assertEqual(parse('(parser (string_quote "))'), ["parser", ["string_quote", '"']])
 
+    def test_router_duplicate_stubs_are_dropped_once_for_preview_and_copper(self):
+        # Actual Freerouting 2.1.0 output (practice board): VIN pad-escape stubs are
+        # emitted on F.Cu and B.Cu, each twice in opposite directions.
+        from kipy.proto.board.board_types_pb2 import BL_User_9
+        from velatrace.ses import RoutePlan, Track
+        from velatrace.write_safety import ItemFactory, _check_graphic_collisions
+        text = (Path(__file__).parent / "fixtures" / "routing" / "freerouting-2.1.0-duplicate-stubs.ses").read_text()
+        plan = parse_ses(text, expected_design="practice", nets={"VIN", "GND", "VOUT"}, layers={"F.Cu", "B.Cu"},
+                         via_catalog={"Via[0-1]_600:300_um": ViaSpec(.6, .3, ("F.Cu", "B.Cu"))},
+                         expected_placements={"J1": (6, -15, "front", 0), "R1": (32, -8, "front", 0),
+                                              "C1": (32, -22, "front", 0), "U1": (18, -15, "front", 0)},
+                         expected_placement_resolution_mm=.0001)
+        steps = [(t.net, t.layer, t.width_mm, frozenset(pair)) for t in plan.tracks
+                 for pair in zip(t.points_mm, t.points_mm[1:])]
+        self.assertEqual((len(steps), len(set(steps)), plan.trace_count, len(plan.vias)), (44, 44, 44, 2))
+        _check_graphic_collisions(ItemFactory.preview(plan, BL_User_9), [], set())
+        # Coincident lines of different nets are still refused.
+        a, b = Track("VIN", "F.Cu", .2, ((0, 0), (1, 0))), Track("GND", "B.Cu", .2, ((1, 0), (0, 0)))
+        with self.assertRaisesRegex(ValidationError, "duplicate segments"):
+            _check_graphic_collisions(ItemFactory.preview(RoutePlan("x", (a, b), ()), BL_User_9), [], set())
+        # Zero-length steps and identical vias are dropped too; a cut repeat splits the path.
+        extra = SES.replace("40000 30000)", "40000 30000 40000 30000 30000 20000 50000 20000)").replace(
+            "(type route))", "(type route)) (via V 1 2) (via V 1 2)")
+        plan = parse_ses(extra, expected_design="board.dsn", nets={"N"}, layers={"F.Cu", "B.Cu"},
+                         via_catalog={"V": ViaSpec(.6, .3, ("F.Cu", "B.Cu"))})
+        self.assertEqual([t.points_mm for t in plan.tracks], [((1, 2), (3, 2), (4, 3)), ((3, 2), (5, 2))])
+        self.assertEqual(len(plan.vias), 1)
+
     def test_numeric_proposal_never_drops_clause(self):
         self.assertEqual(propose_constraint("keep traces away from headers").minimum_mm, 2)
         self.assertEqual(propose_constraint("keep traces 5 mm away from headers").minimum_mm, 5)

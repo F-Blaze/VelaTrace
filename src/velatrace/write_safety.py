@@ -86,9 +86,16 @@ class ItemFactory:
         from kipy.board_types import BoardSegment
         from kipy.geometry import Vector2
         from kipy.proto.common.types.enums_pb2 import SLS_DASH
-        output = []
+        output, drawn = [], set()
         for track in plan.tracks:
             for start, end in zip(track.points_mm, track.points_mm[1:]):
+                # One preview layer: same-net copper stacked on several copper layers
+                # draws one line. Coincident lines of different nets are still drawn
+                # twice, so the collision check refuses them.
+                key = (track.net, frozenset((start, end)))
+                if key in drawn:
+                    continue
+                drawn.add(key)
                 item = BoardSegment()
                 item.id.value = str(uuid.uuid4())
                 item.start = Vector2.from_xy_mm(start[0], -start[1])
