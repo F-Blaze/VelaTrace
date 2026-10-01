@@ -65,6 +65,15 @@ Freerouting runs, and a baseline result is reused only for byte-identical board,
 project, rules and schematic files. Validation still re-reads the live board and
 project after routing; any difference simply runs the baseline again. Baseline and
 candidate DRC passes run concurrently, each in its own temporary folder.
+Each DRC uses a private, per-session copy of the user's KiCad settings
+(`kicad_common.json` path variables and `sym-lib-table` copied verbatim) whose
+footprint library table keeps only the libraries the board's footprints name.
+KiCad 10 otherwise loads every configured footprint library for its
+footprint-library checks, about 10 s per run with the stock libraries, although
+only the board's own libraries can change the report. Reports were identical with
+the full and the trimmed table. A table that cannot be trimmed exactly (a nested
+table behind a path variable, or an unreadable one) is copied whole. The user's
+own settings folder is only read.
 For confirmed extra clearance it runs both the original rules and a second
 pass with a global minimum rule; adding a weaker global rule cannot erase evidence
 from the original stronger rules. Trace-width minima are also measured in code.
