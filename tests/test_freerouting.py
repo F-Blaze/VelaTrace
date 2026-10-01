@@ -3,14 +3,16 @@ import hashlib
 import os
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
 from velatrace.constraints import Constraint, Scope
 from velatrace.dsn import DsnInput, ExportTicket, dsn_scale, file_digest
-from velatrace.errors import CapabilityError, ValidationError
+from velatrace.errors import CapabilityError, RoutingCancelled, ValidationError
 from velatrace.freerouting import (Freerouting, ProcessResult, PROBE_SHA256, clean_environment,
-                                  constrained_dsn, run_bounded)
+                                  constrained_dsn, pass_reporter, run_bounded)
 from velatrace.ses import ViaSpec, parse_ses
 from velatrace.sexpr import children, one, parse
 
@@ -68,6 +70,26 @@ class FreeroutingTests(unittest.TestCase):
         with self.assertRaisesRegex(CapabilityError, "exceeded"):
             run_bounded([sys.executable, "-c", "import time; time.sleep(10)"], self.root, .1)
 
+    def test_cancel_kills_the_router_process_promptly(self):
+        cancel = threading.Event()
+        threading.Timer(.3, cancel.set).start()
+        started = time.monotonic()
+        with self.assertRaises(RoutingCancelled):
+            run_bounded([sys.executable, "-c", "import time; time.sleep(30)"], self.root, 60, cancel)
+        self.assertLess(time.monotonic() - started, 10)
+
+    def test_pass_lines_report_progress_across_chunks(self):
+        seen = []
+        report = pass_reporter(seen.append)
+        log = bytearray(b"INFO Auto-router pass #1 on board 'a' was completed in 1.84 sec")
+        report(log)  # A split line reports nothing yet.
+        log += b"onds with the score of 933.76 (1 unrouted).\n"
+        report(log)
+        report(log)  # Unchanged: no duplicate message.
+        log += b"INFO Auto-router pass #2 on board 'b' was completed in 0.17 seconds with the score of 961.87.\n"
+        report(log)
+        self.assertEqual(seen, ["Routing · pass 1 · 1 unrouted", "Routing · pass 2"])
+
     def test_route_checks_runtime_and_actual_policy_once_before_launch(self):
         jar = self.root / "router.jar"
         jar.write_bytes(b"fixture jar")
@@ -80,7 +102,7 @@ class FreeroutingTests(unittest.TestCase):
         router = Freerouting(jar, sys.executable, work_directory=self.root / "processes")
         for failed_step in (None, "java", "probe"):
             launches = []
-            def run(args, directory, timeout):
+            def run(args, directory, timeout, cancel=None, on_data=None):
                 step = "java" if "-version" in args else "probe" if "OfflineProbe" in args else "router"
                 launches.append((step, directory))
                 if step == failed_step:

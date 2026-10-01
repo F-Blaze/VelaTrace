@@ -1,4 +1,4 @@
-"""Fresh human DSN export handshake and basic board correspondence checks.
+"""DSN export (automatic or manual) and basic board correspondence checks.
 
 Basic checks are necessary, not sufficient: candidate DRC against the real board
 is required before approval because DSN pad geometry may differ from the board.
@@ -46,7 +46,7 @@ class DsnInput:
 
     def assert_unchanged(self):
         if file_digest(self.path) != self.digest or file_digest(self.ticket.board_path) != self.ticket.board_digest:
-            raise ValidationError("Board or DSN changed; save the board and export a fresh DSN.")
+            raise ValidationError("The saved board or DSN changed during routing; click Route board again.")
 
 
 def dsn_scale(root: list) -> float:
@@ -74,7 +74,7 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
     if path.suffix.lower() != ".dsn" or path.stat().st_mtime_ns < ticket.requested_ns:
         raise ValidationError("Export a fresh .dsn after requesting routing.")
     if file_digest(ticket.board_path) != ticket.board_digest:
-        raise ValidationError("Board changed after export request; start a fresh export request.")
+        raise ValidationError("The saved board changed during DSN export; click Route board again.")
     if not snapshot.path or snapshot.path.resolve() != ticket.board_path:
         raise ValidationError("PCB snapshot does not belong to this saved board.")
     if path.stat().st_size > 32_000_000:
@@ -149,3 +149,14 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
                       placement_resolution_mm)
     result.assert_unchanged()
     return result
+
+
+def export_live(cli, board_text: str, snapshot: DesignSnapshot, folder: Path, cancel=None) -> DsnInput:
+    """One-click export: KiCad's own exporter turns the live board text (read at click
+    time, never saved over the user's file) into a DSN, which must then pass exactly the
+    checks a manual export does. The ticket binds it to the saved file's digest."""
+    if not snapshot.path:
+        raise ValidationError("Save the board once in KiCad so VelaTrace knows its project folder.")
+    ticket = ExportTicket.begin(snapshot.path)
+    path = cli.export_dsn(board_text, ticket.board_path, folder, cancel)
+    return accept_export(ticket, path, snapshot, user_confirms_saved_and_exported=True)
