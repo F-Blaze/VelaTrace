@@ -16,7 +16,7 @@ from .dsn import DsnInput, dsn_scale, file_digest
 from .errors import CapabilityError, ValidationError
 from .routing import ValidationReport, plan_digest
 from .ses import RoutePlan, ViaSpec
-from .sexpr import QuotedAtom, children, one, parse
+from .sexpr import QuotedAtom, children, one, parse, render
 
 
 def read_board(path: Path):
@@ -74,16 +74,7 @@ def live_board_text(source: str, excluded_ids=frozenset()) -> str:
     def retained(row):
         ids = children(row, "uuid") if isinstance(row, list) else []
         return not (ids and len(ids[0]) == 2 and ids[0][1] in excluded_ids)
-    root = [root[0], *(row for row in root[1:] if retained(row))]
-    escapes = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r", "\t": "\\t",
-               "\a": "\\a", "\b": "\\b", "\f": "\\f", "\v": "\\v"}
-    def render(value):
-        if isinstance(value, list):
-            return "(" + " ".join(render(item) for item in value) + ")"
-        if isinstance(value, QuotedAtom):
-            return '"' + "".join(escapes.get(char, char) for char in value) + '"'
-        return str(value)
-    return render(root)
+    return render([root[0], *(row for row in root[1:] if retained(row))])
 
 
 def project_context(board_path: Path):
