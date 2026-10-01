@@ -64,11 +64,24 @@ an exact currently available model ID. OpenAI-compatible/Groq classification
 additionally requires a locally installed tokenizer and chat template verified
 against that precise provider/model. Nothing downloads a tokenizer at runtime.
 
-Audit starts with a required design description. Choose the open PCB through
-official IPC, a saved schematic exported through `kicad-cli`, or a previously
-exported KiCad XML netlist with connectivity. The captured description is locked
-after reading; **New audit** clears temporary annotations and allows a new
-description. Inference produces editable function and electrical-role cards.
+Launch opens no dialog. If Setup already saved a Freerouting JAR, the router is
+re-verified quietly in the background; otherwise the red hint explains how to
+unlock routing. The audit needs no setup at all.
+
+Audit: choose the open PCB through official IPC, a saved schematic exported
+through `kicad-cli`, or a previously exported KiCad XML netlist, then click
+**Check design**. The built-in checks run locally with no key and no dialog
+(picking a saved file is the confirmation that it is saved; the step line notes
+that unsaved edits are not included). Findings are grouped under Errors,
+Warnings, Savings and Info with a colored bar and a one-line title; clicking a
+card expands its evidence, fix and illustrative cost. The summary line reads like
+`3 errors · 2 warnings · est. $0.42/board saving`. A reserved hook
+(`MainWindow.zoom_to_part`) will add a **Show in KiCad** link per finding.
+
+**Explain with AI (optional)** starts the provider flow below, with the findings as
+context. The small description box is optional and locked once AI starts;
+**New audit** clears findings, temporary annotations and the AI pass. Inference
+produces editable function and electrical-role cards.
 Explicit function confirmation precedes token counting; the actual prompt's
 precise input count and output cap need a second confirmation before
 classification. Pricing has its own confirmation for the actual flagged set.

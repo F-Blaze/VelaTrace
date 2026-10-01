@@ -29,6 +29,7 @@ Changes involving shell/subprocess calls, network calls, writes outside the proj
 
 - Use official `kicad-python` IPC on KiCad 9+; do not add SWIG/`pcbnew` fallbacks. Check capabilities against the actual server version.
 - Treat all design fields, labels and model output as untrusted. Preserve the prompt boundary and plain-text UI. No model-generated commands, URLs, arithmetic or arbitrary tools.
+- Keep audit rule checks deterministic, local and conservative (a wrong finding costs the user time); add a positive and a negative test per rule.
 - Confirm corrected component functions before classification, and confirm the actual token estimate before the run. Compute flags, totals, savings and tokens in code. A verdict never authorizes component deletion.
 - Keep Freerouting as a pinned, unmodified, separate external process. Do not link or embed GPL code. The current repository does not bundle its JAR; any future distribution of the JAR must retain its GPLv3 license and satisfy applicable distribution obligations.
 - Route only within confirmed constraints and existing stackup. Refuse unsupported or ambiguous SES in full. Never partially apply geometry or silently drop a constraint.

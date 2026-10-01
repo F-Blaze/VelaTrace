@@ -5,7 +5,7 @@ blocking service operation; it reports plain data through queued signals.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
 import os
@@ -22,11 +22,13 @@ from PySide6.QtWidgets import (
     QTextEdit, QVBoxLayout, QWidget,
 )
 
-from .audit import AuditSession, AuditStage
+from .audit import AuditSession, AuditStage, require_connectivity
+from .audit_rules import run_rules, summarize
 from .candidate import SafeCandidateValidator, trusted_via_catalog
 from .constraints import Constraint, ConstraintStore, Scope, propose_constraint
 from .dsn import ExportTicket, accept_export
 from .errors import ValidationError
+from .findings import Finding, Severity
 from .flags import Bucket, Function, Verdict
 from .freerouting import Freerouting
 from .ipc import KiCadReader
@@ -44,6 +46,12 @@ from .write_safety import BoardSafety, SafeBoardWriter
 ACCENT = "#8B5CF6"
 BUCKET_COLORS = {"critical": "#F87171", "important": "#FBBF24",
                  "nice-to-have": "#60A5FA", "redundant": "#A78BFA"}
+SEVERITY_COLORS = {Severity.ERROR: "#F87171", Severity.WARNING: "#FBBF24",
+                   Severity.SAVING: "#34D399", Severity.INFO: "#60A5FA"}
+SEVERITY_GROUPS = ((Severity.ERROR, "Errors"), (Severity.WARNING, "Warnings"),
+                   (Severity.SAVING, "Savings"), (Severity.INFO, "Info"))
+NO_REMOVAL = "Suggestions only. Components are never removed automatically."
+AI_DEFAULT_DESCRIPTION = "Not provided; infer the purpose from the design."
 
 
 def theme_tokens(dark: bool) -> dict:
@@ -312,6 +320,48 @@ class ComponentCard(QFrame):
         super().mouseReleaseEvent(event)
 
 
+class FindingCard(QFrame):
+    """One rule finding: the title up front; evidence, fix and cost when expanded.
+
+    `locate` is the hook for zooming KiCad to the involved parts; no button is
+    shown until that exists. Design text stays plain text."""
+    def __init__(self, finding: Finding, locate=None, parent=None):
+        super().__init__(parent)
+        self.finding = finding
+        self.setObjectName("card")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        outer = QHBoxLayout(self)
+        bar = QFrame()
+        bar.setFixedWidth(4)
+        bar.setStyleSheet(f"background:{SEVERITY_COLORS[finding.severity]}; border-radius:2px")
+        outer.addWidget(bar)
+        body = QVBoxLayout()
+        self.title = label(finding.title)
+        font = self.title.font()
+        font.setBold(True)
+        self.title.setFont(font)
+        body.addWidget(self.title)
+        cost = ""
+        if finding.cost_delta is not None:
+            sign = "−" if finding.cost_delta < 0 else "+"
+            cost = f"Cost: {sign}${abs(finding.cost_delta):.2f}/board (illustrative)"
+        self.details = label("\n\n".join(text for text in (
+            finding.evidence, "Fix: " + finding.fix if finding.fix else "", cost) if text), muted=True)
+        self.details.setVisible(False)
+        body.addWidget(self.details)
+        if locate is not None and finding.refs:
+            button = QPushButton("Show in KiCad")
+            button.setObjectName("textButton")
+            button.clicked.connect(lambda: locate(finding.refs))
+            body.addWidget(button, alignment=Qt.AlignmentFlag.AlignLeft)
+        outer.addLayout(body, 1)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.details.setVisible(not self.details.isVisible())
+        super().mouseReleaseEvent(event)
+
+
 class RouteCanvas(QWidget):
     def __init__(self):
         super().__init__()
@@ -431,6 +481,10 @@ class ConstraintsDialog(QDialog):
             self.owner.show_error(str(exc))
 
 
+READY_STEP = "Check the open PCB, a saved schematic or a netlist. Runs on this computer; no key needed."
+EXPLAIN = "Explain with AI (optional)"
+
+
 class MainWindow(QMainWindow):
     def __init__(self, *, demo=False, config_dir=None):
         super().__init__()
@@ -454,6 +508,9 @@ class MainWindow(QMainWindow):
         self.audit = self.pricing = self.routing = self.router = None
         self.reader = self.safety = self.validator = self.writer = None
         self.ticket = self.snapshot = None
+        # The audit's own design read; self.snapshot belongs to routing.
+        self.audit_snapshot: DesignSnapshot | None = None
+        self.findings: list[Finding] = []
         self.worker = None
         self.executor = Worker(self)
         self.executor.usage.connect(self.update_usage)
@@ -482,8 +539,10 @@ class MainWindow(QMainWindow):
         self.apply_theme("KiCad")
         if demo:
             self.load_demo()
-        else:
-            QTimer.singleShot(0, self.configure)
+        elif self.settings.jar:
+            # Re-verify a remembered router quietly; no dialog stands between launch
+            # and the audit, which needs no setup at all.
+            QTimer.singleShot(0, lambda: self.apply_settings(self.settings, save=False))
 
     def build_ui(self):
         central = QWidget()
@@ -527,24 +586,19 @@ class MainWindow(QMainWindow):
         self.audit_page = QWidget()
         audit_layout = QVBoxLayout(self.audit_page)
         audit_layout.setContentsMargins(0, 0, 0, 0)
-        audit_layout.addWidget(label("What is this board meant to do?"))
-        self.description = QTextEdit()
-        self.description.setAcceptRichText(False)
-        self.description.setPlaceholderText("Required: purpose, supply, interfaces and operating conditions…")
-        self.description.setMaximumHeight(95)
-        audit_layout.addWidget(self.description)
         source = QHBoxLayout()
         self.source = QComboBox()
         self.source.addItems(["Open PCB through IPC", "Saved schematic", "Exported XML netlist"])
         source.addWidget(self.source, 1)
-        self.load_button = QPushButton("Read design")
+        self.load_button = QPushButton("Check design")
+        self.load_button.setObjectName("primary")
         self.load_button.clicked.connect(self.load_design)
         source.addWidget(self.load_button)
         self.restart_button = QPushButton("New audit")
         self.restart_button.clicked.connect(self.restart_audit)
         source.addWidget(self.restart_button)
         audit_layout.addLayout(source)
-        self.audit_step = label("1 · Describe your project, then read connectivity.", muted=True)
+        self.audit_step = label(READY_STEP, muted=True)
         audit_layout.addWidget(self.audit_step)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -554,11 +608,16 @@ class MainWindow(QMainWindow):
         self.card_layout.addStretch()
         self.scroll.setWidget(self.card_container)
         audit_layout.addWidget(self.scroll, 1)
-        self.totals = label("All verdicts are suggestions. Components are never removed automatically.", muted=True)
+        self.totals = label(NO_REMOVAL, muted=True)
         audit_layout.addWidget(self.totals)
+        # Only the optional AI pass uses the description; it never blocks the checks.
+        self.description = QTextEdit()
+        self.description.setAcceptRichText(False)
+        self.description.setPlaceholderText("Optional, for Explain with AI: what the board does…")
+        self.description.setMaximumHeight(52)
+        audit_layout.addWidget(self.description)
         buttons = QHBoxLayout()
-        self.next_button = QPushButton("Infer component functions")
-        self.next_button.setObjectName("primary")
+        self.next_button = QPushButton(EXPLAIN)
         self.next_button.clicked.connect(self.audit_next)
         self.price_button = QPushButton("Price flagged parts")
         self.price_button.clicked.connect(self.price_parts)
@@ -628,6 +687,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.status)
         layout.addWidget(self.usage_label)
         self.setCentralWidget(central)
+        self.render_cards()
         self.refresh_actions()
 
     def apply_theme(self, choice):
@@ -677,7 +737,10 @@ class MainWindow(QMainWindow):
         self.setup_button.setEnabled(not busy and not self.demo)
         self.badge.setEnabled(not busy and not self.demo)
         stage = self.audit.stage if self.audit else None
-        self.next_button.setEnabled(not self.demo and stage in {AuditStage.FUNCTIONS, AuditStage.REVIEW_FUNCTIONS, AuditStage.CONFIRMED_FUNCTIONS, AuditStage.CLASSIFICATION_ESTIMATE})
+        # Explain with AI is an optional second pass over findings already shown.
+        self.next_button.setEnabled(not self.demo and self.audit_snapshot is not None and (
+            stage is None or stage in {AuditStage.FUNCTIONS, AuditStage.REVIEW_FUNCTIONS,
+                                       AuditStage.CONFIRMED_FUNCTIONS, AuditStage.CLASSIFICATION_ESTIMATE}))
         self.price_button.setEnabled(not self.demo and stage == AuditStage.CLASSIFIED)
         self.annotations.setEnabled(not self.demo and stage == AuditStage.CLASSIFIED and self.safety is not None)
         self.import_button.setEnabled(self.ticket is not None)
@@ -749,22 +812,21 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        settings = dialog.value()
+        self.apply_settings(dialog.value())
+
+    def apply_settings(self, settings, *, save=True):
         self.settings = settings  # Reopening Setup after a failure shows what was typed.
-        # An audit owns its provider and key. Retire it as soon as new settings
+        # An AI audit owns its provider and key. Retire it as soon as new settings
         # are accepted, even if independent router verification later fails.
+        # Local rule findings stay: they never depended on the provider.
         # Keep the safety handle until cleanup succeeds so owned graphics remain
         # recoverable when KiCad is unavailable.
-        self.audit = self.pricing = None
-        self.description.setReadOnly(False)
-        self.audit_step.setText("1 · Describe your project, then read connectivity.")
-        self.next_button.setText("Infer component functions")
-        self.totals.setText("All verdicts are suggestions. Components are never removed automatically.")
-        self.render_cards()
-        try:
-            settings.save(self.config_dir / "settings.json")
-        except OSError:
-            pass  # Remembering settings is a convenience; verification still runs.
+        self.reset_ai()
+        if save:
+            try:
+                settings.save(self.config_dir / "settings.json")
+            except OSError:
+                pass  # Remembering settings is a convenience; verification still runs.
         self._setup_error = ""
         def operation(_):
             if self.safety:
@@ -785,7 +847,7 @@ class MainWindow(QMainWindow):
             self.ticket = self.snapshot = None
             self.description.setReadOnly(False)
             self.render_cards()
-            self.status.setText("Java and pinned Freerouting verified. Read a design to begin.")
+            self.status.setText("Java and pinned Freerouting verified.")
         self.ready = False
         self.run_work("Checking required local router and Java", operation, success)
 
@@ -806,11 +868,19 @@ class MainWindow(QMainWindow):
                             disclosure_gate=self.consent.accepted)
         return AuditSession(provider)
 
+    def reset_ai(self):
+        """Drop the optional AI pass (and its provider/key); keep local findings."""
+        self.audit = self.pricing = None
+        self.description.setReadOnly(False)
+        self.next_button.setText(EXPLAIN)
+        self.show_findings_summary()
+        self.render_cards()
+
+    def show_findings_summary(self):
+        self.totals.setText((summarize(self.findings) + "\n" if self.audit_snapshot else "") + NO_REMOVAL)
+
     def load_design(self):
-        description = self.description.toPlainText().strip()
-        if not description:
-            self.show_error("Enter the required project description first.")
-            return
+        """Read connectivity and run the local checks. No provider, key or consent."""
         choice = self.source.currentIndex()
         path = None
         if choice:
@@ -819,13 +889,9 @@ class MainWindow(QMainWindow):
             if not selected:
                 return
             path = Path(selected)
-            if not ask(self, "Saved design", "Confirm that this design is saved. Unsaved schematic changes are not included."):
-                return
         def operation(_):
             if self.safety:
                 self.safety.clear_preview()
-            audit = self.make_audit()
-            audit.set_description(description)
             reader = safety = None
             if choice == 0:
                 reader = KiCadReader.connect()
@@ -833,45 +899,65 @@ class MainWindow(QMainWindow):
                 if snapshot.path:
                     safety = BoardSafety(reader.client.get_board(), snapshot.path)
             elif choice == 1:
+                # Picking the saved file is the confirmation; the step line says so.
                 snapshot = KiCadCli(self.settings.cli).schematic_snapshot(path, saved_confirmed=True)
             else:
                 snapshot = read_xml_netlist(path)
-            audit.load_design(snapshot)
-            return audit, reader, safety
+            # Logos, fiducials and unconnected holes (often REF** or duplicate refs)
+            # carry no connectivity; they must not block the checks.
+            snapshot = replace(snapshot, components=tuple(c for c in snapshot.components if c.nets))
+            require_connectivity(snapshot)
+            return snapshot, run_rules(snapshot), reader, safety
         def success(value):
-            self.audit, self.reader, self.safety = value
+            self.audit_snapshot, self.findings, self.reader, self.safety = value
             self.apply_theme(self.theme.currentText())
-            self.snapshot = self.audit.snapshot
             self.pricing = self.routing = None
             self.ticket = None
-            self.description.setReadOnly(True)
-            self.audit_step.setText(f"2 · {len(self.snapshot.components)} components with real connectivity. Infer functions, then correct them.")
-            self.next_button.setText("Infer component functions")
-            self.render_cards()
-        self.run_work("Reading connectivity", operation, success)
+            count = len(self.audit_snapshot.components)
+            saved = " From the saved file; unsaved edits are not included." if choice else ""
+            self.audit_step.setText(f"{count} parts checked on this computer; nothing was sent.{saved}")
+            self.reset_ai()
+        self.run_work("Reading connectivity and checking the design", operation, success)
 
     def restart_audit(self):
         def operation(_):
             if self.safety:
                 self.safety.clear_preview()
         def done(_):
-            self.audit = self.pricing = None
-            self.description.setReadOnly(False)
-            self.audit_step.setText("1 · Describe your project, then read connectivity.")
-            self.next_button.setText("Infer component functions")
-            self.totals.setText("All verdicts are suggestions. Components are never removed automatically.")
-            self.render_cards()
+            self.audit_snapshot, self.findings = None, []
+            self.audit_step.setText(READY_STEP)
+            self.reset_ai()
         self.run_work("Starting a fresh audit", operation, done)
+
+    def start_explain(self):
+        """Optional second pass: the model explains the findings and each part's role."""
+        if self.audit_snapshot is None:
+            return
+        try:
+            audit = self.make_audit()
+        except ValidationError as exc:
+            self.show_error(f"Explain with AI needs your own provider and model; open Setup ({exc}) "
+                            "The checks above need neither.")
+            return
+        self.audit = audit
+        if not self.authorize_provider():
+            self.audit = None
+            return
+        audit.set_description(self.description.toPlainText().strip() or AI_DEFAULT_DESCRIPTION)
+        audit.load_design(self.audit_snapshot, tuple(self.findings))
+        self.description.setReadOnly(True)
+        self.audit_next()
 
     def audit_next(self):
         try:
             if not self.audit:
+                self.start_explain()
                 return
             if self.audit.stage == AuditStage.FUNCTIONS:
                 if not self.authorize_provider():
                     return
                 def done(_):
-                    self.audit_step.setText("3 · Correct every function and electrical role, then confirm them.")
+                    self.audit_step.setText("Correct each AI function and electrical role, then confirm them.")
                     self.next_button.setText("Confirm functions and estimate tokens")
                     self.render_cards()
                 self.run_work("Inferring functions", lambda usage: self.audit.infer_functions(usage, self.settings.output_cap), done)
@@ -895,7 +981,7 @@ class MainWindow(QMainWindow):
         def done(estimate):
             self.render_cards()
             self.next_button.setText("Review classification estimate")
-            self.audit_step.setText("4 · Functions confirmed. Classification requires this prompt's token confirmation.")
+            self.audit_step.setText("Functions confirmed. Classification needs this prompt's token confirmation.")
             text = (f"{estimate.input_tokens:,} exact input tokens from the actual prompt\n"
                     f"Output cap: {estimate.output_cap:,} per attempt\nAt most {estimate.calls_max} attempts (two retries).\n"
                     f"Method: {estimate.method}\nHard call cap remaining: {self.audit.provider.budget.remaining}\n\nStart classification?")
@@ -915,21 +1001,56 @@ class MainWindow(QMainWindow):
             self.show_error(str(exc))
             return
         def done(_):
-            self.audit_step.setText(f"5 · Audit complete · {len(self.audit.flags)} flagged or borderline components.")
+            self.audit_step.setText(f"AI review complete · {len(self.audit.flags)} flagged or borderline components.")
             self.render_cards()
             if self.safety:
                 QTimer.singleShot(0, self.show_annotations)
         self.run_work("Classifying confirmed component functions", lambda usage: self.audit.classify(fingerprint, usage), done)
 
-    def render_cards(self):
-        if self.audit and self.audit.stage == AuditStage.CLASSIFIED:
-            self.next_button.setText("Audit complete")
+    def can_zoom(self):
+        """True once zoom-to-part exists; until then finding cards show no button."""
+        return False
+
+    def zoom_to_part(self, refs):
+        """Hook: select and zoom KiCad's PCB editor to these references (next feature)."""
+        self.status.setText("Zoom to part is not available yet: " + ", ".join(refs))
+
+    def clear_cards(self):
         while self.card_layout.count():
             item = self.card_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
         self.cards = {}
-        if self.audit and self.audit.snapshot:
+        self.finding_cards = []
+
+    def render_findings(self):
+        if not self.findings:
+            self.card_layout.addWidget(label("No issues found by the built-in checks.", muted=True))
+            return
+        locate = self.zoom_to_part if self.can_zoom() else None
+        for severity, heading in SEVERITY_GROUPS:
+            rows = [item for item in self.findings if item.severity == severity]
+            if not rows:
+                continue
+            header = label(f"{heading} · {len(rows)}")
+            header.setStyleSheet(f"color:{SEVERITY_COLORS[severity]}; font-weight:600")
+            self.card_layout.addWidget(header)
+            for finding in rows:
+                card = FindingCard(finding, locate)
+                self.finding_cards.append(card)
+                self.card_layout.addWidget(card)
+
+    def render_cards(self):
+        classified = bool(self.audit and self.audit.stage == AuditStage.CLASSIFIED)
+        if classified:
+            self.next_button.setText("AI review complete")
+        self.price_button.setVisible(classified)
+        self.annotations.setVisible(classified)
+        self.clear_cards()
+        if self.audit_snapshot is not None:
+            self.render_findings()
+        if self.audit and self.audit.snapshot and self.audit.stage != AuditStage.FUNCTIONS:
+            self.card_layout.addWidget(label("AI review (optional)", muted=True))
             flags = {item.reference: item for item in self.audit.flags}
             for component in self.audit.snapshot.components:
                 reference = component.reference
@@ -938,8 +1059,8 @@ class MainWindow(QMainWindow):
                     flags.get(reference), self.audit.stage == AuditStage.REVIEW_FUNCTIONS)
                 self.cards[reference] = card
                 self.card_layout.addWidget(card)
-        else:
-            self.card_layout.addWidget(label("Your connected components will appear as review cards here.", muted=True))
+        if self.audit_snapshot is None and not self.cards:
+            self.card_layout.addWidget(label("Findings appear here, grouped as errors, warnings, savings and info.", muted=True))
         self.card_layout.addStretch()
 
     def price_parts(self):
@@ -957,7 +1078,8 @@ class MainWindow(QMainWindow):
             def done(_):
                 self.pricing = pricing
                 self.render_cards()
-                self.totals.setText(f"Flagged cost: ${pricing.flagged_cost:.2f} · hypothetical savings: ${pricing.hypothetical_savings:.2f}. Estimates are illustrative; verify every suggestion.")
+                self.totals.setText((summarize(self.findings) + "\n" if self.audit_snapshot else "")
+                                    + f"AI pricing: flagged ${pricing.flagged_cost:.2f} · hypothetical savings ${pricing.hypothetical_savings:.2f}. Illustrative; verify every suggestion.")
                 if pricing.failures:
                     self.show_error(pricing.failure_summary)
                     self.totals.setText(self.totals.text() + "\n" + pricing.failure_summary)
@@ -1255,29 +1377,41 @@ class MainWindow(QMainWindow):
         self.description.setPlainText("Battery-powered environmental monitor with a status LED and two temperature sensors on a shared bus.")
         self.banner.show()
         self.banner.setText("DEMO · synthetic data · no API, IPC or board writes")
-        self.description.setReadOnly(True)
         self.settings.model = "demo"
+        sensor = (Pin("1", "+3V3", "V+"), Pin("2", "GND", "GND"), Pin("3", "SDA", "SDA"), Pin("4", "SCL", "SCL"))
+        components = (
+            Component("U1", "RP2040", "Package_DFN_QFN:QFN-56", (
+                Pin("1", "+3V3", "IOVDD"), Pin("2", "GND", "GND"), Pin("3", "SDA", "GPIO4"),
+                Pin("4", "SCL", "GPIO5"), Pin("5", "STATUS", "GPIO25"), Pin("6", "+1V1", "DVDD")),
+                position_mm=(20, 20)),
+            Component("C1", "100nF", "Capacitor_SMD:C_0402", (Pin("1", "+3V3"), Pin("2", "GND")), position_mm=(22, 20)),
+            Component("D1", "Green", "LED_SMD:LED_0603", (Pin("1", "GND", "K"), Pin("2", "STATUS", "A")), position_mm=(30, 20)),
+            Component("R1", "4.7k", "Resistor_SMD:R_0402", (Pin("1", "+3V3"), Pin("2", "SDA")), position_mm=(26, 24)),
+            Component("R2", "4.7k", "Resistor_SMD:R_0402", (Pin("1", "+3V3"), Pin("2", "SCL")), position_mm=(27, 24)),
+            Component("R3", "4.7k", "Resistor_SMD:R_0402", (Pin("1", "+3V3"), Pin("2", "SDA")), position_mm=(36, 24)),
+            Component("U2", "TMP102", "Package_TO_SOT_SMD:SOT-563", sensor, position_mm=(35, 20)),
+            Component("U3", "TMP102", "Package_TO_SOT_SMD:SOT-563", sensor, position_mm=(40, 20)))
+        self.audit_snapshot = DesignSnapshot(components, "demo")
+        self.findings = run_rules(self.audit_snapshot)
         self.audit = self.make_audit()
         self.audit.set_description(self.description.toPlainText())
-        pins = (Pin("1", "+3V3"), Pin("2", "GND"))
-        components = (Component("U1", "MCU", "QFN:32", pins, position_mm=(20, 20)),
-                      Component("C1", "10 µF", "Capacitor:0805", pins, position_mm=(22, 20)),
-                      Component("D1", "Status LED", "LED:0603", pins, position_mm=(30, 20)),
-                      Component("U3", "TMP102", "SOT:23-6", pins, position_mm=(35, 20)))
-        self.audit.load_design(DesignSnapshot(components, "demo"))
-        descriptions = ["Runs the sensing and reporting loop", "Supports the supply during transient loads",
-                        "Shows device activity at a glance", "Measures the same local temperature as U2"]
-        buckets = list(Bucket)
+        self.audit.load_design(self.audit_snapshot, tuple(self.findings))
+        self.description.setReadOnly(True)
+        descriptions = ["Runs the sensing and reporting loop", "Decouples the MCU supply",
+                        "Shows device activity at a glance", "SDA pull-up", "SCL pull-up",
+                        "Second SDA pull-up", "Measures board temperature", "Measures the same temperature as U2"]
+        buckets = list(Bucket) * 2
         for comp, text, bucket in zip(components, descriptions, buckets):
             self.audit.functions[comp.reference] = Function(text, text, .95)
             self.audit.verdicts[comp.reference] = Verdict(comp.reference, bucket, .95,
                 "Review the schematic and intended operating conditions before making a design change.")
         self.audit.stage = AuditStage.CLASSIFIED
         self.pricing = PricingSession(self.audit)
-        self.pricing.prices = {comp.reference: estimate_price(comp) for comp in components[2:]}
-        self.audit_step.setText("AUDIT COMPLETE · 4 components · 2 illustrative suggestions")
-        self.status.setText("Preview only. Real runs require your local tools and explicit confirmations.")
+        self.pricing.prices = {comp.reference: estimate_price(comp) for comp in components[5:]}
+        self.audit_step.setText(f"DEMO · {len(components)} parts checked on this computer; nothing was sent.")
+        self.status.setText("Preview only. Real runs use your open board or saved files.")
         self.usage_label.setText("Tokens: demo — no requests made")
+        self.show_findings_summary()
         self.render_cards()
         self.refresh_actions()
         self.pages.setEnabled(True)
