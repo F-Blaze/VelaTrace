@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from .audit import AuditSession, AuditStage, require_connectivity
 from .audit_rules import run_rules, summarize
+from .bom import bom_findings
 from .candidate import SafeCandidateValidator, trusted_via_catalog
 from .constraints import Constraint, ConstraintStore, Scope, propose_constraint
 from .dsn import ExportTicket, accept_export
@@ -35,6 +36,7 @@ from .ipc import KiCadReader
 from .kicad_cli import KiCadCli
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
+from .parts_db import download_catalogue, load_catalogue
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
@@ -624,6 +626,11 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.next_button, 1)
         buttons.addWidget(self.price_button)
         audit_layout.addLayout(buttons)
+        self.parts_button = QPushButton("Download JLCPCB parts list (~0.8 MB, optional)")
+        self.parts_button.setToolTip("Free public list of JLCPCB Basic parts. Enables Basic-part savings checks. "
+                                     "Downloaded once, then used offline; no board data is sent.")
+        self.parts_button.clicked.connect(self.download_parts)
+        audit_layout.addWidget(self.parts_button)
         self.annotations = QPushButton("Show / refresh board annotations")
         self.annotations.clicked.connect(self.show_annotations)
         audit_layout.addWidget(self.annotations)
@@ -751,6 +758,22 @@ class MainWindow(QMainWindow):
         self.approve_anyway_button.setEnabled(validated and bool(report.drc_violations))
         self.reject_button.setEnabled(self.routing is not None and self.routing.stage in {
             RoutingStage.PREVIEW, RoutingStage.SHORTFALL, RoutingStage.NEEDS_REASON, RoutingStage.VALIDATING})
+
+    def check_design(self, snapshot):
+        """Built-in rules plus BOM savings; the cached parts list is used only if downloaded."""
+        def bom(snap):
+            return bom_findings(snap, load_catalogue(self.config_dir))
+        return run_rules(snapshot, providers=[bom])
+
+    def download_parts(self):
+        def operation(_):
+            return download_catalogue(self.config_dir)
+        def success(_):
+            self.parts_button.setText("JLCPCB parts list downloaded (used offline)")
+            if getattr(self, "audit_snapshot", None) is not None:
+                self.findings = self.check_design(self.audit_snapshot)
+                self.render_cards()
+        self.run_work("Downloading the JLCPCB parts list", operation, success)
 
     def run_work(self, title, operation, success=None, failure=None):
         if self.worker is not None:
@@ -907,7 +930,7 @@ class MainWindow(QMainWindow):
             # carry no connectivity; they must not block the checks.
             snapshot = replace(snapshot, components=tuple(c for c in snapshot.components if c.nets))
             require_connectivity(snapshot)
-            return snapshot, run_rules(snapshot), reader, safety
+            return snapshot, self.check_design(snapshot), reader, safety
         def success(value):
             self.audit_snapshot, self.findings, self.reader, self.safety = value
             self.apply_theme(self.theme.currentText())
@@ -1392,7 +1415,7 @@ class MainWindow(QMainWindow):
             Component("U2", "TMP102", "Package_TO_SOT_SMD:SOT-563", sensor, position_mm=(35, 20)),
             Component("U3", "TMP102", "Package_TO_SOT_SMD:SOT-563", sensor, position_mm=(40, 20)))
         self.audit_snapshot = DesignSnapshot(components, "demo")
-        self.findings = run_rules(self.audit_snapshot)
+        self.findings = self.check_design(self.audit_snapshot)
         self.audit = self.make_audit()
         self.audit.set_description(self.description.toPlainText())
         self.audit.load_design(self.audit_snapshot, tuple(self.findings))
