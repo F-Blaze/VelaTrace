@@ -36,6 +36,8 @@ from .ipc import KiCadReader
 from .kicad_cli import KiCadCli
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
+from .report import render_report, save_report
+from . import __version__
 from .parts_db import cache_paths, download_catalogue, load_catalogue
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
@@ -725,6 +727,11 @@ class MainWindow(QMainWindow):
         self.parts_button.clicked.connect(self.download_parts)
         extras.addWidget(self.parts_button)
         extras.addSpacing(16)
+        self.report_button = tip(QPushButton("Save report"), "Single offline HTML file you can share")
+        self.report_button.setObjectName("textButton")
+        self.report_button.clicked.connect(self.export_report)
+        extras.addWidget(self.report_button)
+        extras.addSpacing(16)
         self.annotations = tip(QPushButton("Annotate board"), "Show each part's AI bucket on User.9 (temporary)")
         self.annotations.setObjectName("textButton")
         self.annotations.clicked.connect(self.show_annotations)
@@ -897,6 +904,7 @@ class MainWindow(QMainWindow):
         gate(self.price_button, "Not available in the demo." if self.demo else
              "Finish the AI review first." if stage != AuditStage.CLASSIFIED else
              "No flagged parts." if not self.audit.flags else "")
+        gate(self.report_button, "Check a design first." if self.audit_snapshot is None else "")
         gate(self.annotations, "Not available in the demo." if self.demo else
              "Finish the AI review first." if stage != AuditStage.CLASSIFIED else
              "Needs the open PCB." if self.safety is None else "")
@@ -923,6 +931,18 @@ class MainWindow(QMainWindow):
         def bom(snap):
             return bom_findings(snap, load_catalogue(self.config_dir))
         return run_rules(snapshot, providers=[bom])
+
+    def export_report(self):
+        name = Path(self.audit_snapshot.path or "design").stem or "design"
+        path, _ = QFileDialog.getSaveFileName(self, "Save report", f"{name}-velatrace.html", "HTML (*.html)")
+        if not path:
+            return
+        try:
+            save_report(path, render_report(self.audit_snapshot, list(self.findings), version=__version__))
+        except OSError as exc:
+            self.show_error(f"Could not save report: {exc}")
+            return
+        self.status.setText("Report saved.")
 
     def download_parts(self):
         def operation(_):
