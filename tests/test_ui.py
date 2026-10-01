@@ -110,23 +110,43 @@ class UiTests(unittest.TestCase):
                                                    protocol="openai", builtin_search=True)
         with patch("velatrace.ui.ask", return_value=True), patch.object(
                 self.window.audit.provider, "complete",
-                side_effect=ProviderError("Provider rejected the API key or permission.")):
+                side_effect=ProviderError("Provider rejected the API key or permission.")) as complete:
+            # A click whose estimate differs from the shown line only refreshes the line.
             self.window.price_parts()
+            complete.assert_not_called()
+            self.assertIsNone(self.window.worker)
+            self.assertIn("Pricing 1 flagged: ≤1 calls", self.window.cost_line.text())
+            self.window.price_parts()  # the click on the shown estimate is the consent
             self.wait_idle()
         self.assertIn("1 pricing search(es) failed", self.window.totals.text())
         self.assertIn("API key or permission", self.window.status.text())
         self.assertTrue(self.window.pricing.prices["U3"].estimated)
         self.assertTrue(self.window.cards["U3"].details.isHidden())
 
-    def test_function_edits_cannot_bypass_confirmation(self):
-        self.window.audit.stage = AuditStage.REVIEW_FUNCTIONS
+    def test_confirm_applies_edits_and_classification_waits_for_its_own_click(self):
+        audit = self.window.audit
+        audit.stage = AuditStage.REVIEW_FUNCTIONS
         self.window.render_cards()
         self.window.cards["U1"].function_edit.setText("Corrected MCU role")
-        with patch("velatrace.ui.ask", return_value=False), patch.object(self.window.audit, "estimate_classification") as count:
+        estimate = SimpleNamespace(input_tokens=1234, output_cap=4096, calls_max=3, method="exact",
+                                   confirmation_fingerprint="fp")
+        with patch("velatrace.ui.ask") as asked, patch.object(self.window, "authorize_provider", return_value=True), \
+                patch.object(audit, "estimate_classification", return_value=estimate) as count, \
+                patch.object(audit, "classify") as classify:
+            self.window.audit_next()  # inline Confirm functions: no dialog
+            self.wait_idle()
+            self.assertEqual(audit.functions["U1"].text, "Corrected MCU role")
+            self.assertEqual(audit.stage, AuditStage.CONFIRMED_FUNCTIONS)
+            count.assert_called_once()
+            classify.assert_not_called()  # the estimate is shown, not acted on
+            self.assertIn("1,234 tokens", self.window.cost_line.text())
+            self.assertEqual(self.window.next_button.text(), "Classify parts")
+            audit.stage, audit.estimate = AuditStage.CLASSIFICATION_ESTIMATE, estimate
             self.window.audit_next()
-        self.assertEqual(self.window.audit.functions["U1"].text, "Corrected MCU role")
-        self.assertEqual(self.window.audit.stage, AuditStage.REVIEW_FUNCTIONS)
-        count.assert_not_called()
+            self.wait_idle()
+            classify.assert_called_once()
+            self.assertEqual(classify.call_args.args[0], "fp")
+        asked.assert_not_called()
 
     def test_accepted_setup_retires_old_provider_even_when_router_check_fails(self):
         from PySide6.QtWidgets import QDialog
@@ -174,7 +194,7 @@ class UiTests(unittest.TestCase):
         with patch("velatrace.ui.ask") as ask:
             self.window.route()
         ask.assert_not_called()
-        self.assertIn("pending routing prompt", self.window.status.text())
+        self.assertIn("pending rule", self.window.status.text())
         self.window.routing = None
 
     def ready_route_preview(self):
@@ -206,9 +226,10 @@ class UiTests(unittest.TestCase):
     def test_approve_button_applies_once_without_regenerating_preview(self):
         from velatrace.routing import RoutingStage
         session, router, validator, writer = self.ready_route_preview()
-        with patch("velatrace.ui.ask", return_value=True):
-            self.window.approve_button.click()
+        with patch("velatrace.ui.ask") as asked:
+            self.window.approve_button.click()  # the click is the confirmation
             self.wait_idle()
+        asked.assert_not_called()
         writer.apply.assert_called_once_with(session.input, session.plan, session.report, drc_override=False)
         router.route.assert_not_called()
         validator.validate.assert_not_called()
@@ -433,7 +454,7 @@ class UiTests(unittest.TestCase):
 
     def test_route_approval_is_reachable_in_a_small_window(self):
         self.ready_route_preview()
-        self.window.route_summary.setText("A detailed validation warning for review. " * 12)
+        self.window.blocking("A detailed validation warning for review. " * 40)
         self.window.resize(700, 650)
         self.window.show()
         self.app.processEvents()
@@ -467,12 +488,13 @@ class UiTests(unittest.TestCase):
         self.assertTrue(self.window.isVisible())
         self.assertIsNotNone(self.window.safety)
         self.assertIn("Backup refused", self.window.status.text())
-        # A second close offers an explicit exit instead of retrying forever.
-        with patch("velatrace.ui.ask", return_value=True) as ask:
+        self.assertIn("Close again", self.window.status.text())
+        # A second close exits without a dialog instead of retrying forever.
+        with patch("velatrace.ui.ask") as ask:
             self.window.close()
             self.wait_idle()
             self.app.processEvents()
-        ask.assert_called_once()
+        ask.assert_not_called()
         self.assertIsNone(self.window.safety)
         self.assertFalse(self.window.isVisible())
 
@@ -493,7 +515,7 @@ class UiTests(unittest.TestCase):
                    if " · " in item.text() and item.text().split(" · ")[0] in {"Errors", "Warnings", "Savings", "Info"}]
         self.assertEqual(headers, ["Errors · 1", "Warnings · 3", "Savings · 1"])
         self.assertIn("1 error · 3 warnings · 1 saving · est. $0.01/board saving", self.window.totals.text())
-        self.assertIn("never removed automatically", self.window.totals.text())
+        self.assertIn("never removed automatically", self.window.totals.toolTip())
         card = self.window.finding_cards[0]
         self.assertEqual(card.finding.severity.value, "error")
         self.assertTrue(card.details.isHidden())
@@ -600,10 +622,8 @@ class SetupUsabilityTests(unittest.TestCase):
         self.assertTrue(window.description.isEnabled())
         self.assertTrue(window.load_button.isEnabled())
         self.assertFalse(window.placed.isEnabled())
-        self.assertTrue(window.setup_hint.isVisibleTo(window))
         self.assertIn("Click Setup", window.setup_hint.text())
-        window.command.setText("/autoroute")
-        window.run_command()
+        window.run_command("/autoroute")
         self.app.processEvents()
         # "Ready." after a mode change must not hide why routing is locked.
         self.assertTrue(window.setup_hint.isVisibleTo(window))
@@ -621,8 +641,7 @@ class SetupUsabilityTests(unittest.TestCase):
 
     def test_verified_setup_unlocks_routing(self):
         window = self.launch(accept=True)
-        window.command.setText("/autoroute")
-        window.run_command()
+        window.mode_buttons[__import__("velatrace.routing", fromlist=["Mode"]).Mode.ROUTING].click()
         self.settle(window)
         self.assertTrue(window.placed.isEnabled())
         self.assertFalse(window.setup_hint.isVisibleTo(window))
@@ -663,7 +682,7 @@ class SetupUsabilityTests(unittest.TestCase):
         self.assertNotIn("Stopped", window.status.text())
         self.assertEqual([card.finding.rule for card in window.finding_cards], ["duplicate.parallel_ic"])
         self.assertIn("1 saving", window.totals.text())
-        self.assertIn("nothing was sent", window.audit_step.text())
+        self.assertIn("nothing was sent", window.audit_step.toolTip())
         self.assertTrue(window.next_button.isEnabled())
         self.assertFalse(window.price_button.isVisibleTo(window))
 
@@ -710,7 +729,7 @@ class SetupUsabilityTests(unittest.TestCase):
         if window.frameGeometry().width() <= screen.width():
             self.assertLessEqual(window.frameGeometry().right(), screen.right())
         self.assertGreaterEqual(window.frameGeometry().left(), screen.left())
-        self.assertIn("press Enter", window.command.placeholderText())
+        self.assertIn("Ctrl+Enter", window.load_button.toolTip())
 
 
 if __name__ == "__main__":
