@@ -14,7 +14,7 @@ from types import SimpleNamespace
 try:
     from PySide6.QtWidgets import QApplication
     from PySide6.QtCore import Qt
-    from velatrace.ui import MainWindow, ComponentCard, RouteCanvas
+    from velatrace.ui import MainWindow, ComponentCard, FindingCard, RouteCanvas
 except ImportError:
     QApplication = None
 
@@ -487,6 +487,40 @@ class UiTests(unittest.TestCase):
         self.assertFalse(canvas.grab().isNull())
         canvas.close()
 
+    def test_findings_are_grouped_by_severity_and_expand_in_place(self):
+        from PySide6.QtWidgets import QLabel
+        headers = [item.text() for item in self.window.card_container.findChildren(QLabel)
+                   if " · " in item.text() and item.text().split(" · ")[0] in {"Errors", "Warnings", "Savings", "Info"}]
+        self.assertEqual(headers, ["Errors · 1", "Warnings · 3", "Savings · 1"])
+        self.assertIn("1 error · 3 warnings · 1 saving · est. $0.01/board saving", self.window.totals.text())
+        self.assertIn("never removed automatically", self.window.totals.text())
+        card = self.window.finding_cards[0]
+        self.assertEqual(card.finding.severity.value, "error")
+        self.assertTrue(card.details.isHidden())
+        from PySide6.QtTest import QTest
+        QTest.mouseClick(card, Qt.MouseButton.LeftButton)
+        self.assertFalse(card.details.isHidden())
+        self.assertIn("Fix:", card.details.text())
+
+    def test_finding_text_is_plain_and_locate_hook_is_reserved(self):
+        from decimal import Decimal
+        from PySide6.QtWidgets import QLabel, QPushButton
+        from velatrace.findings import Finding, Severity
+        finding = Finding("x", Severity.SAVING, "<b>R1</b> <a href=evil>x</a>", ("R1",),
+                          evidence="<img src=x>", fix="remove", cost_delta=Decimal("-0.05"))
+        card = FindingCard(finding)
+        labels = card.findChildren(QLabel)
+        self.assertTrue(all(item.textFormat() == Qt.TextFormat.PlainText for item in labels))
+        self.assertIn("−$0.05/board", card.details.text())
+        self.assertEqual(card.findChildren(QPushButton), [])  # no zoom button until it exists
+        located = []
+        with_hook = FindingCard(finding, locate=located.append)
+        with_hook.findChildren(QPushButton)[0].click()
+        self.assertEqual(located, [("R1",)])
+        self.assertFalse(self.window.can_zoom())
+        card.deleteLater()
+        with_hook.deleteLater()
+
 
 @unittest.skipIf(QApplication is None, "Install the pinned Qt UI dependency")
 class SetupUsabilityTests(unittest.TestCase):
@@ -500,15 +534,26 @@ class SetupUsabilityTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.config = Path(self.temp.name)
 
-    def launch(self, accept, check_startup=None):
+    def launch(self, accept=None, check_startup=None):
+        """Launch without Setup; accept=True/False then opens Setup once like a click."""
         from PySide6.QtWidgets import QDialog
         from velatrace import ui
         code = QDialog.DialogCode.Accepted if accept else QDialog.DialogCode.Rejected
-        with patch.object(ui.SettingsDialog, "exec", lambda dialog: code), \
+        self.dialogs = []
+        def dialog_exec(dialog):
+            self.dialogs.append(dialog)
+            return code
+        # Hermetic: a developer's VELATRACE_* router variables must not leak in.
+        clean = {key: value for key, value in os.environ.items() if not key.startswith("VELATRACE_")}
+        with patch.dict(os.environ, clean, clear=True), \
+                patch.object(ui.SettingsDialog, "exec", dialog_exec), \
                 patch.object(ui.Freerouting, "check_startup", check_startup or (lambda router: None)):
             window = MainWindow(config_dir=self.config)
             window.show()
             self.settle(window)
+            if accept is not None:
+                window.configure()
+                self.settle(window)
         self.addCleanup(self.shut, window)
         return window
 
@@ -525,6 +570,30 @@ class SetupUsabilityTests(unittest.TestCase):
         self.settle(window)
         window.close()
         self.assertTrue(window.executor.wait(5000))
+        self.assertTrue(window.drc_executor.wait(5000))
+        # Free Qt objects on the Qt thread now; a later cyclic GC (possibly while
+        # another test's threads run) must not be the one to destroy them.
+        window.deleteLater()
+        from PySide6.QtCore import QEvent
+        self.app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.dialogs = []
+        gc.collect()
+
+    def test_launch_opens_no_dialog_and_audit_needs_no_setup(self):
+        window = self.launch()
+        self.assertEqual(self.dialogs, [])
+        self.assertTrue(window.load_button.isEnabled())
+        self.assertFalse(window.ready)
+        self.assertIn("Click Setup", window.setup_hint.text())
+
+    def test_saved_router_is_verified_quietly_at_launch(self):
+        from velatrace.ui import Settings
+        Settings(jar="C:/tools/freerouting.jar").save(self.config / "settings.json")
+        checked = []
+        window = self.launch(check_startup=lambda router: checked.append(router))
+        self.assertEqual(self.dialogs, [])
+        self.assertEqual(len(checked), 1)
+        self.assertTrue(window.ready)
 
     def test_audit_is_usable_and_routing_lock_is_explained_before_setup(self):
         window = self.launch(accept=False)
@@ -572,6 +641,66 @@ class SetupUsabilityTests(unittest.TestCase):
         self.assertEqual((damaged.cap, damaged.key), (40, ""))
         path.write_text("not json", encoding="utf-8")
         Settings().load(path)  # A damaged file never blocks launch.
+
+    def read_fixture(self, window):
+        from velatrace import ui
+        fixture = Path(__file__).parent / "fixtures" / "audit" / "necessity.xml"
+        window.source.setCurrentIndex(2)
+        no_dialog = AssertionError("zero-setup audit must not open a dialog")
+        with patch.object(ui.QFileDialog, "getOpenFileName", return_value=(str(fixture), "")), \
+                patch("velatrace.ui.ask", side_effect=no_dialog) as asked, \
+                patch.object(ui.QMessageBox, "exec", side_effect=no_dialog):
+            window.load_design()
+            self.settle(window)
+        asked.assert_not_called()
+
+    def test_zero_setup_check_shows_findings_with_no_provider_or_dialog(self):
+        window = self.launch()
+        self.assertEqual(window.settings.model, "")  # no provider configured at all
+        self.read_fixture(window)
+        self.assertEqual(self.dialogs, [])
+        self.assertIsNone(window.audit)  # nothing was sent anywhere
+        self.assertNotIn("Stopped", window.status.text())
+        self.assertEqual([card.finding.rule for card in window.finding_cards], ["duplicate.parallel_ic"])
+        self.assertIn("1 saving", window.totals.text())
+        self.assertIn("nothing was sent", window.audit_step.text())
+        self.assertTrue(window.next_button.isEnabled())
+        self.assertFalse(window.price_button.isVisibleTo(window))
+
+    def test_logos_with_duplicate_refs_do_not_block_the_checks(self):
+        from velatrace.models import DesignSnapshot, Pin
+        parts = (Component("REF**", "LOGO", "Symbol:Logo", ()), Component("REF**", "LOGO", "Symbol:Logo", ()),
+                 Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"))))
+        with patch("velatrace.ui.read_xml_netlist", return_value=DesignSnapshot(parts, "fixture")):
+            window = self.launch()
+            self.read_fixture(window)
+        self.assertNotIn("Stopped", window.status.text())
+        self.assertEqual([c.reference for c in window.audit_snapshot.components], ["U1"])
+        self.assertEqual(window.finding_cards[0].finding.rule, "decoupling.missing")
+
+    def test_explain_with_ai_without_provider_points_to_setup_without_dialog(self):
+        window = self.launch()
+        self.read_fixture(window)
+        with patch("velatrace.ui.ask") as asked:
+            window.audit_next()
+        asked.assert_not_called()
+        self.assertIsNone(window.audit)
+        self.assertIn("Setup", window.status.text())
+        self.assertEqual(len(window.finding_cards), 1)  # findings stay on screen
+
+    def test_explain_with_ai_sends_findings_as_context_after_consent(self):
+        from velatrace.audit import AuditSession
+        window = self.launch()
+        self.read_fixture(window)
+        window.settings.model, window.settings.key = "test-model", "synthetic-key"
+        with patch("velatrace.ui.ask", return_value=True) as consent, \
+                patch.object(AuditSession, "infer_functions", return_value={}) as infer:
+            window.audit_next()
+            self.settle(window)
+        consent.assert_called_once()  # the privacy notice stays on the optional path
+        infer.assert_called_once()
+        self.assertEqual(window.audit.findings, tuple(window.findings))
+        self.assertTrue(window.description.isReadOnly())
 
     def test_disabled_inputs_look_disabled_and_window_is_on_screen(self):
         window = self.launch(accept=False)

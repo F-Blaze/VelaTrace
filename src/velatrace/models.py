@@ -9,6 +9,11 @@ class Pin:
     number: str
     net: str
     name: str = ""
+    # Schematic electrical type (e.g. "power_in", "input", "passive"); "" when the
+    # source does not provide it (the PCB IPC path does not).
+    electrical_type: str = ""
+    # Absolute pad position on the board; None for schematic/netlist sources.
+    position_mm: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)

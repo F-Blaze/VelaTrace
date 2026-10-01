@@ -39,7 +39,7 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
                 raise ValidationError("Netlist contains duplicate or conflicting pin membership.")
             membership[key] = name
             pins.setdefault(node.get("ref", ""), []).append(
-                Pin(node.get("pin", ""), name, node.get("pinfunction", "")))
+                Pin(node.get("pin", ""), name, node.get("pinfunction", ""), node.get("pintype", "")))
     components = []
     references: set[str] = set()
     for comp in root.findall("./components/comp"):

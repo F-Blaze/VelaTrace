@@ -2,7 +2,9 @@
 
 VelaTrace has no backend and no telemetry. At runtime its remote API requests go only to the HTTPS endpoint you configure, using your own API key. It connects to KiCad through local IPC. Freerouting runs as a separate process with network access denied by the verified Java policy. Provider-side search can contact the provider's search services; that processing is outside the plugin and follows their terms. Installation downloads are separate from runtime activity.
 
-Before the first analysis, a notice identifies the provider and endpoint and explains that component fields, connectivity, your description and corrections are sent with your key. Gemini token-count requests also send the actual prompt. Avoid confidential/NDA designs unless you trust that provider. Declining prevents analysis; a changed endpoint, protocol, enabled-search setting or notice version requires fresh acceptance. The notice precedes inference, token counting, classification and pricing.
+**Check design** runs entirely on this computer: it reads KiCad over local IPC or a saved file and sends nothing anywhere. Only the optional **Explain with AI** step contacts a provider.
+
+Before the first AI analysis, a notice identifies the provider and endpoint and explains that component fields, connectivity, your description and corrections are sent with your key. Gemini token-count requests also send the actual prompt. Avoid confidential/NDA designs unless you trust that provider. Declining prevents analysis; a changed endpoint, protocol, enabled-search setting or notice version requires fresh acceptance. The notice precedes inference, token counting, classification and pricing.
 
 Keys can be entered in Setup or supplied through `VELATRACE_API_KEY`. VelaTrace keeps keys in process memory, hides them in settings representations, and does not write them to its configuration, router arguments or logs. Keys inherited from the environment are removed from the local-tool child environments. Your shell or operating system may retain environment configuration you create independently.
 

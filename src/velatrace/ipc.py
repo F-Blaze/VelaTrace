@@ -45,7 +45,10 @@ class KiCadReader:
                 reference=fp.reference_field.text.value,
                 value=fp.value_field.text.value,
                 footprint=f"{library.library}:{library.name}",
-                pins=tuple(Pin(pad.number, pad.net.name) for pad in fp.definition.pads),
+                # Footprint children carry absolute board positions (kipy docs).
+                pins=tuple(Pin(pad.number, pad.net.name,
+                               position_mm=(pad.position.x / 1_000_000, pad.position.y / 1_000_000))
+                           for pad in fp.definition.pads),
                 fields=fields,
                 position_mm=(fp.position.x / 1_000_000, fp.position.y / 1_000_000),
                 uuid=fp.id.value,

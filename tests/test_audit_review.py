@@ -105,4 +105,19 @@ class AuditReview(unittest.TestCase):
   s=self.session(); s.infer_functions(); s.confirm_functions(); e=s.estimate_classification(); s.classify(e.confirmation_fingerprint)
   pricing=PricingSession(s); pe=pricing.prepare(); self.assertEqual(pe.flagged_count,1); self.assertEqual(pe.max_http_calls,0)
   prices=pricing.run(pe.fingerprint); self.assertEqual(set(prices),{'U2'}); self.assertIn('estimate only — no part number found',prices['U2'].note)
+class RuleContext(unittest.TestCase):
+ def test_rule_findings_reach_both_prompts_without_pad_coordinates(self):
+  from velatrace.audit_rules import run_rules
+  parts=tuple(replace(c,pins=tuple(replace(p,position_mm=(1.0,2.0)) for p in c.pins)) for c in SENSORS)
+  snapshot=DesignSnapshot(parts,'fixture'); findings=tuple(run_rules(snapshot,providers=()))
+  self.assertTrue(findings)
+  s=AuditSession(FakeProvider()); s.set_description('Temperature monitor'); s.load_design(snapshot,findings)
+  s.infer_functions(); s.confirm_functions(); s.estimate_classification()
+  for prompt,_ in s.provider.calls:
+   self.assertIn('rule_findings',prompt.user); self.assertIn(findings[0].rule,prompt.user)
+   self.assertNotIn('[1.0, 2.0]',prompt.user)
+  self.assertIn('rule_findings',s._build_classification_prompt().user)
+ def test_no_findings_keeps_prompt_free_of_rule_section(self):
+  s=AuditSession(FakeProvider()); s.set_description('Temperature monitor'); s.load_design(DesignSnapshot(SENSORS,'fixture'))
+  s.infer_functions(); self.assertNotIn('rule_findings',s.provider.calls[0][0].user)
 if __name__=='__main__': unittest.main(verbosity=2)
