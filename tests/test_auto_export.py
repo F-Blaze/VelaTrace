@@ -54,6 +54,7 @@ class AutoExportTests(unittest.TestCase):
         (self.user_config / "10.0").mkdir(parents=True)
         (self.user_config / "10.0" / "kicad_common.json").write_text("{}", encoding="utf-8")
         cli = object.__new__(KiCadCli)
+        cli.config_directory = None
         cli.executable, cli.timeout, cli.version = self.root / "kicad-cli.exe", 5, (10, 0, 6)
         cli._config_lock, cli.python, cli._export_home = threading.Lock(), self.python, None
         self.cli = cli

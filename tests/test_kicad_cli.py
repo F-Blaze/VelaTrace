@@ -35,6 +35,19 @@ class KiCadCliTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 parse_drc_report(path)
 
+    def test_benchmark_drc_config_never_reads_personal_config(self):
+        cli = object.__new__(KiCadCli)
+        cli.version = (10, 0, 6)
+        cli._config_homes, cli._config_lock = {}, threading.Lock()
+        with tempfile.TemporaryDirectory() as directory:
+            cli.config_directory = Path(directory)
+            with patch('velatrace.kicad_cli.user_config_dir', side_effect=AssertionError('personal config read')), \
+                    patch.object(cli, '_run', return_value=1) as run:
+                home = cli._drc_config_home(frozenset({'VelaTrace'}))
+                self.assertTrue(home.is_dir())
+                self.assertFalse((home / '10.0' / 'kicad_common.json').exists())
+                self.assertEqual(run.call_args.args[-1], home)
+
     def test_missing_cli_is_actionable(self):
         with patch("velatrace.kicad_cli.shutil.which", return_value=None):
             with self.assertRaisesRegex(CapabilityError, "Install KiCad 9"):

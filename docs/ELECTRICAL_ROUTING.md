@@ -95,6 +95,13 @@ It identifies endpoint normalization and a better candidate backend as work stil
 needed before comparing electrical performance. These tiny synthetic fixtures
 cannot establish performance on engineering designs.
 
+After integration with main through `61daf7f` (one-click routing, audit updates,
+and trimmed DRC library tables), the full regression suite passed **490 tests and
+199 subtests**, with four optional native tests skipped. Lint passed. A separate
+post-merge four-layer native rerun again correctly selected no winner: baseline
+9.12 s, portfolio 29.58 s. The prototype has not been installed into the user's
+production plugin or enabled in its UI.
+
 ## Remaining engineering gates
 
 1. Import confirmed endpoint-specific electrical requirements and fabrication
