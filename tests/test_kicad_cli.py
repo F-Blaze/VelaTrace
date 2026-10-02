@@ -11,6 +11,18 @@ from velatrace.kicad_cli import KiCadCli, local_tool_environment, parse_drc_repo
 
 
 class KiCadCliTests(unittest.TestCase):
+    def test_config_override_is_per_instance_and_preserves_parent_environment(self):
+        # Avoid depending on an installed native CLI for environment selection.
+        cli = object.__new__(KiCadCli)
+        cli.config_directory = Path('isolated').resolve()
+        with patch.dict(os.environ, {'KICAD_CONFIG_HOME': 'user-settings', 'SECRET_KEY': 'not-for-child'}):
+            child = cli._environment()
+            self.assertEqual(child['KICAD_CONFIG_HOME'], str(cli.config_directory))
+            self.assertEqual(os.environ['KICAD_CONFIG_HOME'], 'user-settings')
+            self.assertNotIn('SECRET_KEY', child)
+            cli.config_directory = None
+            self.assertEqual(cli._environment()['KICAD_CONFIG_HOME'], 'user-settings')
+
     def test_required_drc_counts(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "drc.json"

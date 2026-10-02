@@ -79,7 +79,8 @@ def parse_drc_report(path: Path) -> DrcResult:
 
 
 class KiCadCli:
-    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 120):
+    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 120, *,
+                 config_directory: Path | None = None):
         found = shutil.which(str(executable))
         if not found:
             raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its executable path.")
@@ -89,15 +90,22 @@ class KiCadCli:
         if not isinstance(timeout, (float, int)) or not 0 < timeout <= 600:
             raise ValidationError("KiCad CLI timeout must be between 0 and 600 seconds.")
         self.timeout = timeout
+        self.config_directory = Path(config_directory).resolve() if config_directory is not None else None
         self.version: tuple[int, int, int] | None = None
         self._exportable: set[tuple] = set()  # (schematic, project) digests proven exportable
         self._export_lock = threading.Lock()
+
+    def _environment(self):
+        environment = local_tool_environment()
+        if self.config_directory is not None:
+            environment['KICAD_CONFIG_HOME'] = str(self.config_directory)
+        return environment
 
     def check_startup(self) -> tuple[int, int, int]:
         try:
             result = subprocess.run([str(self.executable), "version"], shell=False,
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                    timeout=10, check=False, env=local_tool_environment(),
+                                    timeout=10, check=False, env=self._environment(),
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise CapabilityError("Cannot run kicad-cli. Check the configured KiCad installation.") from exc
@@ -122,7 +130,7 @@ class KiCadCli:
         try:
             result = subprocess.run([str(self.executable), *arguments], cwd=cwd, shell=False,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                    timeout=self.timeout, check=False, env=local_tool_environment(),
+                                    timeout=self.timeout, check=False, env=self._environment(),
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except subprocess.TimeoutExpired as exc:
             raise CapabilityError("KiCad CLI timed out; no verified result is available.") from exc

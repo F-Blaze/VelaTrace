@@ -22,6 +22,11 @@ VelaTrace is a companion window for KiCad's PCB Editor. It does two things:
 1. **Audit** — reads real pad/net connectivity and tells you which parts are critical, important, nice-to-have or redundant, with cost and savings estimates.
 2. **Route** — runs [Freerouting](https://github.com/freerouting/freerouting) on your placed board and lets you preview, validate and approve the result before a single track touches your copper.
 
+Development work on electrically aware multilayer routing now includes strict
+stackup/geometry APIs and a local 4/6/8-layer candidate benchmark. These are
+experimental and are not yet an electrical-routing option in the companion
+window. See [scope, benchmark instructions and remaining gates](docs/ELECTRICAL_ROUTING.md).
+
 ## Why VelaTrace
 
 - **Connectivity-aware, not guesswork.** Classification starts from actual pad/net connectivity (open PCB, or a saved schematic/XML netlist), not just reference designators. Two parts on the same rail are not called duplicates unless value, footprint and pin connectivity match.
