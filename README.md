@@ -1,6 +1,6 @@
 # VelaTrace
 
-**Catch design mistakes, cut your BOM cost and autoroute safely — inside KiCad. Free offline checks, optional bring-your-own-key AI, no telemetry, every change previewed and undoable.**
+**Free and local: audit your KiCad design, find BOM savings, and autoroute safely — nothing leaves your machine, undo anytime.**
 
 [![License: MIT](https://img.shields.io/github/license/F-Blaze/VelaTrace)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/F-Blaze/VelaTrace/ci.yml?branch=main&label=CI)](https://github.com/F-Blaze/VelaTrace/actions/workflows/ci.yml)
@@ -8,7 +8,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![KiCad 9+](https://img.shields.io/badge/KiCad-9%2B%20(tested%2010.0)-314cb0)](https://www.kicad.org/)
 
-<!-- TODO: hero GIF of audit → route preview → approve -->
+<!-- HERO GIF: docs/hero.gif -->
 
 <p align="center">
   <img src="docs/ui-demo.png" alt="VelaTrace audit: offline findings grouped as errors, warnings and savings, with a per-board saving estimate" width="340">
@@ -17,21 +17,38 @@
 </p>
 <p align="center"><sub>Screenshots use the built-in synthetic demo (<code>python -m velatrace --demo</code>): no API, IPC or board writes.</sub></p>
 
-VelaTrace is a companion window for KiCad's PCB Editor. It does two things:
+VelaTrace is a companion window for KiCad's PCB Editor. Its mission is to save hardware designers time and money, and it is free: the checks run offline, AI is optional, and there is no paid service behind it.
 
-1. **Audit** — reads real pad/net connectivity and runs free, offline design checks (decoupling, I2C pull-ups, LED resistors, dangling nets, duplicated parts and more) with concrete fixes and savings. An optional AI pass explains the findings.
-2. **Route** — runs [Freerouting](https://github.com/freerouting/freerouting) on your placed board and lets you preview, validate and approve the result before a single track touches your copper.
+## Features
 
-## Why VelaTrace
+- **Offline design audit.** Rule checks on real pad/net connectivity: missing or distant decoupling capacitors, I2C pull-ups (missing, redundant, wrong value), LEDs without a series resistor, single-pin nets, floating IC inputs, duplicated ICs, unprotected power connectors, 0 Ω shorts and unset values. No key, no network. [Rule list](docs/behavior-and-limits.md#built-in-audit-checks)
+- **BOM savings.** Consolidates equivalent values and packages (`100n` / `0.1uF` / `100nF`) and, with an opt-in, free JLCPCB parts list, flags Extended parts that have a Basic equivalent. [Details](docs/bom.md)
+- **Optional AI explanation.** Bring your own key (Gemini or any OpenAI-compatible endpoint) for plain-language explanations. Token counts and a hard call budget are shown first; the key stays in memory.
+- **Shareable offline report.** **Save report** writes one self-contained HTML file (no scripts, no external requests). [Details](docs/report.md)
+- **One-click routing.** **Route board** runs pre-flight checks, exports the DSN, runs [Freerouting](https://github.com/freerouting/freerouting), draws a `User.9` preview, then validates it with KiCad DRC in the background. **Approve** (or **Approve anyway**, after a confirmation that lists the findings) writes the copper as a single undoable commit, after a backup. **Cancel routing** stops a run.
+- **Optional warm router.** Opt in to keep one verified Freerouting JVM running so repeat routes start faster.
+- **Safe by construction.** Suggestions only: VelaTrace never deletes a component. Backup before every live write, KiCad's official IPC API only (no SWIG/`pcbnew`), no backend, no telemetry. [Write safety](docs/write-safety.md)
 
-- **Connectivity-aware, not guesswork.** Checks and AI classification start from actual pad/net connectivity (open PCB, or a saved schematic/XML netlist), not just reference designators. Two parts on the same rail are not called duplicates unless value, footprint and pin connectivity match.
-- **Suggestions, never deletions.** Verdicts are advice. VelaTrace never removes a component; you approve everything.
-- **Code does the math.** Flags, Decimal totals, hypothetical savings and token counts are computed in code. The model supplies judgments only.
-- **Safe routing pipeline.** Preview on `User.9` → DRC-validate against your live board (only errors and newly introduced warnings block; pre-existing warnings are reported) → approve → one undoable IPC commit. Rejecting requires a reason.
-- **Backup before every write.** The saved board, live board and project are copied to `.velatrace/backups` beside your board before any live change, including preview creation and cleanup.
-- **Bring your own key.** Gemini or any Groq/OpenAI-compatible endpoint. Token counts and a hard call budget are shown and confirmed before each call.
-- **No backend, no telemetry.** Requests go only to the endpoint you configure. Freerouting runs as a separate process with network access denied.
-- **Official API only.** Uses KiCad's IPC API via [kicad-python](https://pypi.org/project/kicad-python/), never legacy SWIG/`pcbnew` bindings.
+## Comparison
+
+| | VelaTrace | Stock Freerouting KiCad plugin | Cloud AI routers |
+|---|---|---|---|
+| Runs where | Your machine | Your machine | Vendor's cloud (board is uploaded) |
+| Cost | Free, MIT | Free | Varies by service |
+| Preview before applying | Yes (`User.9` layer) | Not built in | Varies |
+| DRC gate before approval | Yes (background KiCad DRC; explicit override) | Not built in | Varies |
+| Single undo of the result | Yes (one IPC commit, backup first) | Not built in | Varies |
+| Design audit and BOM savings | Yes, offline | No | Varies |
+
+This reflects our reading of each tool's public documentation at the time of writing; "varies" means it differs between services. Freerouting itself does the actual routing in both local options. Corrections welcome via an issue.
+
+## Audit accuracy
+
+The audit favours silence over guessing: a check stays quiet when the data cannot show a problem clearly. How often it is right on real boards is being measured.
+
+<!-- BENCHMARK RESULTS: filled after measurement -->
+
+Found a wrong or missing finding? Please file an [audit false positive](https://github.com/F-Blaze/VelaTrace/issues/new?template=audit_false_positive.yml) report; they directly improve the rules.
 
 ## Quickstart
 
