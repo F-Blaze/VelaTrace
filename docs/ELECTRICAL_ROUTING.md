@@ -25,10 +25,11 @@ constraints, independent verification and measured candidate selection around it
   and complete constraint evidence. Ranking is total unique track length, then
   unique vias. It revalidates the winner so mutable writer evidence cannot belong
   to a different candidate. Cancellation and changed inputs invalidate results.
-- `route_cleanup.consolidate_collinear` creates a candidate with exactly the same
-  quantized copper coverage using fewer overlapping collinear track objects. Its
-  output still requires DRC; equal copper coverage does not guarantee that KiCad
-  considers the new object endpoints valid.
+- `route_repair.repair_dangling` removes only new route segments identified by
+  official KiCad DRC as dangling. Trials preserve item identifiers, must retain
+  full connectivity and introduce no new issue, and are bounded by pass/time
+  limits. A final ordinary validation must prove the repaired plan clean. Vias,
+  other warnings and unsupported SES geometry are never silently repaired.
 
 These APIs and the benchmark are experimental. The companion window retains its
 existing routing workflow; these additions do not claim electrical approval in the
@@ -55,7 +56,7 @@ The synthetic stackup material is explicitly declared, not inferred FR-4.
 
 The baseline uses the pinned external Freerouting process once. The portfolio
 tries all permitted signal layers, outer layers only, and outer layers plus the
-first inner layer, with candidate consolidation and without changing mandatory
+first inner layer, with DRC-guided dangling-segment repair and without changing mandatory
 design rules. Both receive the
 same wall-time budget, including validation and final winner revalidation.
 Cold JVM mode and a single routing thread are fixed. Startup and DRC are bounded
@@ -101,6 +102,39 @@ and trimmed DRC library tables), the full regression suite passed **490 tests an
 post-merge four-layer native rerun again correctly selected no winner: baseline
 9.12 s, portfolio 29.58 s. The prototype has not been installed into the user's
 production plugin or enabled in its UI.
+
+## DRC-guided repair results, 2026-10-02
+
+The next experiment replaces consolidation with the bounded `repair_dangling`
+step described above. In two runs, the repaired portfolio produced a fully
+connected, independently accepted candidate for every 4/6/8-layer fixture.
+The single-run baseline produced no accepted candidate in either run.
+
+| Signal layers | Run 1 portfolio | Run 2 portfolio | Run 2 copper length | Vias |
+| --- | ---: | ---: | ---: | ---: |
+| 4 | 41.27 s | 55.98 s | 235.618 mm | 8 |
+| 6 | 36.72 s | 49.69 s | 233.910 mm | 8 |
+| 8 | 47.27 s | 51.88 s | 237.659 mm | 8 |
+
+Acceptance means zero unconnected items and zero new/blocking DRC issues under
+the existing rules; eight footprint warnings already present on the synthetic
+source board remain reported. Source boards, projects and DSNs stayed unchanged.
+The second run's eight-layer baseline recorded a 1,711.98 s callback overrun and
+was rejected for exceeding its 180 s budget. That timing outlier is not usable
+as evidence of router speed. Other baseline attempts failed strict SES parsing
+or retained new copper DRC issues. These results support the repair step on this
+small corpus; they do not establish superiority over other routers, plane
+continuity, differential matching or signal integrity. The baseline performs
+one engine attempt while the portfolio may perform three within the same time
+allowance, so the portfolio consumes more work on these easy fixtures.
+
+Cleanup is deliberately absent from the live preview/approval workflow until
+that integration is independently tested. In particular, validation must never
+silently change a plan after its preview has already been displayed.
+
+Final local validation of this milestone: **500 tests and 199 subtests passed**,
+four optional native tests skipped, and lint clean. Native comparisons above ran
+separately against installed tools; they are not simulated by the unit tests.
 
 ## Remaining engineering gates
 

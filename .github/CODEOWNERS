@@ -24,7 +24,7 @@
 /src/velatrace/portfolio.py @F-Blaze
 /src/velatrace/stackup.py @F-Blaze
 /src/velatrace/benchmark.py @F-Blaze
-/src/velatrace/route_cleanup.py @F-Blaze
+/src/velatrace/route_repair.py @F-Blaze
 
 # Writes outside the project: application config, consent, temp reports, demo export.
 /src/velatrace/privacy.py @F-Blaze

@@ -126,7 +126,7 @@ def run_benchmark(output: Path, *, jar: Path, java: Path, kicad_cli: Path,
     """
     from .electrical_rules import ElectricalRules, NetRule, compile_electrical_dsn, validate_plan_rules
     from .portfolio import CandidateProducer, PortfolioBudget, explore_candidates
-    from .route_cleanup import consolidate_collinear
+    from .route_repair import repair_dangling
     from .stackup import read_stackup
     if isinstance(seconds, bool) or not math.isfinite(seconds) or not 10 <= seconds <= 3600:
         raise ValidationError('Benchmark budget must be 10–3600 seconds per solver per fixture.')
@@ -197,7 +197,7 @@ def run_benchmark(output: Path, *, jar: Path, java: Path, kicad_cli: Path,
                     prefix = workspace / f'candidate-{emitted}'
                     started = time.monotonic()
                     attempt = {'rules': asdict(rules), 'timeout_seconds': router.timeout, 'status': 'failed',
-                               'consolidate_collinear': solver == 'portfolio'}
+                               'repair_dangling': solver == 'portfolio'}
                     router.last_log = ''
                     try:
                         compiled = compile_electrical_dsn(contents['crossed.dsn'], rules)
@@ -212,7 +212,12 @@ def run_benchmark(output: Path, *, jar: Path, java: Path, kicad_cli: Path,
                         if failures:
                             raise ValidationError('; '.join(failures))
                         if solver == 'portfolio':
-                            plan = consolidate_collinear(plan)
+                            remaining_repair = remaining - (time.monotonic() - started)
+                            if remaining_repair > 0:
+                                repair = repair_dangling(plan, dsn, (), validator,
+                                                         timeout_seconds=min(30, remaining_repair))
+                                attempt['repair'] = asdict(repair)
+                                plan = repair.plan
                         attempt['status'] = 'routed'
                         return plan
                     except Exception as exc:
