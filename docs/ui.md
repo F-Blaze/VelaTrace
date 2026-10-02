@@ -3,10 +3,13 @@
 Run `python -m velatrace` or the KiCad IPC action to open one always-on-top
 window, initially positioned at the right edge of the primary display. Move it
 beside KiCad. KiCad's public IPC interface does not expose docking or the native
-window rectangle. VelaTrace never uses legacy `pcbnew` bindings.
+window rectangle. VelaTrace never loads legacy `pcbnew` bindings into its own
+process; only the one-click DSN export runs KiCad's bundled Python, separately.
 
-Routing has two separate actions: **Generate routing preview**, then **Approve and
-apply copper**. User.9 graphics are non-copper and do not clear the ratsnest.
+Routing has two actions: **Route board**, then **Approve and apply copper**.
+**Route board** reads the open board through IPC (no save needed), runs the
+pre-flight checks, exports the DSN with KiCad's own exporter, routes and draws
+the preview. No checkbox, no file picker, no export dialog. User.9 graphics are non-copper and do not clear the ratsnest.
 Approval uses the validated route without rerunning Freerouting. Blocking DRC
 types are shown separately from pre-existing warnings. The routing page scrolls
 so approval remains reachable on smaller screens.
@@ -14,7 +17,7 @@ so approval remains reachable on smaller screens.
 The User.9 preview is drawn as soon as Freerouting's result is imported. Candidate
 KiCad DRC then runs on a separate background thread while the status reads
 **Checking DRC…**; approval stays disabled until it finishes. Reject and
-**Generate routing preview** stay usable meanwhile: rejecting, rerouting, changing
+**Route board** stay usable meanwhile: rejecting, rerouting, changing
 mode or loading new input makes the running check stale, and its result is
 discarded (the routing session's generation counter). If DRC fails, or the board
 changed between drawing the preview and validating it, the preview is removed and
@@ -30,13 +33,33 @@ apply, and incomplete routes or unknown DRC still refuse. The override and the
 blocking issues are written to that commit's `intent.json` and `completion.json`,
 and the result line says the route was applied despite DRC errors.
 
-The status shows the current stage and elapsed seconds. Finished runs show
-routing, preview and DRC durations separately. Successful approval reports track,
+The status shows the current stage and its elapsed seconds: **Exporting the board
+to DSN** → **Routing · pass N · K unrouted** (parsed from Freerouting's log) →
+**Importing the route and drawing the preview** → **Checking DRC…**. **Cancel
+routing** (below the pages, visible only while it can act) kills the export or
+router process (one-shot or warm JVM) and writes nothing; during DRC it discards
+the check and removes the preview. Finished runs show export, routing, preview
+and DRC durations separately.
+
+Pre-flight checks run on the live board before Freerouting starts and refuse with
+one line each: tracks or vias already present, no Edge.Cuts outline, footprints
+whose pads lie outside the outline's bounding box (this replaces the old "every
+footprint is placed" checkbox), and duplicate reference designators. Board Setup
+rules that KiCad's DSN does not carry (only net classes reach Freerouting:
+minimum clearance/track width above the net classes, copper-to-edge and hole
+clearance, custom `.kicad_dru` rules) are reported as notes, since DRC still
+checks them. Numeric-only names were tested and route fine, so they are not
+checked.
+
+If the automatic export is unavailable (no bundled Python or `pcbnew`, e.g. once
+KiCad 11 removes the SWIG bindings), one message says so and **Load DSN exported
+from KiCad…** appears: export Specctra DSN from KiCad's File menu, pick it, confirm
+it is fresh, and routing continues. That DSN gets the same checks. Successful approval reports track,
 via and layer counts after reading the copper back from KiCad. Failed approval
 retains the panel preview with an explicit error; that is not a new routing run.
 An uncertain result blocks retry until inspected.
 
-Before Freerouting starts, **Generate routing preview** checks User.9. Old
+Before Freerouting starts, **Route board** checks User.9. Old
 VelaTrace previews (saved into the board, restored by Undo, or left by an earlier
 run) are recognised by the UUIDs in `.velatrace/backups/*/completion.json` and
 removed through the normal backed-up transaction. Dashed 0.1 mm User.9 lines that
@@ -107,12 +130,14 @@ application configuration directory as `constraints.json`; session rules remain
 only in memory and stack across retries. **Add rule** turns text into a numeric
 constraint, which then appears in the constraint line. Header/per-net constraints are retained but currently refuse
 routing rather than being ignored. The currently supported baseline is all-net
-clearance and width on saved, placed, initially unrouted boards.
+clearance and width on placed, initially unrouted boards (saved once, so the
+project folder and rules exist).
 
-The fresh DSN handshake is explicit because KiCad 9/10's pinned IPC and CLI do
-not expose DSN export. Request an export, export in KiCad, then load the freshly
-written file. The complete numeric constraint list is shown beside **Generate
-routing preview**; each click confirms it (Ctrl+Enter also works). Freerouting and the preview run on the service worker; candidate CLI
+KiCad 9/10's IPC and CLI do not expose DSN export, so **Route board** runs
+`pcbnew.ExportSpecctraDSN` in KiCad's bundled Python (next to `kicad-cli`) on a
+private copy of the live board text and saved project, with a private
+`KICAD_CONFIG_HOME`. The complete numeric constraint list is shown beside
+**Route board**; each click confirms it (Ctrl+Enter also works). Freerouting and the preview run on the service worker; candidate CLI
 DRC follows on its own background worker.
 The panel draws a separate dashed-violet preview for each used copper layer;
 board graphics are dashed on `User.9`, whose color remains under KiCad's control.

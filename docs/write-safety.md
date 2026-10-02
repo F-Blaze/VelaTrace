@@ -14,9 +14,15 @@ UI integration order:
    `validator = SafeCandidateValidator(safety, cli)` and
    `writer = SafeBoardWriter(safety, validator)`.
 2. Construct the routing session with that validator and the external router.
-   Obtain a fresh DSN and normal placement/constraint confirmations.
+   Call `safety.prepare_preview()` (removes old previews), read
+   `text = board.get_as_string()`, run `preflight` on it, then
+   `dsn = export_live(cli, text, snapshot, folder)`; `session.set_input(dsn, ...)`.
+   The manual fallback instead takes `ExportTicket.begin(...)` before the user
+   exports, and `accept_export(...)` after; both pass identical DSN checks.
 3. Run `plan = session.route(trusted_via_catalog(dsn))` (stage `validating`), note
-   `session.generation`, and draw `snapshot = safety.show_preview(dsn, plan)`. Then run
+   `session.generation`, and draw `snapshot = safety.show_preview(dsn, plan,
+   canonical(parse(text)))` — bound to the exported board text, so an edit made
+   after the click refuses the preview (manual path: no expected board). Then run
    `session.check(plan)` off the UI thread, require `validator.evidence[5] == snapshot`
    (the board did not change after the preview was drawn), and hand the report (or
    `None` on failure) to `session.accept(plan, report, generation)` on the UI thread.
@@ -91,7 +97,13 @@ saved project when present. Copies never replace a source file. The live board
 copy is flushed to disk before a mutation. `SaveCopyOfDocument` is not used: it
 can rewrite the real project and caused a KiCad 10.0.4 crash during earlier tests.
 
-There is no requirement to save between preview and approval. Candidate DRC uses
+There is no requirement to save before routing or between preview and approval.
+The one-click DSN is exported from the live board text read at click time, never
+from the saved file, and VelaTrace never calls `board.save()`. The board must have
+been saved once (a path, project folder and `.kicad_pro` must exist for backups
+and rules). The saved file's digest is still bound into the export ticket, so
+saving during routing refuses the result; the live chain is DSN text = preview
+snapshot = DRC snapshot = approval snapshot. Candidate DRC uses
 the live board, including unsaved edits made before validation. Approval compares
 that validated snapshot with the live board, excluding only verified owned preview
 items. Changes after validation require a new validation, not a save of the preview.
@@ -100,8 +112,8 @@ unknown geometry. Generator metadata, harmless numeric spelling and root item
 ordering are normalized. Edited or missing owned previews refuse explicitly.
 
 Board Setup changes not present in the saved project cannot be read safely by this
-adapter. Save the project rules before starting the initial DSN workflow; validation
-uses those saved rules and checks their digests. Do not edit the board or project
+adapter. Save the project rules before routing; the exported DSN's net classes and
+validation both use those saved rules, and validation checks their digests. Do not edit the board or project
 while a routing operation is running. This is not full live Board Setup validation.
 
 A durable `intent.json` lists exact item UUIDs before a transaction begins; a

@@ -271,7 +271,8 @@ class UiTests(unittest.TestCase):
         validator.evidence = (None, None, None, None, None, snapshot)
         self.window.validator = validator
         self.window.safety.show_preview.return_value = "snapshot"
-        self.window.placed.setChecked(True)
+        # The live-board export has its own tests; here it yields the exported snapshot.
+        self.window.prepare_board = lambda cancel: ("exported", ["Note: edge rule."])
         with patch("velatrace.ui.ask", return_value=True), patch("velatrace.ui.trusted_via_catalog", return_value={}):
             self.window.route_button.click()
             self.wait_idle()
@@ -282,7 +283,7 @@ class UiTests(unittest.TestCase):
         session, router, validator, writer, release = self.start_route()
         # Preview drawn (no expected board: DRC has not run yet); approval still locked.
         router.route.assert_called_once()
-        self.window.safety.show_preview.assert_called_once_with(session.input, session.plan)
+        self.window.safety.show_preview.assert_called_once_with(session.input, session.plan, "exported")
         self.assertIs(self.window.canvas.plan, session.plan)
         self.assertEqual(session.stage, RoutingStage.VALIDATING)
         self.assertFalse(self.window.approve_button.isEnabled())
@@ -410,8 +411,9 @@ class UiTests(unittest.TestCase):
     def test_preview_layer_refusal_happens_before_freerouting(self):
         from velatrace.errors import ValidationError
         session, router, validator, writer = self.ready_route_preview()
-        self.window.safety.prepare_preview.side_effect = ValidationError("User.9 has 1 dashed 0.1 mm line")
-        self.window.placed.setChecked(True)
+        safety = self.window.safety
+        safety.prepare_preview.side_effect = ValidationError("User.9 has 1 dashed 0.1 mm line")
+        self.window.prepare_board = lambda cancel: (safety.prepare_preview(), (None, []))[1]
         with patch("velatrace.ui.ask", return_value=True):
             self.window.route_button.click()
             self.wait_idle()
@@ -419,6 +421,63 @@ class UiTests(unittest.TestCase):
         validator.validate.assert_not_called()
         self.window.safety.show_preview.assert_not_called()
         self.assertIn("User.9 has 1 dashed", self.window.status.text())
+
+    def test_cancel_kills_routing_and_writes_nothing(self):
+        from velatrace.errors import RoutingCancelled
+        session, router, validator, writer = self.ready_route_preview()
+        def route(dsn, constraints):  # Stands in for Freerouting: runs until its event is set.
+            if not router.cancel.wait(5):
+                raise AssertionError("Cancel never reached the router")
+            raise RoutingCancelled("Cancelled; nothing was written to the board.")
+        router.route.side_effect = route
+        self.window.prepare_board = lambda cancel: ("exported", [])
+        with patch("velatrace.ui.trusted_via_catalog", return_value={}):
+            self.window.route_button.click()
+            deadline = time.monotonic() + 5
+            while not self.window.cancel_button.isVisibleTo(self.window) and time.monotonic() < deadline:
+                self.app.processEvents()
+            self.window.cancel_button.click()
+            self.wait_idle()
+        self.window.safety.show_preview.assert_not_called()
+        writer.apply.assert_not_called()
+        validator.validate.assert_not_called()
+        self.assertEqual(session.stage.value, "setup")
+        self.assertIn("Cancelled; nothing was written", self.window.status.text())
+        self.assertFalse(self.window.cancel_button.isVisibleTo(self.window))
+
+    def test_cancel_during_drc_discards_the_check_and_removes_the_preview(self):
+        session, router, validator, writer, release = self.start_route()
+        self.assertTrue(self.window.cancel_button.isVisibleTo(self.window))
+        self.window.cancel_button.click()
+        self.wait_idle()
+        self.window.safety.clear_preview.assert_called_once()
+        release.set()
+        self.wait_drc()
+        self.assertIsNone(session.report)
+        self.assertFalse(self.window.approve_button.isEnabled())
+        self.assertIn("Cancelled; the board is unchanged", self.window.canvas.toolTip())
+
+    def test_export_failure_offers_the_manual_dsn_path(self):
+        from velatrace.errors import ExportUnavailable
+        session, router, validator, writer = self.ready_route_preview()
+        board = Path(self.temp.name) / "board.kicad_pcb"
+        board.write_text('(kicad_pcb (gr_rect (start 0 0) (end 40 30) (layer "Edge.Cuts")))', encoding="utf-8")
+        board.with_suffix(".kicad_pro").write_text('{"board": {"design_settings": {}}}', encoding="utf-8")
+        snapshot = SimpleNamespace(path=board, components=())
+        self.window.snapshot = snapshot
+        self.window.safety.board.get_as_string.return_value = board.read_text(encoding="utf-8")
+        self.window.validator = validator
+        validator.cli.export_dsn.side_effect = ExportUnavailable("no pcbnew module.")
+        reader = SimpleNamespace(read_board=lambda: snapshot, version=(10, 0, 6),
+                                 client=SimpleNamespace(get_board=lambda handle=self.window.safety.board: handle))
+        with patch("velatrace.ui.KiCadReader.connect", return_value=reader):
+            self.window.route_button.click()
+            self.wait_idle()
+        router.route.assert_not_called()
+        self.assertIsNotNone(self.window.ticket)
+        self.assertTrue(self.window.import_button.isVisibleTo(self.window))
+        self.assertIn("Specctra DSN", self.window.route_summary.text())
+        self.assertIn("no pcbnew module", self.window.status.text())
 
     def test_failed_approval_keeps_preview_and_reports_unconfirmed_copper(self):
         from velatrace.errors import ValidationError
@@ -629,7 +688,7 @@ class SetupUsabilityTests(unittest.TestCase):
         window = self.launch(accept=False)
         self.assertTrue(window.description.isEnabled())
         self.assertTrue(window.load_button.isEnabled())
-        self.assertFalse(window.placed.isEnabled())
+        self.assertFalse(window.route_button.isEnabled())
         self.assertIn("Click Setup", window.setup_hint.text())
         window.run_command("/autoroute")
         self.app.processEvents()
@@ -642,7 +701,7 @@ class SetupUsabilityTests(unittest.TestCase):
             raise CapabilityError("Freerouting is missing.")
         window = self.launch(accept=True, check_startup=missing)
         self.assertIn("Freerouting is missing.", window.setup_hint.text())
-        self.assertFalse(window.placed.isEnabled())
+        self.assertFalse(window.route_button.isEnabled())
         # Values from the dialog are kept for the retry, not reset to old defaults.
         self.assertEqual(window.settings.name, "Gemini")
         self.assertTrue((self.config / "settings.json").is_file())
@@ -651,7 +710,7 @@ class SetupUsabilityTests(unittest.TestCase):
         window = self.launch(accept=True)
         window.mode_buttons[__import__("velatrace.routing", fromlist=["Mode"]).Mode.ROUTING].click()
         self.settle(window)
-        self.assertTrue(window.placed.isEnabled())
+        self.assertTrue(window.route_button.isEnabled())
         self.assertFalse(window.setup_hint.isVisibleTo(window))
 
     def test_settings_persist_without_the_api_key(self):

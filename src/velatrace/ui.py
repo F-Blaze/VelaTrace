@@ -9,6 +9,9 @@ from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
 import os
+import shutil
+import tempfile
+import threading
 import time
 import uuid
 from queue import Queue
@@ -25,24 +28,26 @@ from PySide6.QtWidgets import (
 from .audit import AuditSession, AuditStage, require_connectivity
 from .audit_rules import run_rules, summarize
 from .bom import bom_findings
-from .candidate import SafeCandidateValidator, trusted_via_catalog
+from .candidate import SafeCandidateValidator, canonical, project_context, trusted_via_catalog
 from .constraints import Constraint, ConstraintStore, Scope, propose_constraint
-from .dsn import ExportTicket, accept_export
-from .errors import ValidationError
+from .dsn import ExportTicket, accept_export, export_live
+from .errors import ExportUnavailable, RoutingCancelled, ValidationError
 from .findings import Finding, Severity
 from .flags import Bucket, Function, Verdict
-from .freerouting import Freerouting
+from .freerouting import CANCELLED, Freerouting
 from .ipc import KiCadReader
 from .kicad_cli import KiCadCli
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
 from .report import render_report, save_report
 from . import __version__
+from .preflight import preflight
 from .parts_db import cache_paths, download_catalogue, load_catalogue
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
 from .routing import Mode, RoutingSession, RoutingStage
+from .sexpr import parse
 from .tokens import LocalChatTokenizer
 from .theme import saved_kicad_theme
 from .write_safety import BoardSafety, SafeBoardWriter
@@ -615,6 +620,9 @@ class MainWindow(QMainWindow):
         self.drc_executor.result.connect(self.drc_finished)
         self.drc_executor.start()
         self._drc_pending = 0
+        self._cancel = None  # threading.Event of the running Route board click
+        self._dsn_folder = None  # private copy of the last exported board and DSN
+        self._preflight_notes = []
         self.ready = False
         self.preview_shown = False
         self._cleanup_failed = False
@@ -743,8 +751,6 @@ class MainWindow(QMainWindow):
         self.route_page = QWidget()
         route_layout = QVBoxLayout(self.route_page)
         route_layout.setContentsMargins(0, 0, 0, 0)
-        self.placed = QCheckBox("Every footprint is already placed; no autoplacement")
-        route_layout.addWidget(self.placed)
         rule = QHBoxLayout()
         self.route_prompt = QLineEdit()
         self.route_prompt.setPlaceholderText("Optional rule, e.g. keep traces away from headers")
@@ -762,20 +768,17 @@ class MainWindow(QMainWindow):
         edit.clicked.connect(self.open_constraints)
         constraints.addWidget(edit, alignment=Qt.AlignmentFlag.AlignTop)
         route_layout.addLayout(constraints)
-        row = QHBoxLayout()
-        self.export_button = QPushButton("1 · Request fresh DSN")
-        self.export_button.clicked.connect(self.request_export)
-        self.import_button = QPushButton("2 · Load fresh DSN")
-        self.import_button.clicked.connect(self.load_dsn)
-        row.addWidget(self.export_button)
-        row.addWidget(self.import_button)
-        route_layout.addLayout(row)
-        self.route_button = tip(QPushButton("3 · Generate routing preview"),
-                                "Routes with the constraints above, draws a dashed User.9 preview, then runs DRC "
-                                "(Ctrl+Enter). Set User.9 to violet in KiCad to match this panel.")
+        # One click reads the open board, checks it, exports its DSN and routes it.
+        self.route_button = tip(QPushButton("Route board"),
+                                "Reads the open board, checks it, exports the DSN and routes it "
+                                "(Ctrl+Enter). The preview is dashed on User.9.")
         self.route_button.setObjectName("primary")
         self.route_button.clicked.connect(self.route)
         route_layout.addWidget(self.route_button)
+        # Fallback only, shown when KiCad cannot export the DSN automatically.
+        self.import_button = QPushButton("Load DSN exported from KiCad…")
+        self.import_button.clicked.connect(self.load_dsn)
+        route_layout.addWidget(self.import_button)
         self.canvas = RouteCanvas()
         route_layout.addWidget(self.canvas, 1)
         self.route_summary = label()  # errors and blocking messages only; info goes to note()
@@ -815,6 +818,10 @@ class MainWindow(QMainWindow):
         route_box_layout.addWidget(self.route_scroll, 1)
         self.pages.addWidget(route_box)
         layout.addWidget(self.pages, 1)
+        # Outside the route page, which is disabled while the worker runs.
+        self.cancel_button = QPushButton("Cancel routing")
+        self.cancel_button.clicked.connect(self.cancel_route)
+        layout.addWidget(self.cancel_button)
         self.status = label("Ready.")
         self.usage_label = label(muted=True)
         self.usage_label.hide()
@@ -910,9 +917,12 @@ class MainWindow(QMainWindow):
              "Needs the open PCB." if self.safety is None else "")
         set_primary(self.next_button, ai_step)
         set_primary(self.load_button, not ai_step)
-        self.import_button.setEnabled(self.ticket is not None)
+        self.import_button.setVisible(self.ticket is not None)
         session = self.routing
-        gate(self.route_button, "" if session is not None and session.input is not None else "Load a fresh DSN first.")
+        gate(self.route_button, "" if self.ready or session is not None else "Click Setup first.")
+        self.cancel_button.setVisible(
+            (busy and self._cancel is not None and not self._cancel.is_set())
+            or (self._drc_pending > 0 and session is not None and session.stage == RoutingStage.VALIDATING))
         report = session.report if session is not None else None
         validated = report is not None and self.preview_shown and session.stage == RoutingStage.PREVIEW
         approvable = validated and report.drc_violations == 0
@@ -989,6 +999,9 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def work_progress(self, message):
+        # Elapsed time is per stage; "Routing · pass 2" continues the "Routing" stage.
+        if message.split(" · ")[0] != self._work_title.split(" · ")[0] and self._work_started is not None:
+            self._work_started = time.monotonic()
         self._work_title = message
         self.update_work_status()
 
@@ -1381,81 +1394,134 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.show_error(str(exc))
 
-    def request_export(self):
-        if not self.placed.isChecked():
-            self.show_error("Confirm that all footprints are placed first.")
-            return
-        if not ask(self, "Prepare saved board", "Save the open, initially unrouted PCB and its project in KiCad before continuing. Temporary annotations must already be cleared. Confirm it is saved?"):
-            return
-        def operation(_):
-            if self.safety:
-                self.safety.clear_preview()
-            reader = KiCadReader.connect()
-            snapshot = reader.read_board()
-            if not snapshot.path:
-                raise ValidationError("Routing requires a saved PCB with an absolute path.")
+    def prepare_board(self, cancel):
+        """Worker thread: read the open board, pre-flight it and export its DSN with
+        KiCad's own exporter. Nothing is saved. Returns (canonical snapshot of the
+        exported board text, pre-flight notes); the preview must match that snapshot."""
+        reader = KiCadReader.connect()
+        snapshot = reader.read_board()
+        if not snapshot.path:
+            raise ValidationError("Save the board once in KiCad so VelaTrace knows its project folder.")
+        board = reader.client.get_board()
+        if self.routing is None or self.snapshot is None or self.snapshot.path != snapshot.path:
             cli = KiCadCli(self.settings.cli)
             cli.require_editor_version(reader.version)
-            safety = BoardSafety(reader.client.get_board(), snapshot.path)
-            validator = SafeCandidateValidator(safety, cli)
-            session = RoutingSession(self.constraints, self.router, validator)
-            session.command("/autoroute")
-            ticket = ExportTicket.begin(snapshot.path)
-            return reader, snapshot, safety, validator, session, ticket
-        def done(value):
-            self.reader, self.snapshot, self.safety, self.validator, self.routing, self.ticket = value
-            self.apply_theme(self.theme.currentText())
+            if self.safety is None or self.safety.path != snapshot.path.resolve():
+                self.safety = BoardSafety(board, snapshot.path)
+            self.validator = SafeCandidateValidator(self.safety, cli)
+            self.routing = RoutingSession(self.constraints, self.router, self.validator)
+            self.routing.command("/autoroute")
             self.writer = SafeBoardWriter(self.safety, self.validator)
-            self.blocking("Now export Specctra DSN using KiCad File → Export, then select ‘Load fresh DSN’. Do not edit or save changes after this request.")
-        self.run_work("Preparing a fresh DSN request", operation, done)
-
-    def load_dsn(self):
-        selected, _ = QFileDialog.getOpenFileName(self, "Fresh Specctra DSN", "", "Specctra DSN (*.dsn)")
-        if not selected:
-            return
-        if not self.placed.isChecked() or not ask(self, "Confirm fresh export", "The PCB is saved and this DSN was exported after the fresh-DSN request. Every footprint remains placed. Confirm?"):
-            return
-        def operation(_):
-            dsn = accept_export(self.ticket, Path(selected), self.snapshot, user_confirms_saved_and_exported=True)
-            self.routing.set_input(dsn, all_footprints_placed=True)
-            return dsn
-        self.run_work("Checking DSN connectivity and placements", operation,
-                      lambda dsn: self.note(f"Fresh DSN verified: {dsn.path.name}. Review all numeric constraints before routing."))
+        self.safety.board = board  # A fresh IPC handle; owned preview items carry over.
+        self.reader, self.snapshot = reader, snapshot
+        # Remove old previews first: the exported text must not contain them.
+        self.safety.prepare_preview()
+        text = board.get_as_string()
+        root = parse(text, kicad=True)
+        project, _ = project_context(snapshot.path)
+        problems, self._preflight_notes = preflight(root, snapshot, project)
+        if problems:
+            raise ValidationError("\n".join(problems))
+        if cancel.is_set():
+            raise RoutingCancelled(CANCELLED)
+        if self._dsn_folder:
+            shutil.rmtree(self._dsn_folder, ignore_errors=True)
+        (self.config_dir / "dsn-export").mkdir(parents=True, exist_ok=True)
+        self._dsn_folder = tempfile.mkdtemp(prefix="board-", dir=self.config_dir / "dsn-export")
+        try:
+            dsn = export_live(self.validator.cli, text, snapshot, Path(self._dsn_folder), cancel)
+        except ExportUnavailable as exc:
+            self.ticket = ExportTicket.begin(snapshot.path)  # Starts the manual fallback.
+            raise ExportUnavailable(f"Automatic DSN export is unavailable: {exc} Export it from KiCad "
+                                    "(File > Export > Specctra DSN), then click ‘Load DSN exported from KiCad…’.") from None
+        self.routing.set_input(dsn, all_footprints_placed=True)  # Pre-flight replaced the checkbox.
+        return canonical(root), self._preflight_notes
 
     def route(self):
+        self.ticket = None
+        self.start_routing(self.prepare_board)
+
+    def load_dsn(self):
+        """Manual fallback: a DSN the user exported from KiCad after the failed attempt."""
+        selected, _ = QFileDialog.getOpenFileName(self, "Specctra DSN exported from KiCad", "", "Specctra DSN (*.dsn)")
+        if not selected:
+            return
+        if not ask(self, "Confirm fresh export", "This DSN was exported from KiCad after VelaTrace asked for it, "
+                   "and the board was not edited since. Confirm?"):
+            return
+        ticket, snapshot = self.ticket, self.snapshot
+        def prepare(_):
+            self.safety.prepare_preview()
+            dsn = accept_export(ticket, Path(selected), snapshot, user_confirms_saved_and_exported=True)
+            self.routing.set_input(dsn, all_footprints_placed=True)
+            return None, self._preflight_notes
+        self.start_routing(prepare)
+
+    def start_routing(self, prepare):
+        """Route board: prepare (export), Freerouting, then the User.9 preview; DRC follows."""
         try:
             if self.route_prompt.text().strip():
                 raise ValidationError("Add or clear the pending rule first.")
-            if not self.placed.isChecked():
-                raise ValidationError("Confirm that every footprint is placed.")
+            if self.routing is not None and self.routing.stage == RoutingStage.NEEDS_REASON:
+                raise ValidationError("Enter a reject reason and click Reject first.")
             # The full constraint list is shown beside this button; the click confirms it.
-            self.routing.confirm_constraints(self.constraints.fingerprint)
+            fingerprint = self.constraints.fingerprint
+            cancel = self._cancel = threading.Event()
             self.preview_shown = False
             def operation(_):
-                # Every preview refusal that can be known before routing fails here, not after it.
-                self.executor.progress.emit("Checking preview layer")
-                self.safety.prepare_preview()
-                self.routing.progress = self.executor.progress.emit
-                plan = self.routing.route(trusted_via_catalog(self.routing.input))
-                generation = self.routing.generation
-                # The preview is drawn before DRC; approval waits for the DRC result.
-                self.executor.progress.emit("Drawing preview")
+                emit = self.executor.progress.emit
                 started = time.monotonic()
-                snapshot = self.safety.show_preview(self.routing.input, plan)
-                return plan, generation, snapshot, time.monotonic() - started
+                expected, notes = prepare(cancel)
+                exported = time.monotonic() - started
+                session = self.routing
+                session.confirm_constraints(fingerprint)
+                session.progress = session.router.progress = emit
+                session.router.cancel = cancel
+                plan = session.route(trusted_via_catalog(session.input))
+                generation = session.generation
+                emit("Importing the route and drawing the preview")
+                started = time.monotonic()
+                # Bound to the exported board: an edit since the click refuses the preview.
+                snapshot = self.safety.show_preview(session.input, plan, expected)
+                if cancel.is_set():
+                    session.cancel()
+                    self.safety.clear_preview()
+                    raise RoutingCancelled(CANCELLED)
+                return plan, generation, snapshot, exported, time.monotonic() - started, notes
             def done(value):
-                plan, generation, snapshot, preview_seconds = value
+                self._cancel = None
+                plan, generation, snapshot, exported, preview_seconds, notes = value
                 self.preview_shown = True
-                self._route_timing = f"Routing {self.routing.timings['router']:.1f}s; preview {preview_seconds:.1f}s"
+                self._route_timing = (f"Export {exported:.1f}s; Routing {self.routing.timings['router']:.1f}s; "
+                                      f"preview {preview_seconds:.1f}s")
                 self.note(
                     f"{plan.trace_count} traces · {len(plan.vias)} vias · {', '.join(plan.layers_used)}. "
-                    f"{self._route_timing}. Preview only (User.9). Checking DRC…")
+                    f"{self._route_timing}. Preview only (User.9). Checking DRC…" + "".join(" " + note for note in notes))
                 self.canvas.plan = plan
                 self.canvas.update()
                 self.check_drc(self.routing, self.validator, plan, generation, snapshot)
-            self.run_work("Routing", operation, done)
+                if cancel.is_set():  # Clicked after the last in-worker check.
+                    QTimer.singleShot(0, self.cancel_route)
+            def failed(message):
+                self._cancel = None
+                self.blocking(message)
+            self.run_work("Exporting the board", operation, done, failed)
         except Exception as exc:
             self.show_error(str(exc))
+
+    def cancel_route(self):
+        """Stop the router (its process is killed) or discard a preview still in DRC."""
+        if self.worker is not None and self._cancel is not None:
+            self._cancel.set()
+            self.status.setText("Cancelling…")
+        elif self.routing is not None and self.routing.stage == RoutingStage.VALIDATING:
+            self.routing.cancel()
+            self.preview_shown = False
+            self.canvas.plan = None
+            self.canvas.update()
+            self.run_work("Removing the cancelled preview", lambda _: self.safety.clear_preview(),
+                          lambda _: self.note("Cancelled; the board is unchanged."))
+        self.refresh_actions()
 
     def check_drc(self, session, validator, plan, generation, snapshot):
         """Candidate DRC off the Qt thread; drc_finished discards a stale result."""
@@ -1592,6 +1658,8 @@ class MainWindow(QMainWindow):
             worker.wait(2000)
         if self.router is not None:
             self.router.close()  # No java.exe outlives the window.
+        if self._dsn_folder:
+            shutil.rmtree(self._dsn_folder, ignore_errors=True)  # The exported board copy.
         event.accept()
 
     def close_after_cleanup(self):
