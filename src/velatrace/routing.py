@@ -136,6 +136,12 @@ class RoutingSession:
         self.plan, self.report = None, None
         self.stage = RoutingStage.SETUP
 
+    def cancel(self):
+        """The Cancel button: drop a confirmed or previewed attempt; a check() still
+        running for it can no longer be accepted. A running route() cancels itself."""
+        if self.stage in {RoutingStage.CONFIRMED, RoutingStage.VALIDATING}:
+            self._invalidate()
+
     def set_input(self, dsn: DsnInput, *, all_footprints_placed: bool):
         if not all_footprints_placed:
             raise ValidationError("Place every footprint and explicitly confirm placement before routing. No autoplacement.")

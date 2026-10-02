@@ -88,6 +88,19 @@ def parse(text: str, *, kicad: bool = False) -> list:
     return roots[0]
 
 
+_ESCAPES = {"\\": "\\\\", '"': '\\"', "\n": "\\n", "\r": "\\r", "\t": "\\t",
+            "\a": "\\a", "\b": "\\b", "\f": "\\f", "\v": "\\v"}
+
+
+def render(value) -> str:
+    """Serialize a kicad=True parse() tree; quoted atoms stay quoted and escaped."""
+    if isinstance(value, list):
+        return "(" + " ".join(render(item) for item in value) + ")"
+    if isinstance(value, QuotedAtom):
+        return '"' + "".join(_ESCAPES.get(char, char) for char in value) + '"'
+    return str(value)
+
+
 def children(node: list, name: str) -> list[list]:
     return [value for value in node[1:] if isinstance(value, list) and value and value[0] == name]
 

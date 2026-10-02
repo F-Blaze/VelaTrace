@@ -7,7 +7,8 @@ import unittest
 from unittest.mock import patch
 
 from velatrace.errors import CapabilityError, ValidationError
-from velatrace.kicad_cli import KiCadCli, local_tool_environment, parse_drc_report
+from velatrace.kicad_cli import (KiCadCli, footprint_libraries, local_tool_environment, parse_drc_report,
+                                 trimmed_library_table)
 
 
 class KiCadCliTests(unittest.TestCase):
@@ -96,13 +97,13 @@ class KiCadCliTests(unittest.TestCase):
             board = Path(directory) / "board.kicad_pcb"
             board.write_text("fixture")
             calls = []
-            def run(args, cwd, allowed_exit_codes):
+            def run(args, cwd, allowed_exit_codes, config_home):
                 calls.append(args)
                 report = Path(args[args.index("--output") + 1])
                 report.write_text(json.dumps({"violations": [], "unconnected_items": [],
                                               "schematic_parity": []}))
                 return 0
-            with patch.object(cli, "_run", side_effect=run), patch.object(cli, "schematic_snapshot") as export:
+            with patch.object(cli, "_run", side_effect=run), patch.object(cli, "schematic_snapshot") as export,                     patch.object(cli, "_drc_config_home", return_value=Path(directory)):
                 cli.drc(board)
                 self.assertNotIn("--schematic-parity", calls[-1])
                 export.assert_not_called()
@@ -119,6 +120,35 @@ class KiCadCliTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValidationError, "unreadable schematic"):
                     cli.drc(board)
                 self.assertEqual(len(calls), before)
+
+    def test_drc_library_table_keeps_only_the_boards_libraries(self):
+        board = ('(kicad_pcb (footprint "Resistor_SMD:R_0603" (at 0 0)) (footprint "Odd\\"Lib:X")'
+                 ' (footprint "NoLibrary") (footprint "Connector:J"))')
+        self.assertEqual(footprint_libraries(board), {"Resistor_SMD", 'Odd"Lib', "Connector"})
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            stock = root / "stock-table"
+            stock.write_text('(fp_lib_table (version 7)\n'
+                             ' (lib (name "Resistor_SMD") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty") (options "") (descr ""))\n'
+                             ' (lib (name "Battery") (type "KiCad") (uri "${KICAD10_FOOTPRINT_DIR}/Battery.pretty") (options "") (descr "")))\n')
+            user = root / "fp-lib-table"
+            user.write_text(f'(fp_lib_table (version 7)\n (lib (name "KiCad") (type "Table") (uri "{stock.as_posix()}") (options "") (descr "Stock"))\n'
+                            ' (lib (name "Connector") (type "KiCad") (uri "C:/libs/Connector.pretty") (options "") (descr "") (disabled))\n'
+                            ' (lib (name "Unused") (type "KiCad") (uri "C:/libs/Unused.pretty") (options "") (descr "")))\n')
+            out = root / "out"
+            out.mkdir()
+            text = trimmed_library_table(user, frozenset({"Resistor_SMD", "Connector"}), out)
+            self.assertNotIn("Unused", text)
+            self.assertIn('(lib (name "Connector") (type "KiCad") (uri "C:/libs/Connector.pretty") (options "") (descr "") (disabled))', text)
+            nested = [path for path in out.iterdir()]
+            self.assertEqual(len(nested), 1)
+            self.assertIn(f'(uri "{nested[0].as_posix()}")', text)
+            self.assertIn('(uri "${KICAD10_FOOTPRINT_DIR}/Resistor_SMD.pretty")', nested[0].read_text())
+            self.assertNotIn("Battery", nested[0].read_text())
+            # A nested table behind a path variable cannot be located exactly: no trimming.
+            user.write_text('(fp_lib_table (version 7) (lib (name "KiCad") (type "Table") (uri "${KICAD_USER}/t") (options "") (descr "")))')
+            with self.assertRaises(ValueError):
+                trimmed_library_table(user, frozenset(), out)
 
     def test_saved_schematic_confirmation_precedes_subprocess(self):
         cli = object.__new__(KiCadCli)

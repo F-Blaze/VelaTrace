@@ -28,3 +28,12 @@ def test_utf16_netlist_without_declarations_still_reads(tmp_path):
     snapshot = read_xml_netlist(path)
     assert snapshot.components[0].value == "10k"
     assert snapshot.connectivity() == {"A": (("R1", "1"),)}
+
+
+def test_schematic_pin_types_are_kept_for_rule_checks(tmp_path):
+    path = tmp_path / "typed.xml"
+    path.write_text('<export><components><comp ref="U1"><value>LDO</value></comp></components>'
+                    '<nets><net name="+5V"><node ref="U1" pin="1" pinfunction="VIN" pintype="power_in"/>'
+                    '</net></nets></export>', encoding="utf-8")
+    pin = read_xml_netlist(path).components[0].pins[0]
+    assert (pin.name, pin.electrical_type, pin.position_mm) == ("VIN", "power_in", None)

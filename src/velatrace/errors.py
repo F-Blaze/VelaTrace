@@ -8,3 +8,11 @@ class CapabilityError(VelaTraceError):
 
 class ValidationError(VelaTraceError):
     """Input was refused before any mutation."""
+
+
+class ExportUnavailable(CapabilityError):
+    """KiCad's bundled Python cannot export DSN here; the manual export path remains."""
+
+
+class RoutingCancelled(VelaTraceError):
+    """The user cancelled routing; nothing was written to the board."""

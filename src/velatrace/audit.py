@@ -1,4 +1,9 @@
-"""Audit state machine: every model verdict is a read-only suggestion."""
+"""Optional "Explain with AI" pass: every model verdict is a read-only suggestion.
+
+The audit's core value comes from the deterministic checks in audit_rules, which run
+locally with no provider. This session only starts when the user asks for an AI
+explanation; the rule findings are included as context.
+"""
 from dataclasses import asdict
 from enum import Enum
 import json
@@ -6,6 +11,7 @@ import math
 from typing import Callable
 
 from .errors import ValidationError
+from .findings import Finding
 from .flags import Bucket, Flag, Function, Verdict, compute_flags, redundancy_flags
 from .models import DesignSnapshot
 from .provider import Provider, Usage
@@ -34,8 +40,29 @@ Use the connectivity graph and pins, never assume a shared rail implies redundan
 
 
 def board_payload(snapshot: DesignSnapshot) -> dict:
-    return {"components": [asdict(comp) for comp in snapshot.components],
-            "connectivity": snapshot.connectivity(), "source": snapshot.source}
+    components = []
+    for comp in snapshot.components:
+        row = asdict(comp)
+        # Pad coordinates add many tokens and no judgement value; keep them local.
+        for pin in row["pins"]:
+            pin.pop("position_mm", None)
+        components.append(row)
+    return {"components": components, "connectivity": snapshot.connectivity(),
+            "source": snapshot.source}
+
+
+def findings_payload(findings) -> list[dict]:
+    return [{"rule": item.rule, "severity": item.severity.value, "title": item.title,
+             "refs": list(item.refs), "nets": list(item.nets), "evidence": item.evidence,
+             "fix": item.fix} for item in findings]
+
+
+def require_connectivity(snapshot: DesignSnapshot) -> None:
+    refs = [comp.reference for comp in snapshot.components]
+    if not refs or len(refs) != len(set(refs)) or any(not ref for ref in refs):
+        raise ValidationError("Design needs uniquely referenced components.")
+    if not snapshot.connectivity():
+        raise ValidationError("Real netlist connectivity is required; a flat parts list is insufficient.")
 
 
 def data_block(data: dict) -> str:
@@ -85,6 +112,7 @@ class AuditSession:
         self.stage = AuditStage.DESCRIPTION
         self.description = ""
         self.snapshot: DesignSnapshot | None = None
+        self.findings: tuple[Finding, ...] = ()
         self.functions: dict[str, Function] = {}
         self.verdicts: dict[str, Verdict] = {}
         self.flags: list[Flag] = []
@@ -105,15 +133,19 @@ class AuditSession:
         self.description = description.strip()
         self.stage = AuditStage.DESIGN
 
-    def load_design(self, snapshot: DesignSnapshot):
+    def load_design(self, snapshot: DesignSnapshot, findings: tuple[Finding, ...] = ()):
         self._require(AuditStage.DESIGN)
-        refs = [comp.reference for comp in snapshot.components]
-        if not refs or len(refs) != len(set(refs)) or any(not ref for ref in refs):
-            raise ValidationError("Design needs uniquely referenced components.")
-        if not snapshot.connectivity():
-            raise ValidationError("Real netlist connectivity is required; a flat parts list is insufficient.")
+        require_connectivity(snapshot)
         self.snapshot = snapshot
+        self.findings = tuple(findings)
         self.stage = AuditStage.FUNCTIONS
+
+    def _context(self) -> dict:
+        """Board data plus the local rule findings the model should explain."""
+        context = {"design": board_payload(self.snapshot)}
+        if self.findings:
+            context["rule_findings"] = findings_payload(self.findings)
+        return context
 
     def infer_functions(self, on_usage: Callable[[Usage], None] | None = None,
                         output_cap: int = 4096) -> dict[str, Function]:
@@ -121,8 +153,9 @@ class AuditSession:
         prompt = Prompt(SYSTEM + '\nInfer each component function. Return {"functions": '
             '[{"reference":"R1","text":"one-line function","role":"specific role such as '
             'bulk capacitor or local decoupling capacitor","confidence":0.9}]}. '
-            'Cover every reference once. Do not classify necessity yet.',
-            "Project description:\n" + self.description + "\n" + data_block(board_payload(self.snapshot)))
+            'Cover every reference once. Do not classify necessity yet. rule_findings, when '
+            'present, are code-generated checks: use them as evidence.',
+            "Project description:\n" + self.description + "\n" + data_block(self._context()))
         response = parse_object(self.provider.complete(prompt, output_cap, on_usage).text)
         rows = self._rows(response, "functions")
         functions = {}
@@ -171,9 +204,11 @@ class AuditSession:
             'Only use redundant if listed in the code-generated duplicate_candidates. '
             'Return {"verdicts":[{"reference":"R1","bucket":"important",'
             '"confidence":0.9,"suggestion":"explanation and optional suggestion"}]}. '
-            'Cover every reference exactly once. Treat confirmed functions as user-reviewed facts.',
+            'Cover every reference exactly once. Treat confirmed functions as user-reviewed facts. '
+            'rule_findings are code-generated checks: in the suggestion for each involved '
+            'reference, explain the finding in plain words and whether its fix suits this design.',
             "Project description:\n" + self.description + "\n" + data_block({
-                "design": board_payload(self.snapshot),
+                **self._context(),
                 "confirmed_functions": {ref: asdict(value) for ref, value in self.functions.items()},
                 "duplicate_candidates": [asdict(flag) for flag in
                     redundancy_flags(self.snapshot.components, self.functions)]}))

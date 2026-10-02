@@ -14,10 +14,11 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 
 from .constraints import Constraint
 from .dsn import DsnInput, dsn_scale
-from .errors import CapabilityError, ValidationError
+from .errors import CapabilityError, RoutingCancelled, ValidationError
 from .ses import number
 from .sexpr import JoinedAtom, QuotedAtom, one, parse
 
@@ -29,6 +30,10 @@ WARM_SHA256 = "4283bd5219bf2bf1f85ea7ae07a28d0fa41121f8d8bb9020ae381db4a284adae"
 MAX_SES = 32_000_000
 WARM_START_SECONDS = 60
 WARM_MAX_FAILURES = 2
+CANCELLED = "Cancelled; nothing was written to the board."
+# Freerouting 2.1.0 logs e.g. "Auto-router pass #1 on board '…' was completed in 1.84
+# seconds with the score of 933.76 (1 unrouted)." The count is omitted at zero.
+PASS_LINE = re.compile(rb"Auto-router pass #(\d+) [^\n]*?(?:\((\d+) unrouted\))?\.?\r?\n")
 # Two crossing nets on SMD pads (needs vias): routed once at warm start-up to load
 # and JIT-compile the router before the user's first route, and to self-test it.
 WARMUP_DSN = """(pcb warmup
@@ -75,16 +80,30 @@ class ProcessResult:
     output: str
 
 
-def _drain(stream, chunks: bytearray) -> None:
-    """Read until EOF, retaining only the final 64 KiB."""
+def _drain(stream, chunks: bytearray, on_data=None) -> None:
+    """Read until EOF, retaining only the final 64 KiB; on_data(chunks) after each read."""
     while data := stream.read1(4096):
         chunks.extend(data)
         if len(chunks) > 65_536:
             del chunks[:-65_536]
+        if on_data is not None:
+            on_data(chunks)
 
 
-def run_bounded(args: list[str], directory: Path, timeout: float) -> ProcessResult:
-    """Drain output continuously, retain only final 64 KiB, kill on timeout."""
+def pass_reporter(progress):
+    """An on_data callback reporting each new Freerouting pass line through progress()."""
+    last = [None]
+    def report(chunks):
+        found = PASS_LINE.findall(bytes(chunks[-8192:]))
+        if found and found[-1] != last[0]:
+            last[0] = found[-1]
+            number, unrouted = found[-1]
+            progress(f"Routing · pass {int(number)}" + (f" · {int(unrouted)} unrouted" if unrouted else ""))
+    return report
+
+
+def run_bounded(args: list[str], directory: Path, timeout: float, cancel=None, on_data=None) -> ProcessResult:
+    """Drain output continuously, retain only final 64 KiB, kill on timeout or cancel."""
     chunks = bytearray()
     try:
         process = subprocess.Popen(args, cwd=directory, env=clean_environment(directory),
@@ -93,18 +112,31 @@ def run_bounded(args: list[str], directory: Path, timeout: float) -> ProcessResu
                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except OSError as exc:
         raise CapabilityError("Cannot start Java. Install Java 21 and configure its executable path.") from exc
-    reader = threading.Thread(target=_drain, args=(process.stdout, chunks), daemon=True)
+    reader = threading.Thread(target=_drain, args=(process.stdout, chunks, on_data), daemon=True)
     reader.start()
     try:
-        process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
-        raise CapabilityError(f"Freerouting/Java exceeded {timeout:g} seconds and was stopped; nothing applied.") from None
+        _wait(process, timeout, cancel)
     finally:
         reader.join(timeout=5)
         process.stdout.close()
     return ProcessResult(process.returncode, chunks.decode("utf-8", errors="replace"))
+
+
+def _wait(process, timeout: float, cancel=None) -> None:
+    """Wait for exit; kill on timeout or when `cancel` (a threading.Event) is set."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            process.wait(timeout=.1)
+            return
+        except subprocess.TimeoutExpired:
+            cancelled = cancel is not None and cancel.is_set()
+            if cancelled or time.monotonic() > deadline:
+                process.kill()
+                process.wait()
+                if cancelled:
+                    raise RoutingCancelled(CANCELLED) from None
+                raise CapabilityError(f"Freerouting/Java exceeded {timeout:g} seconds and was stopped; nothing applied.") from None
 
 
 def supports_constraints(constraints: tuple[Constraint, ...]) -> bool:
@@ -239,6 +271,7 @@ class _WarmRouter:
         self.directory = Path(tempfile.mkdtemp(prefix="warm-", dir=owner.work_directory))
         self.jar_lock = self.process = None
         self.log = bytearray()
+        self.on_log = None  # The current job's pass reporter.
         self.replies: Queue = Queue()
         atexit.register(self.close)
         try:
@@ -279,13 +312,19 @@ class _WarmRouter:
 
     def _drain_log(self):
         with self.process.stderr as log:
-            _drain(log, self.log)
+            _drain(log, self.log, lambda chunks: self.on_log and self.on_log(chunks))
 
-    def _reply(self, timeout: float) -> str:
-        try:
-            reply = self.replies.get(timeout=timeout)
-        except Empty:
-            raise TimeoutError from None
+    def _reply(self, timeout: float, cancel=None) -> str:
+        deadline = time.monotonic() + timeout
+        while True:
+            if cancel is not None and cancel.is_set():
+                raise RoutingCancelled(CANCELLED)
+            try:
+                reply = self.replies.get(timeout=min(.1, max(0, deadline - time.monotonic())))
+                break
+            except Empty:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError from None
         if reply is None:
             raise _WarmFailure("Warm router exited")
         return reply
@@ -293,17 +332,22 @@ class _WarmRouter:
     def alive(self) -> bool:
         return self.process is not None and self.process.poll() is None
 
-    def run(self, args: list[str], timeout: float) -> str:
-        """Submit one job; return the log tail. Raises TimeoutError or _WarmFailure."""
+    def run(self, args: list[str], timeout: float, cancel=None, on_log=None) -> str:
+        """Submit one job; return the log tail. Raises TimeoutError, _WarmFailure or
+        RoutingCancelled (the caller then kills this JVM)."""
         if any(ch in arg for arg in args for ch in "\t\r\n"):
             raise _WarmFailure("Argument cannot be sent to the warm router")
         del self.log[:]
+        self.on_log = on_log
         try:
             self.process.stdin.write(("\t".join(args) + "\n").encode("utf-8"))
             self.process.stdin.flush()
         except OSError as exc:
             raise _WarmFailure("Warm router pipe closed") from exc
-        reply = self._reply(timeout)
+        try:
+            reply = self._reply(timeout, cancel)
+        finally:
+            self.on_log = None
         if reply != "VELATRACE_JOB COMPLETED":
             raise _WarmFailure(reply)
         return self.log.decode("utf-8", errors="replace")
@@ -342,6 +386,10 @@ class Freerouting:
         self._warm_lock = threading.Lock()
         self._warm_failures = 0
         self._closed = False
+        # Set by the caller before each route: cancel (a threading.Event) stops the
+        # router process, progress(message) receives "Routing · pass N" updates.
+        self.cancel = threading.Event()
+        self.progress = lambda message: None
 
     def _args(self, directory: Path) -> list[str]:
         return [str(self.java), "-Xmx1024m", "-Djava.security.manager",
@@ -399,7 +447,7 @@ class Freerouting:
     def _router_args(directory: Path, copied: Path, output: Path) -> list[str]:
         # The one-shot CLI and the warm launcher receive exactly the same router arguments.
         return ["-de", str(copied), "-do", str(output),
-                "-da", "-dl", "--gui.enabled=false", "--api_server.enabled=false",
+                "-da", "--gui.enabled=false", "--api_server.enabled=false",
                 "--profile.allow_telemetry=false", "--feature_flags.save_jobs=false",
                 "--user_data_path=" + str(directory), "-mp", "100", "-mt", "1"]
 
@@ -440,7 +488,7 @@ class Freerouting:
         with self._warm_lock:
             self._ensure_warm()
 
-    def _route_warm(self, dsn: DsnInput, text: str) -> str | None:
+    def _route_warm(self, dsn: DsnInput, text: str, cancel) -> str | None:
         """Route in the warm JVM. None means use the one-shot path instead."""
         with self._warm_lock:
             warm = self._ensure_warm()
@@ -459,9 +507,15 @@ class Freerouting:
                 copied.write_text(text, encoding="utf-8")
                 output = directory / "result.ses"
                 try:
-                    self.last_log = warm.run(self._router_args(directory, copied, output), self.timeout)
+                    self.last_log = warm.run(self._router_args(directory, copied, output), self.timeout,
+                                             cancel, pass_reporter(self.progress))
                     if not output.is_file():
                         raise _WarmFailure("No SES")
+                except RoutingCancelled:
+                    # Killing the JVM is the only way to stop a job; warm up a fresh one.
+                    self._stop_warm(kill=True)
+                    threading.Thread(target=self._prewarm, daemon=True, name="velatrace-router-prewarm").start()
+                    raise
                 except TimeoutError:
                     self._stop_warm(kill=True)
                     raise CapabilityError(f"Freerouting/Java exceeded {self.timeout:g} seconds and was stopped; nothing applied.") from None
@@ -473,6 +527,9 @@ class Freerouting:
                 return self._read_ses(output, dsn)
 
     def route(self, dsn: DsnInput, constraints: tuple[Constraint, ...], *, electrical_rules=None) -> str:
+        cancel = self.cancel
+        if cancel.is_set():
+            raise RoutingCancelled(CANCELLED)
         local_path(dsn.path)
         local_path(dsn.ticket.board_path)
         dsn.assert_unchanged()
@@ -486,8 +543,10 @@ class Freerouting:
             # layer_rule. Compile only after global minima have been strengthened.
             from .electrical_rules import compile_electrical_dsn
             text = compile_electrical_dsn(text, electrical_rules)
-        if self.warm and (ses := self._route_warm(dsn, text)) is not None:
+        if self.warm and (ses := self._route_warm(dsn, text, cancel)) is not None:
             return ses
+        if cancel.is_set():
+            raise RoutingCancelled(CANCELLED)
         self._check_installation()
         with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
             directory = Path(name)
@@ -499,7 +558,7 @@ class Freerouting:
             copied.write_text(text, encoding="utf-8")
             output = directory / "result.ses"
             args = self._args(directory) + ["-jar", str(self.jar)] + self._router_args(directory, copied, output)
-            result = run_bounded(args, directory, self.timeout)
+            result = run_bounded(args, directory, self.timeout, cancel, pass_reporter(self.progress))
             self.last_log = result.output  # Local only; never transmitted or included in provider prompts.
             if result.returncode:
                 raise CapabilityError("Freerouting failed or produced no SES. Inspect the local router log; nothing was applied.")

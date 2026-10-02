@@ -63,6 +63,30 @@ Timeout kills the Java process. Per-run scratch data is removed on return/error.
 The retained log may contain design names; it stays local and must never enter
 provider prompts or telemetry.
 
+Progress and cancel: the router runs without `-dl`, so Freerouting 2.1.0 logs
+`Auto-router pass #N … (K unrouted).` lines (the count is omitted at zero); they
+are parsed from the drained log as it arrives and shown as **Routing · pass N · K
+unrouted**. `Freerouting.cancel` (a `threading.Event`, replaced by the caller per
+route) is polled every 0.1 s: setting it kills the one-shot JVM, or the warm JVM
+(which cannot abort a job otherwise; a fresh one is pre-warmed in the background,
+and a cancel never counts as a warm failure or falls back to a one-shot rerun).
+`RoutingCancelled` is raised and nothing is written.
+
+## Automatic DSN export (one-click)
+
+`KiCadCli.export_dsn` writes the live board text (IPC `SaveDocumentToString`) and
+a copy of the saved `.kicad_pro` (net classes) into a private folder, then runs
+`<kicad bin>/python -I -c` with `pcbnew.ExportSpecctraDSN(pcbnew.LoadBoard(board),
+dsn)`; the paths are arguments, never code. The bundled Python is found next to
+the configured `kicad-cli` (Windows `bin/python.exe`, macOS
+`Contents/Frameworks/Python.framework/.../python3`, Linux the system `python3`).
+`KICAD_CONFIG_HOME` points at a private folder holding only a copy of
+`kicad_common.json`, so the user's settings are never written. It is killed after
+the CLI timeout or on cancel. Measured: about 2 s on the practice board with
+KiCad 10.0.6. No Python, no `pcbnew` (SWIG is slated for removal in KiCad 11) or a
+failed export raises `ExportUnavailable`, and the UI offers the manual File >
+Export path instead.
+
 Router run time on small boards is mostly fixed cost inside the unmodified JAR:
 JVM and logging start-up (about 1.5-2 s), an unconditional 1 s sleep in 2.1.0
 start-up, and 500 ms job-state polling before the SES is written. Measured on
