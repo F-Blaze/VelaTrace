@@ -10,9 +10,10 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import weakref
 
-from .errors import CapabilityError, ValidationError
+from .errors import CapabilityError, ExportUnavailable, RoutingCancelled, ValidationError
 from .models import DesignSnapshot
 from .netlist import read_xml_netlist
 from .sexpr import QuotedAtom, parse, render
@@ -146,6 +147,8 @@ class KiCadCli:
         self._export_lock = threading.Lock()
         self._config_homes: dict[frozenset, Path] = {}  # footprint libraries -> DRC settings folder
         self._config_lock = threading.Lock()
+        self.python: Path | None = None  # KiCad's bundled Python; found next to kicad-cli when unset
+        self._export_home: Path | None = None
 
     def check_startup(self) -> tuple[int, int, int]:
         try:
@@ -270,3 +273,81 @@ class KiCadCli:
             if status == 5 and not (report.violations or report.unconnected or report.schematic_parity):
                 raise ValidationError("KiCad DRC status disagrees with its report; approval is unavailable.")
             return report
+
+    def kicad_python(self) -> Path | None:
+        """The Python that ships with this KiCad (it has the pcbnew module)."""
+        if self.python is not None:
+            return self.python
+        folder = self.executable.parent
+        for path in (folder / "python.exe", folder / "python3",  # Windows bundle
+                     folder.parent / "Frameworks" / "Python.framework" / "Versions" / "Current" / "bin" / "python3"):
+            if path.is_file():
+                return path
+        # Linux packages install pcbnew into the system Python.
+        found = shutil.which("python3") if os.name != "nt" and sys.platform != "darwin" else None
+        return Path(found) if found else None
+
+    def _export_config_home(self) -> Path:
+        """Private settings for the export process: only path variables are copied, so
+        KiCad never writes (or reads unrelated state from) the user's own settings."""
+        with self._config_lock:
+            if self._export_home is None:
+                if self.version is None:
+                    self.check_startup()
+                home = Path(tempfile.mkdtemp(prefix="velatrace-kicad-export-"))
+                weakref.finalize(self, shutil.rmtree, home, True)
+                target = home / f"{self.version[0]}.{self.version[1]}"
+                target.mkdir()
+                source = user_config_dir(self.version) / "kicad_common.json"
+                if source.is_file():
+                    shutil.copyfile(source, target / source.name)
+                self._export_home = home
+            return self._export_home
+
+    def export_dsn(self, board_text: str, board_path: Path, folder: Path, cancel=None) -> Path:
+        """Write the live board text and its saved project into `folder`, then export
+        Specctra DSN with KiCad's own exporter in a separate process. The user's board,
+        project and settings are only read. Raises ExportUnavailable when this KiCad
+        cannot export headlessly (no bundled Python/pcbnew, e.g. SWIG removed)."""
+        python = self.kicad_python()
+        if python is None:
+            raise ExportUnavailable("KiCad's bundled Python was not found next to kicad-cli.")
+        board_path, folder = Path(board_path), Path(folder)
+        board = folder / board_path.name
+        board.write_text(board_text, encoding="utf-8")
+        project = board_path.with_suffix(".kicad_pro")
+        if project.is_file():  # Net classes live in the project; the DSN carries them.
+            shutil.copyfile(project, board.with_suffix(".kicad_pro"))
+        output = board.with_suffix(".dsn")
+        environment = local_tool_environment()
+        environment["KICAD_CONFIG_HOME"] = str(self._export_config_home())
+        try:
+            process = subprocess.Popen([str(python), "-I", "-c", EXPORT_SCRIPT, str(board), str(output)],
+                                       cwd=folder, env=environment, shell=False, stdin=subprocess.DEVNULL,
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except OSError as exc:
+            raise ExportUnavailable("KiCad's bundled Python could not start.") from exc
+        deadline = time.monotonic() + self.timeout
+        while True:
+            try:
+                _, error = process.communicate(timeout=.2)
+                break
+            except subprocess.TimeoutExpired:
+                if (cancel is not None and cancel.is_set()) or time.monotonic() > deadline:
+                    process.kill()
+                    process.communicate()
+                    if cancel is not None and cancel.is_set():
+                        raise RoutingCancelled("Cancelled; nothing was written to the board.") from None
+                    raise ExportUnavailable(f"DSN export exceeded {self.timeout:g} seconds and was stopped.") from None
+        if process.returncode or not output.is_file():
+            tail = error[-2000:].decode("utf-8", errors="replace")
+            reason = ("this KiCad's Python has no pcbnew module" if "pcbnew" in tail and "Error" in tail
+                      else f"exit {process.returncode}")
+            raise ExportUnavailable(f"KiCad could not export the DSN ({reason}).")
+        return output
+
+
+# Arguments, not formatted source: paths never become code.
+EXPORT_SCRIPT = ("import sys, pcbnew\n"
+                 "sys.exit(0 if pcbnew.ExportSpecctraDSN(pcbnew.LoadBoard(sys.argv[1]), sys.argv[2]) else 3)")

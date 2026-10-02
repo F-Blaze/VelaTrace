@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -33,13 +34,18 @@ class FakeWarm:
     def alive(self):
         return self.closed is None
 
-    def run(self, args, timeout):
+    def run(self, args, timeout, cancel=None, on_log=None):
         self.jobs += 1
         self.sent.append(args)
         if FakeWarm.mode == "crash":
             raise freerouting._WarmFailure("crash")
         if FakeWarm.mode == "hang":
             raise TimeoutError
+        if FakeWarm.mode == "cancel":
+            cancel.set()  # The user clicks Cancel mid-job.
+            raise freerouting.RoutingCancelled("Cancelled")
+        if on_log is not None:
+            on_log(bytearray(b"Auto-router pass #2 on board 'x' was completed in 1 seconds (4 unrouted).\n"))
         Path(args[args.index("-do") + 1]).write_text("warm result")
         return "warm log"
 
@@ -48,7 +54,7 @@ class FakeWarm:
         shutil.rmtree(self.directory, ignore_errors=True)
 
 
-def one_shot(args, directory, timeout):
+def one_shot(args, directory, timeout, cancel=None, on_data=None):
     if "-version" in args:
         return ProcessResult(0, 'version "21.0.1"')
     if "OfflineProbe" in args:
@@ -115,6 +121,24 @@ class WarmLifecycleTests(unittest.TestCase):
             self.router.route(self.dsn, ())
         run.assert_not_called()
         self.assertIs(FakeWarm.started[0].closed, True)
+
+    def test_cancel_kills_warm_jvm_never_falls_back_and_rewarms(self):
+        FakeWarm.mode = "cancel"
+        with patch.object(freerouting, "run_bounded") as run, \
+                self.assertRaises(freerouting.RoutingCancelled):
+            self.router.route(self.dsn, ())
+        run.assert_not_called()  # No one-shot rerun of a cancelled job.
+        self.assertIs(FakeWarm.started[0].closed, True)
+        self.assertEqual(self.router._warm_failures, 0)
+        # The next route is refused until the caller supplies a fresh cancel event.
+        with self.assertRaises(freerouting.RoutingCancelled):
+            self.router.route(self.dsn, ())
+        FakeWarm.mode = "ok"
+        self.router.cancel = threading.Event()
+        seen = []
+        self.router.progress = seen.append
+        self.assertEqual(self.router.route(self.dsn, ()), "warm result")
+        self.assertEqual(seen, ["Routing · pass 2 · 4 unrouted"])
 
     def test_unlocked_jar_is_rehashed_before_every_warm_job(self):
         self.assertEqual(self.router.route(self.dsn, ()), "warm result")
