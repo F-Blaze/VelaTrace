@@ -32,11 +32,13 @@ class PortfolioCancelled(ValidationError):
 class PortfolioBudget:
     max_candidates: int
     max_seconds: float
+    first_feasible: bool = False
 
     def __post_init__(self):
         if (type(self.max_candidates) is not int or self.max_candidates < 1
                 or type(self.max_seconds) not in {int, float}
-                or not math.isfinite(self.max_seconds) or self.max_seconds <= 0):
+                or not math.isfinite(self.max_seconds) or self.max_seconds <= 0
+                or type(self.first_feasible) is not bool):
             raise ValidationError("Portfolio budgets require positive finite time and an integer candidate limit.")
 
 
@@ -311,6 +313,11 @@ def explore_candidates(
         candidate = CandidateResult(attempt, producer.name, plan, report, metrics)
         candidates.append(candidate)
         record(attempt, producer.name, "feasible", metrics=metrics, report=report)
+        if budget.first_feasible:
+            # Speed mode still requires complete independent validation and the
+            # final fresh validation below. It makes no optimality claim.
+            stop_reason = "first-feasible"
+            break
 
     winner = None
     check()

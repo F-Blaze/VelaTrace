@@ -138,6 +138,11 @@ separately against installed tools; they are not simulated by the unit tests.
 
 ## Remaining engineering gates
 
+The next milestone adds a pinned second external engine and fast/optimization
+search policies. Setup, boundaries and measured comparisons are documented in
+[KRT_BENCHMARK.md](KRT_BENCHMARK.md). It remains a synthetic research harness;
+the live preview/approval path has not been switched to it.
+
 1. Import confirmed endpoint-specific electrical requirements and fabrication
    limits, with units, provenance and a binding to board/project/stackup hashes.
    Never assume every multilayer board requires one particular plane arrangement.

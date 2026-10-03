@@ -85,6 +85,35 @@ class PortfolioTests(unittest.TestCase):
         self.assertIs(result.selected_plan, a)
         self.assertEqual(result.winner.attempt, 1)
 
+    def test_fast_policy_stops_after_first_complete_candidate_and_revalidates(self):
+        slow_call = []
+        def producers():
+            yield CandidateProducer('first', lambda remaining: plan(2))
+            slow_call.append(True)
+            yield CandidateProducer('shorter', lambda remaining: plan(1))
+        result = explore_candidates(producers(), self.validate,
+                                    budget=PortfolioBudget(5, 100, first_feasible=True),
+                                    expected_board_digest=BOARD, required_constraint_ids=REQUIRED,
+                                    assert_fresh=lambda: None, cancelled=lambda: False, clock=self.clock)
+        self.assertFalse(slow_call)
+        self.assertEqual(result.stop_reason, 'first-feasible')
+        self.assertEqual(result.selected_metrics.copper_length_mm, 2)
+        self.assertEqual(len(self.calls), 2)
+        self.assertEqual(self.calls[0], self.calls[1])
+
+    def test_fast_policy_falls_back_after_failed_candidate_but_cannot_bypass_final_check(self):
+        bad, good = plan(1), plan(2)
+        validated = []
+        def validate(candidate):
+            validated.append(candidate)
+            return report(candidate, unconnected_count=1 if candidate == bad or len(validated) == 3 else 0)
+        result = self.run_search([bad, good], validate=validate,
+                                 budget=PortfolioBudget(5, 100, first_feasible=True))
+        self.assertEqual(validated, [bad, good, good])
+        self.assertIsNone(result.winner)
+        with self.assertRaises(ValidationError):
+            PortfolioBudget(1, 10, first_feasible='yes')
+
     def test_only_feasible_complete_bound_reports_can_win(self):
         cases = (
             {"plan_digest": "other"}, {"board_digest": "other"},

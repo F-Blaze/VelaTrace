@@ -84,6 +84,13 @@ python -m pytest
 
 Security reports: see [SECURITY.md](SECURITY.md). VelaTrace is solo-maintained by F-Blaze with no response-time guarantee.
 
+Experimental routing development: the [hybrid benchmark](docs/KRT_BENCHMARK.md)
+compares pinned Freerouting and KiCadRoutingTools candidates on authored 4/6/8-layer
+obstacle boards. It includes a fast fallback strategy and a shortest-copper
+search, with independent KiCad validation. This research command is separate
+from the installed plugin and does not yet establish electrical correctness or
+superiority over other routers.
+
 ## License
 
 [MIT](LICENSE). Freerouting is GPLv3 and is run as a separate, unmodified external process; its JAR is not bundled.
