@@ -526,7 +526,7 @@ class Freerouting:
                 self._warm_failures = 0
                 return self._read_ses(output, dsn)
 
-    def route(self, dsn: DsnInput, constraints: tuple[Constraint, ...]) -> str:
+    def route(self, dsn: DsnInput, constraints: tuple[Constraint, ...], *, electrical_rules=None) -> str:
         cancel = self.cancel
         if cancel.is_set():
             raise RoutingCancelled(CANCELLED)
@@ -538,6 +538,11 @@ class Freerouting:
         if any(ch in dsn.path.name for ch in ('+', '\n', '\r')):
             raise ValidationError("DSN filename contains unsupported characters; export using a simple filename.")
         text = constrained_dsn(dsn.path.read_text(encoding="utf-8"), constraints)
+        if electrical_rules is not None:
+            # Dedicated classes are required: the pinned router ignores net-level
+            # layer_rule. Compile only after global minima have been strengthened.
+            from .electrical_rules import compile_electrical_dsn
+            text = compile_electrical_dsn(text, electrical_rules)
         if self.warm and (ses := self._route_warm(dsn, text, cancel)) is not None:
             return ses
         if cancel.is_set():

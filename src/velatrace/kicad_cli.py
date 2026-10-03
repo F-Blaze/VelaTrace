@@ -132,7 +132,8 @@ def parse_drc_report(path: Path) -> DrcResult:
 
 
 class KiCadCli:
-    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 120):
+    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 120, *,
+                 config_directory: Path | None = None):
         found = shutil.which(str(executable))
         if not found:
             raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its executable path.")
@@ -142,6 +143,7 @@ class KiCadCli:
         if not isinstance(timeout, (float, int)) or not 0 < timeout <= 600:
             raise ValidationError("KiCad CLI timeout must be between 0 and 600 seconds.")
         self.timeout = timeout
+        self.config_directory = Path(config_directory).resolve() if config_directory is not None else None
         self.version: tuple[int, int, int] | None = None
         self._exportable: set[tuple] = set()  # (schematic, project) digests proven exportable
         self._export_lock = threading.Lock()
@@ -150,11 +152,17 @@ class KiCadCli:
         self.python: Path | None = None  # KiCad's bundled Python; found next to kicad-cli when unset
         self._export_home: Path | None = None
 
+    def _environment(self):
+        environment = local_tool_environment()
+        if self.config_directory is not None:
+            environment['KICAD_CONFIG_HOME'] = str(self.config_directory)
+        return environment
+
     def check_startup(self) -> tuple[int, int, int]:
         try:
             result = subprocess.run([str(self.executable), "version"], shell=False,
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                    timeout=10, check=False, env=local_tool_environment(),
+                                    timeout=10, check=False, env=self._environment(),
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise CapabilityError("Cannot run kicad-cli. Check the configured KiCad installation.") from exc
@@ -176,7 +184,7 @@ class KiCadCli:
     def _run(self, arguments: list[str], cwd: Path, allowed_exit_codes=(0,), config_home=None) -> int:
         if self.version is None:
             self.check_startup()
-        environment = local_tool_environment()
+        environment = self._environment()
         if config_home is not None:
             environment["KICAD_CONFIG_HOME"] = str(config_home)
         try:
@@ -233,7 +241,10 @@ class KiCadCli:
                 self.check_startup()
             home = Path(tempfile.mkdtemp(prefix="velatrace-kicad-settings-"))
             weakref.finalize(self, shutil.rmtree, home, True)
-            source, target = user_config_dir(self.version), home / f"{self.version[0]}.{self.version[1]}"
+            version_folder = f"{self.version[0]}.{self.version[1]}"
+            source = (self.config_directory / version_folder if self.config_directory is not None
+                      else user_config_dir(self.version))
+            target = home / version_folder
             target.mkdir()
             for name in ("kicad_common.json", "sym-lib-table"):  # path variables; symbol libraries
                 if (source / name).is_file():
@@ -298,7 +309,9 @@ class KiCadCli:
                 weakref.finalize(self, shutil.rmtree, home, True)
                 target = home / f"{self.version[0]}.{self.version[1]}"
                 target.mkdir()
-                source = user_config_dir(self.version) / "kicad_common.json"
+                source = ((self.config_directory / f"{self.version[0]}.{self.version[1]}"
+                           if self.config_directory is not None else user_config_dir(self.version))
+                          / "kicad_common.json")
                 if source.is_file():
                     shutil.copyfile(source, target / source.name)
                 self._export_home = home

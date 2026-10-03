@@ -22,6 +22,11 @@ VelaTrace is a companion window for KiCad's PCB Editor. It does two things:
 1. **Audit** — reads real pad/net connectivity and runs free, offline design checks (decoupling, I2C pull-ups, LED resistors, dangling nets, duplicated parts and more) with concrete fixes and savings. An optional AI pass explains the findings.
 2. **Route** — runs [Freerouting](https://github.com/freerouting/freerouting) on your placed board and lets you preview, validate and approve the result before a single track touches your copper.
 
+Development work on electrically aware multilayer routing now includes strict
+stackup/geometry APIs and a local 4/6/8-layer candidate benchmark. These are
+experimental and are not yet an electrical-routing option in the companion
+window. See [scope, benchmark instructions and remaining gates](docs/ELECTRICAL_ROUTING.md).
+
 ## Why VelaTrace
 
 - **Connectivity-aware, not guesswork.** Checks and AI classification start from actual pad/net connectivity (open PCB, or a saved schematic/XML netlist), not just reference designators. Two parts on the same rail are not called duplicates unless value, footprint and pin connectivity match.
@@ -78,6 +83,13 @@ python -m pytest
 ```
 
 Security reports: see [SECURITY.md](SECURITY.md). VelaTrace is solo-maintained by F-Blaze with no response-time guarantee.
+
+Experimental routing development: the [hybrid benchmark](docs/KRT_BENCHMARK.md)
+compares pinned Freerouting and KiCadRoutingTools candidates on authored 4/6/8-layer
+obstacle boards. It includes a fast fallback strategy and a shortest-copper
+search, with independent KiCad validation. This research command is separate
+from the installed plugin and does not yet establish electrical correctness or
+superiority over other routers.
 
 ## License
 
