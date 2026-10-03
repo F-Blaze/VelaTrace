@@ -64,13 +64,37 @@ _PRECISION_TOKENS = frozenset({
     "RBIAS", "BIAS", "SS", "TR", "COMP", "ILIM", "LIM", "OCP", "OSC", "SENSE", "ISENSE",
     "VSENSE", "ISNS", "CC", "ID", "TIMER", "DELAY", "UVLO", "OVP", "HYS", "HYST", "TRIP",
     "REF", "VREF", "ADC", "AIN", "XIN", "XOUT", "XTAL", "XI", "XO", "CFG", "CONFIG", "MODE",
-    "SEL", "ADDR", "INP", "INN", "THERM", "NTC", "TEMP", "VSET", "SETI", "SETV"})
+    "SEL", "ADDR", "INP", "INN", "THERM", "NTC", "TEMP", "VSET", "SETI", "SETV",
+    # PHY/transceiver/LED-driver bias and reference resistors (e.g. EPHY_RTX 6k04 1%).
+    "RTX", "RTXT", "EXTRES", "RREF", "IBIAS", "VBIAS", "RTERM"})
+# Net-name tokens that prove a digital pull. Values outside E24 (4.99k, 6.04k: E48/E96/E192)
+# are usually chosen for precision, so they only count as pulls on a net named like this.
+_PULL_SIGNAL_TOKENS = frozenset({
+    "SDA", "SCL", "SMBDAT", "SMBCLK", "RST", "RESET", "EN", "ENABLE", "CE", "CS", "INT", "IRQ",
+    "ALERT", "BOOT", "TACH", "WAKE", "WAKEUP", "PG", "PGOOD", "PWRGD", "POK", "BTN", "BUTTON",
+    "KEY", "TX", "TXD", "RX", "RXD", "RTS", "CTS", "DTR", "MISO", "MOSI", "SCK", "SCLK",
+    "OE", "WP", "HOLD", "FAULT", "FLT", "READY", "RDY", "DONE", "STAT", "CHG", "DET", "GPIO",
+    "IO", "SHDN", "SLEEP", "STBY", "PULLUP", "PULLDOWN"})
 _OPAMP_PIN_RE = re.compile(r"(?i)[+-]|IN\d*[+-]|[+-]IN\d*|V[+-]")
-_LCSC_FIELDS = frozenset({"lcsc", "lcsc part", "lcsc part #", "lcsc#", "lcsc part number",
-                          "lcsc_part", "lcsc pn", "lcsc_pn", "jlcpcb part", "jlcpcb part #",
-                          "jlcpcb part number", "jlc part", "jlc_pn", "jlcpcb", "jlc"})
-_MPN_FIELDS = frozenset({"mpn", "manufacturer part number", "manufacturer_part_number",
-                         "mfr part number", "mfr. part #", "mfr_pn", "part number"})
+# Field names are compared after _field_key(): case, spaces and _-.#:/ punctuation ignored.
+# Supplier fields (SPN1, Supplier Part Number, ...) only count when the value looks like C<digits>.
+_LCSC_FIELDS = frozenset({
+    "lcsc", "lcsc part", "lcsc part number", "lcsc part no", "lcsc pn", "lcsc no", "lcsc id",
+    "jlc", "jlcpcb", "jlc part", "jlcpcb part", "jlc part number", "jlcpcb part number",
+    "jlc part no", "jlcpcb part no", "jlc pn", "jlcpcb pn", "spn", "spn1", "spn2",
+    "supplier part", "supplier part number", "supplier part no", "supplier pn",
+    "supplier 1 part number", "supplier part number 1"})
+_MPN_FIELDS = frozenset({
+    "mpn", "mpn1", "manufacturer part", "manufacturer part number", "manufacturer part no",
+    "manufacturer partno", "manufacturer pn", "mfr part", "mfr part number", "mfr part no",
+    "mfr pn", "mfg part number", "mfg pn", "part number", "partno", "part no", "pn", "p n"})
+_IGNORED_VALUE_WORDS = frozenset({"RES", "RESISTOR", "CAP", "CAPACITOR", "SMD", "MLCC", "CHIP",
+                                  "CERAMIC"}) | frozenset(_PACKAGES)
+_E24 = frozenset(Decimal(x) for x in (
+    "1", "1.1", "1.2", "1.3", "1.5", "1.6", "1.8", "2", "2.2", "2.4", "2.7", "3", "3.3", "3.6",
+    "3.9", "4.3", "4.7", "5.1", "5.6", "6.2", "6.8", "7.5", "8.2", "9.1"))
+_E12 = frozenset(Decimal(x) for x in ("1", "1.2", "1.5", "1.8", "2.2", "2.7", "3.3", "3.9",
+                                      "4.7", "5.6", "6.8", "8.2"))
 _PULL_ROLES = frozenset({"pullup", "pulldown"})
 _MOVABLE_ROLES = _PULL_ROLES | {"decoupling"}
 
@@ -84,10 +108,19 @@ class ParsedValue:
     power: str | None = None
     other: frozenset[str] = frozenset()
 
-    def compatible(self, other: "ParsedValue") -> bool:
-        """Same nominal part: no explicitly conflicting rating or unexplained extra text."""
-        for mine, theirs in ((self.tolerance, other.tolerance), (self.voltage, other.voltage),
-                             (self.dielectric, other.dielectric), (self.power, other.power)):
+    def compatible(self, other: "ParsedValue", *, ignore_voltage: bool = False) -> bool:
+        """Same nominal part: no conflicting rating or unexplained extra text.
+
+        A tolerance stated on only one side is a conflict ('10k 0.1%' is not a generic 10k).
+        ignore_voltage is for members that share one MPN: the MPN fixes the real rating.
+        """
+        if (self.tolerance is None) != (other.tolerance is None):
+            return False
+        pairs = [(self.tolerance, other.tolerance), (self.dielectric, other.dielectric),
+                 (self.power, other.power)]
+        if not ignore_voltage:
+            pairs.append((self.voltage, other.voltage))
+        for mine, theirs in pairs:
             if mine is not None and theirs is not None and mine != theirs:
                 return False
         return self.other == other.other
@@ -128,11 +161,11 @@ def _value_token(token: str, kind: str) -> Decimal | None:
     token = token.replace("µ", "u").replace("μ", "u")
     if kind == "resistor" and (leading := re.fullmatch(r"[Rr](\d+)", token)):
         return Decimal("0." + leading.group(1))  # R10 = 0.10 ohm
-    rkm = re.fullmatch(r"(\d+)([pnumkKMGRrPNU])(\d+)", token)
+    rkm = re.fullmatch(r"(\d+)([pnumkKMGRrPNU])(\d+)([A-Za-zΩωΩ]*)", token)
     if rkm:
-        whole, prefix, fraction = rkm.groups()
+        whole, prefix, fraction, unit = rkm.groups()
         prefix = _canonical_prefix(prefix, kind)
-        if prefix is None:
+        if prefix is None or unit.casefold() not in _UNIT[kind]:
             return None
         return Decimal(f"{whole}.{fraction}") * SI_PREFIX[prefix]
     plain = re.fullmatch(r"(\d+(?:\.\d*)?|\.\d+)([pnumkKMGPNU]?)([A-Za-zΩωΩ]*)", token)
@@ -159,10 +192,16 @@ def _canonical_prefix(prefix: str, kind: str) -> str | None:
 
 
 def parse_value(text: str, kind: str) -> ParsedValue | None:
-    """Parse passive value text such as 4k7, 4.7k, 4700, 10u, 100nF 50V X7R, 0R, 1k 1%."""
+    """Parse passive value text such as 4k7, 4.7k, 4700, 10u, 100nF 50V X7R, 0R, 1k 1%,
+    4,7uF (comma decimal), 10 kΩ, 2R2, '0402 10uF' (package/kind words are ignored)."""
     if kind not in _UNIT or not isinstance(text, str) or len(text) > 120:
         return None
-    tokens = [token for token in re.split(r"[\s,;_]+|(?<!\d)/|/(?!\d)", text.strip()) if token]
+    text = re.sub(r"(?<=\d),(?=\d)", ".", text.strip())  # European decimal comma
+    tokens = [token for token in re.split(r"[\s,;_]+|(?<!\d)/|/(?!\d)", text)
+              if token and token.upper() not in _IGNORED_VALUE_WORDS]
+    if len(tokens) > 1 and re.fullmatch(r"\d+(?:\.\d+)?", tokens[0]) and re.fullmatch(
+            r"(?i)[pnumkgrµμ]?(?:[ΩωΩ]|ohms?|f|h)?", tokens[1]):
+        tokens[:2] = [tokens[0] + tokens[1]]  # '10 kΩ', '100 nF' (before the DNP 'NF' check)
     if not tokens or any(token.upper() in _DNP for token in tokens):
         return None
     value = _value_token(tokens[0], kind)
@@ -223,21 +262,24 @@ def passive_kind(comp: Component) -> str | None:
     return None
 
 
-def _field(comp: Component, names: frozenset[str]) -> str:
-    for name, value in comp.fields.items():
-        if name.strip().casefold() in names and isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
+def _field_key(name: str) -> str:
+    return re.sub(r"[\s_\-.#:/]+", " ", name.casefold()).strip()
+
+
+def _fields(comp: Component, names: frozenset[str]) -> list[str]:
+    return [value.strip() for name, value in comp.fields.items()
+            if isinstance(name, str) and _field_key(name) in names
+            and isinstance(value, str) and value.strip()]
 
 
 def lcsc_code(comp: Component) -> str | None:
-    value = _field(comp, _LCSC_FIELDS).upper()
-    return value if re.fullmatch(r"C\d{1,9}", value) else None
+    return next((value.upper() for value in _fields(comp, _LCSC_FIELDS)
+                 if re.fullmatch(r"C\d{1,9}", value.upper())), None)
 
 
 def mpn_of(comp: Component) -> str | None:
-    value = _field(comp, _MPN_FIELDS)
-    return value if value and value.upper() not in {"~", "-", "N/A", "NA", "DNP"} else None
+    return next((value for value in _fields(comp, _MPN_FIELDS)
+                 if value.upper() not in {"~", "-", "?", "N/A", "NA", "DNP"}), None)
 
 
 def passives(snapshot: DesignSnapshot) -> list[Passive]:
@@ -281,6 +323,18 @@ def _precision_name(name: str) -> bool:
     return False
 
 
+def _pull_signal_name(name: str) -> bool:
+    for token in re.split(r"[^A-Za-z0-9]+", name.upper()):
+        token = token.rstrip("0123456789")
+        if token in _PULL_SIGNAL_TOKENS or (token[:1] == "N" and token[1:] in _PULL_SIGNAL_TOKENS):
+            return True
+    return False
+
+
+def _mantissa(value: Decimal) -> Decimal:
+    return value.scaleb(-value.adjusted()).normalize()
+
+
 def classify_roles(snapshot: DesignSnapshot, found: Iterable[Passive]) -> dict[str, _Role]:
     """Conservative topology roles. Anything uncertain is 'other' and never value-merged."""
     graph = snapshot.connectivity()
@@ -310,6 +364,7 @@ def classify_roles(snapshot: DesignSnapshot, found: Iterable[Passive]) -> dict[s
         signal = nets[1] if nets[0] == rail else nets[0]
         peers = [node for node in graph.get(signal, ()) if node[0] != passive.ref]
         if (not peers or _precision_name(base_net(signal))
+                or (_mantissa(parsed.value) not in _E24 and not _pull_signal_name(base_net(signal)))
                 or any(not _PULL_PEER_RE.fullmatch(ref) for ref, _ in peers)
                 or any(_precision_name(pin_names.get(node, "")) for node in peers
                        if pin_names.get(node))):
@@ -401,21 +456,35 @@ def _normalise_findings(ctx: _Context) -> list[Finding]:
     findings = []
     for line, members in ctx.by_line.items():
         texts = Counter(m.component.value.strip() for m in members)
-        ids = {lcsc_code(m.component) or mpn_of(m.component) for m in members} - {None}
+        # One part number on every member, or none on any: a generic part and a specific
+        # MPN/LCSC part (or two different MPNs) are different BOM lines on purpose.
+        ids = {lcsc_code(m.component) or mpn_of(m.component) for m in members}
+        same_part = len(ids) == 1 and None not in ids
         if len(texts) < 2 or len(ids) > 1 or any(
-                not a.parsed.compatible(b.parsed) for a in members for b in members):
+                not a.parsed.compatible(b.parsed, ignore_voltage=same_part)
+                for a in members for b in members):
             continue
         kind, value, package = line
-        canonical = max(texts, key=lambda text: (texts[text], text == format_value(value, kind)))
+        volts = {m.parsed.voltage for m in members} - {None}
+        # Never suggest a spelling that drops or lowers a stated voltage rating.
+        canonical = max(texts, key=lambda text: (
+            same_part or not volts or parse_value(text, kind).voltage == max(volts),
+            texts[text], text == format_value(value, kind)))
         spelled = "; ".join(f"{_ref_list(_refs(m for m in members if m.component.value.strip() == t))}"
                             f" = '{t}'" for t in sorted(texts))
+        same = "Same value, package and ratings"
+        write = f"Write the value as '{canonical}'"
+        if same_part and len(volts) > 1:
+            same = (f"All carry part number {next(iter(ids))}, yet the text states "
+                    f"{len(volts)} different voltage ratings; the part's datasheet rating is the real one")
+            write = f"Write the value as '{format_value(value, kind)}' plus the part's real rating"
         findings.append(Finding(
             "bom.value_normalise", Severity.SAVING,
             f"{_line_text(kind, value, package)} {kind} value is written {len(texts)} ways",
             refs=_refs(members),
-            evidence=(f"{spelled}. Same value, package and ratings, but BOM tools group by value "
+            evidence=(f"{spelled}. {same}, but BOM tools group by value "
                       f"text, so this becomes {len(texts)} BOM lines instead of 1."),
-            fix=(f"Write the value as '{canonical}' on all of them and give them one LCSC/MPN so "
+            fix=(f"{write} on all of them and give them one LCSC/MPN so "
                  f"the BOM has a single line ({len(texts) - 1} fewer to source and review).")))
     return findings
 
@@ -434,11 +503,7 @@ def _pick_target(ctx: _Context, candidates: list[tuple], counts: Counter):
 
 
 def _is_e12(value: Decimal) -> bool:
-    if value <= 0:
-        return False
-    mantissa = value.scaleb(-value.adjusted()).normalize()
-    return mantissa in {Decimal(x) for x in ("1", "1.2", "1.5", "1.8", "2.2", "2.7", "3.3",
-                                             "3.9", "4.7", "5.6", "6.8", "8.2")}
+    return value > 0 and _mantissa(value) in _E12
 
 
 def _merge_cost(ctx: _Context, removed: list[tuple]) -> tuple[Decimal | None, str]:
@@ -468,13 +533,22 @@ def _value_merge_findings(ctx: _Context) -> list[Finding]:
                 end += 1
             cluster = [("resistor", value, package) for value in ordered[start:end + 1]]
             start = end + 1
-            if len(cluster) < 2:
-                continue
             members = [m for line in cluster for m in ctx.by_line[line]]
             if any(not a.parsed.compatible(b.parsed) for a in members for b in members):
                 continue
-            counts = Counter({line: len(ctx.by_line[line]) for line in cluster})
-            target = _pick_target(ctx, cluster, counts)
+            # Any other existing line of this package (a USB-C Rd 5.1k, say) can absorb the
+            # pulls: its own parts never change, so its role does not matter.
+            low, high = cluster[-1][1] / MERGE_RATIO, cluster[0][1] * MERGE_RATIO
+            existing = [line for line in ctx.by_line if line[0] == "resistor"
+                        and line[2] == package and line not in cluster and low <= line[1] <= high
+                        and _mantissa(line[1]) in _E24
+                        and all(a.parsed.compatible(b.parsed) for a in ctx.by_line[line]
+                                for b in members)]
+            candidates = cluster + existing
+            if len(candidates) < 2:
+                continue
+            counts = Counter({line: len(ctx.by_line[line]) for line in candidates})
+            target = _pick_target(ctx, candidates, counts)
             removed = [line for line in cluster if line != target and all(
                 ctx.role(m).role in _PULL_ROLES for m in ctx.by_line[line])]
             if not removed:
@@ -482,9 +556,13 @@ def _value_merge_findings(ctx: _Context) -> list[Finding]:
             moved = [m for line in removed for m in ctx.by_line[line]]
             target_text = format_value(target[1], "resistor")
             cost, cost_note = _merge_cost(ctx, removed)
+            if target in existing:
+                cost_note = (f"{target_text} {package} is already on the BOM "
+                             f"({_ref_list(_refs(ctx.by_line[target]), 4)}). {cost_note}")
+            shown = sorted({line[1] for line in removed} | {target[1]})
             findings.append(Finding(
                 "bom.value_merge", Severity.SAVING,
-                f"Pull resistors {', '.join(format_value(line[1], 'resistor') for line in cluster)}"
+                f"Pull resistors {', '.join(format_value(v, 'resistor') for v in shown)}"
                 f" ({package}) can share one value: {target_text}",
                 refs=_refs(moved + ctx.by_line[target]),
                 nets=tuple(sorted({ctx.role(m).signal for m in moved})),
