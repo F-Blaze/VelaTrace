@@ -15,6 +15,11 @@ class Pin:
     # Absolute pad position on the board; None for schematic/netlist sources.
     position_mm: tuple[float, float] | None = None
 
+    @property
+    def no_connect(self) -> bool:
+        """The schematic flags this pin as intentionally unconnected (pin type or NC flag)."""
+        return "no_connect" in self.electrical_type
+
 
 @dataclass(frozen=True)
 class Component:

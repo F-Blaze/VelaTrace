@@ -25,21 +25,32 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
         raise ValidationError("Cannot parse KiCad XML netlist; export again with --format kicadxml.") from exc
     if root.tag != "export" or root.find("components") is None or root.find("nets") is None:
         raise ValidationError("A KiCad connectivity netlist is required, not a flat BOM.")
-    pins: dict[str, list[Pin]] = {}
-    membership: dict[tuple[str, str], str] = {}
-    for net in root.findall("./nets/net"):
-        name = net.get("name", "")
+    nodes = [(net.get("name", ""), node) for net in root.findall("./nets/net") for node in net.findall("node")]
+    # KiCad 10 writes pinfunction as "<name>_<number>"; strip it only when every named pin
+    # in the file follows that form, so a real pin called "IO_1" from older exports survives.
+    named = [(node.get("pinfunction", ""), node.get("pin", "")) for _, node in nodes if node.get("pinfunction")]
+    suffixed = bool(named) and all(func.endswith("_" + number) for func, number in named)
+    pins: dict[tuple[str, str], Pin] = {}
+    for name, node in nodes:
         if not name:
             raise ValidationError("Netlist contains a net without a name.")
-        for node in net.findall("node"):
-            key = (node.get("ref", ""), node.get("pin", ""))
-            if not all(key):
-                raise ValidationError("Netlist contains a node without a reference or pin number.")
-            if key in membership:
+        key = (node.get("ref", ""), node.get("pin", ""))
+        if not all(key):
+            raise ValidationError("Netlist contains a node without a reference or pin number.")
+        func = node.get("pinfunction", "")
+        if suffixed and func:
+            func = func[:-len(key[1]) - 1]
+        if key in pins:
+            # Repeated pad numbers (e.g. a 4-pad switch numbered 1,1,2,2): one pad wired, the
+            # twin left on KiCad's "unconnected-(...)" net. The real net wins.
+            if name.startswith("unconnected-("):
+                continue
+            if not pins[key].net.startswith("unconnected-("):
                 raise ValidationError("Netlist contains duplicate or conflicting pin membership.")
-            membership[key] = name
-            pins.setdefault(node.get("ref", ""), []).append(
-                Pin(node.get("pin", ""), name, node.get("pinfunction", ""), node.get("pintype", "")))
+        pins[key] = Pin(key[1], name, func, node.get("pintype", ""))
+    by_ref: dict[str, list[Pin]] = {}
+    for (ref, _), pin in pins.items():
+        by_ref.setdefault(ref, []).append(pin)
     components = []
     references: set[str] = set()
     for comp in root.findall("./components/comp"):
@@ -49,7 +60,7 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
         references.add(ref)
         fields = {item.get("name", ""): item.text or "" for item in comp.findall("./fields/field")}
         components.append(Component(ref, comp.findtext("value", ""), comp.findtext("footprint", ""),
-                                    tuple(pins.get(ref, ())), fields))
-    if set(pins) - references:
+                                    tuple(by_ref.get(ref, ())), fields))
+    if set(by_ref) - references:
         raise ValidationError("Netlist connectivity refers to unknown components.")
     return DesignSnapshot(tuple(components), "kicad-xml-netlist", path)
