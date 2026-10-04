@@ -33,7 +33,7 @@ class KiCadCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "drc.json"
             warning = {"type": "clearance", "severity": "warning", "items": [{"uuid": "pad-1"}]}
-            incomplete = [warning | {"items": []}, warning | {"items": [{}]},
+            incomplete = [warning | {"items": [{}]},
                           warning | {"items": [{"uuid": None}]}, warning | {"type": None},
                           warning | {"severity": None}]
             for issue in incomplete:
@@ -48,6 +48,12 @@ class KiCadCliTests(unittest.TestCase):
                                        "schematic_parity": []}))
             result = parse_drc_report(path)
             self.assertEqual(route_issues(result, result), (0, 1))
+            # KiCad reports a copper sliver with no items: it can never be matched to the
+            # unrouted board, so it blocks, but the identified warning beside it is still exempt.
+            path.write_text(json.dumps({"violations": [warning, warning | {"type": "copper_sliver", "items": []}],
+                                       "unconnected_items": [], "schematic_parity": []}))
+            result = parse_drc_report(path)
+            self.assertEqual(route_issues(result, result), (1, 1))
 
     def test_incomplete_drc_coverage_refused(self):
         with tempfile.TemporaryDirectory() as directory:

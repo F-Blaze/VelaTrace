@@ -107,7 +107,13 @@ def _sections(node: list, allowed: set[str], offset: int = 1):
 def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[str],
               via_catalog: Mapping[str, ViaSpec] | None = None,
               expected_placements: Mapping[str, tuple[float, float, str, float]] | None = None,
-              expected_placement_resolution_mm: float | None = None) -> RoutePlan:
+              expected_placement_resolution_mm: float | None = None,
+              layer_aliases: Mapping[str, str] | None = None,
+              optional_placements: frozenset[str] = frozenset()) -> RoutePlan:
+    """`layers` are the DSN's layer names; layer_aliases maps renamed ones to the
+    canonical board names (e.g. Front -> F.Cu) that the plan and via specs use."""
+    def board(name):
+        return (layer_aliases or {}).get(name, name)
     root = parse(text)
     if root[0] != "session" or len(root) < 3 or not isinstance(root[1], str):
         raise ValidationError("Expected a Specctra session root.")
@@ -133,10 +139,13 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
             raise ValidationError("SES placement resolution differs from the verified DSN precision.")
         seen_places = set()
         for component in children(placement, "component"):
-            if len(component) < 2 or not isinstance(component[1], str):
+            # A footprint with no library name is written as (component "" ...) in the
+            # DSN and comes back with the name left out. The name is never used.
+            first = 2 if len(component) > 1 and isinstance(component[1], str) else 1
+            if len(component) <= first:
                 raise ValidationError("Malformed SES component placement.")
-            _sections(component, {"place"}, 2)
-            for place in component[2:]:
+            _sections(component, {"place"}, first)
+            for place in component[first:]:
                 if (len(place) != 6 or not isinstance(place[1], str)
                         or place[1] in seen_places or place[1] not in expected_placements):
                     raise ValidationError("Unknown, duplicate or unsupported SES placement.")
@@ -150,7 +159,8 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                         or not 0 <= rotation <= 360
                         or int(rotation) % 360 != _rounded(angle % 360) % 360):
                     raise ValidationError("SES moved, rotated or flipped a footprint; entire route refused.")
-        if seen_places != set(expected_placements):
+        # Only footprints without a connected pad (optional_placements) may be left out.
+        if not set(expected_placements) - set(optional_placements) <= seen_places:
             raise ValidationError("SES placement reference list changed.")
     routes = one(root, "routes")
     _sections(routes, {"resolution", "parser", "library_out", "network_out"})
@@ -186,7 +196,7 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                         or (len(circle) == 5 and (number(circle[3]) != 0 or number(circle[4]) != 0))):
                     raise ValidationError("SES padstack geometry differs from verified board via.")
                 circle_layers.add(circle[1])
-            if not set(spec.layers) <= circle_layers:
+            if not set(spec.layers) <= {board(name) for name in circle_layers}:
                 raise ValidationError("SES via layer span differs from verified board via.")
             if any(attach != ["attach", "off"] for attach in children(padstack, "attach")):
                 raise ValidationError("Unsupported SES padstack attachment.")
@@ -205,21 +215,23 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                     if kind not in [["type", "route"], ["type", "normal"]]:
                         raise ValidationError("Unsupported SES wire type.")
                 path = one(geometry, "path")
-                if len(path) < 7 or len(path) % 2 != 1 or not isinstance(path[1], str) or path[1] not in layers:
+                # Freerouting 2.1.0 also emits one-point paths (at vias and pad centres).
+                # They have no length: like KiCad's own SES import, _normalised drops them.
+                if len(path) < 5 or len(path) % 2 != 1 or not isinstance(path[1], str) or path[1] not in layers:
                     raise ValidationError("Unsupported SES path or layer.")
                 width = number(path[2]) * scale
                 if not 0 < width <= 100:
                     raise ValidationError("Invalid SES track width.")
                 points = tuple((coordinate(path[i], scale), coordinate(path[i+1], scale))
                                for i in range(3, len(path), 2))
-                tracks.append(Track(net[1], path[1], width, points))
+                tracks.append(Track(net[1], board(path[1]), width, points))
             else:
                 if len(geometry) not in {4, 5} or not isinstance(geometry[1], str):
                     raise ValidationError("Unsupported SES via geometry.")
                 if len(geometry) == 5 and geometry[4] != ["type", "route"]:
                     raise ValidationError("Unsupported SES via type.")
                 spec = (via_catalog or {}).get(geometry[1])
-                if spec is None or not 0 < spec.drill_mm < spec.diameter_mm <= 100 or not set(spec.layers) <= layers:
+                if spec is None or not 0 < spec.drill_mm < spec.diameter_mm <= 100 or not set(spec.layers) <= {board(name) for name in layers}:
                     raise ValidationError("SES via lacks a verified board padstack/drill mapping.")
                 vias.append(Via(net[1], (coordinate(geometry[2], scale), coordinate(geometry[3], scale)), spec))
     return RoutePlan(base[1], *_normalised(tracks, vias))

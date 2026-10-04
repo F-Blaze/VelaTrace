@@ -93,16 +93,53 @@ start-up, and 500 ms job-state polling before the SES is written. Measured on
 Windows with Temurin 21.0.12 (2026-09-29): `-XX:TieredStopAtLevel=1` saved about
 0.8 s on 4-6 footprint boards but doubled routing time on a 100-footprint board
 (47 s to 99 s), `-XX:+UseSerialGC` and an AppCDS archive gave no gain, and the
-post-route optimizer is already off in 2.1.0 CLI mode. None are used. Routing stops
-on its own once passes stop improving, so `-mp 100` only bounds unroutable boards.
+post-route optimizer is already off in 2.1.0 CLI mode. None are used.
+
+### Stalled routes and partial results
+
+Measured on real boards (2026-10-04): the 2.1.0 CLI ignores `-mp`,
+`--router.max_passes` and `--router.job_timeout` (its headless path never sets the
+stop pass, so it runs to pass 999), and it keeps retrying a connection it cannot
+route. A 17-part board sat at "1 unrouted" from pass 8 to pass 999 (288 s). The
+router is single-threaded by design (`-mt 1`; the multi-threaded router adds
+clearance violations) and these boards stay far below the 1 GB heap, so neither
+more cores nor more memory helps.
+
+Every route therefore runs through the launcher (`WarmRouter`), also when the warm
+option is off (the JVM is then started for that route and closed after it):
+
+- The launcher echoes each pass result and keeps the SES of the best finished pass
+  (fewest unrouted; a stop lands mid-pass, when the board is partly ripped up).
+- VelaTrace asks it to stop (`VELATRACE_STOP`) when the unrouted count has not
+  improved for `STALL_PASSES` (12) passes, or when the budget
+  `route_budget()` = 30 s + 3 s per footprint (60 s minimum, timeout - 30 s maximum)
+  is spent. The launcher replies `VELATRACE_JOB STOPPED` and writes that best SES.
+- A stalled route is started again while less than 60 % of the budget is used, and
+  the attempt with the fewest unrouted connections is kept (results vary run to run).
+- The partial route goes through the normal preview and candidate DRC and is shown
+  as a shortfall ("N of M connections routed"); it can be rejected, never approved.
+- The hard timeout still kills the JVM with nothing applied. The plain one-shot
+  CLI remains only as the fallback when the launcher cannot start.
+
+Before routing, `(plane ...)` entries on the outer copper layers are removed from
+the router's DSN copy: Freerouting treats a pour as solid copper over its whole
+outline, but tracks cut a real outer-layer pour into islands and KiCad's DRC (zones
+refilled) then reports those pads unconnected. Such nets are routed with tracks;
+inner-layer planes are kept. One-point SES paths, which 2.1.0 emits at vias and
+pads, have no length and are dropped as KiCad's own SES import does.
+
 The one-shot path re-hashes the JAR on every route (about 0.2 s for 67 MB); a
 size/mtime cache was rejected because it would let an equal-size replacement skip
 the pin.
 
 ## Warm router
 
-`Freerouting(..., warm=True)` (used by the plugin UI only when **Keep Freerouting running between routes** is ticked in Setup; off by default) removes those fixed costs
-from each route. `check_startup()` pre-warms one JVM in the background running
+Every route runs through the launcher described here (see "Stalled routes and
+partial results"). `Freerouting(..., warm=True)` (the plugin UI's **Keep Freerouting
+running** option in Setup; off by default) additionally keeps that JVM between
+routes, which removes the fixed start-up costs from each route; with it off the
+launcher JVM is started for one route, without the warm-up route, and closed after it.
+`check_startup()` pre-warms one JVM in the background running
 `router_resources/WarmRouter.class`, under the same offline policy, arguments,
 clean environment and heap limit. Its start-up does what a one-shot route does
 before launching Freerouting: the JAR hash, the Java 21 check and `OfflineProbe`
@@ -187,7 +224,7 @@ javac --release 21 -proc:none -cp freerouting-2.1.0.jar src/velatrace/router_res
 ```
 
 Expected class SHA-256 (Temurin 21.0.12 javac):
-`4283bd5219bf2bf1f85ea7ae07a28d0fa41121f8d8bb9020ae381db4a284adae`.
+`61af2ebe3249918f488a006b6aecdf1afb36118033b56e64290ba45c9be7645b`.
 It uses only public classes of the unmodified JAR and is verified before each start.
 
 ## Requirements for the board safety adapter

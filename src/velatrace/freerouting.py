@@ -26,14 +26,49 @@ VERSION = "2.1.0"
 JAR_SHA256 = "2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def"
 RELEASE_URL = "https://github.com/freerouting/freerouting/releases/tag/v2.1.0"
 PROBE_SHA256 = "c27481d8f2e0505ec21b8ba375888343dfcc06406d9e62e4ab6c7c63929ef6de"
-WARM_SHA256 = "4283bd5219bf2bf1f85ea7ae07a28d0fa41121f8d8bb9020ae381db4a284adae"
+WARM_SHA256 = "61af2ebe3249918f488a006b6aecdf1afb36118033b56e64290ba45c9be7645b"
 MAX_SES = 32_000_000
 WARM_START_SECONDS = 60
 WARM_MAX_FAILURES = 2
 CANCELLED = "Cancelled; nothing was written to the board."
 # Freerouting 2.1.0 logs e.g. "Auto-router pass #1 on board '…' was completed in 1.84
 # seconds with the score of 933.76 (1 unrouted)." The count is omitted at zero.
-PASS_LINE = re.compile(rb"Auto-router pass #(\d+) [^\n]*?(?:\((\d+) unrouted\))?\.?\r?\n")
+# "(1 unrouted and 2 violations)" and "(2 violations)" also occur.
+PASS_LINE = re.compile(rb"Auto-router pass #(\d+) [^\n]*?(?:\((\d+) unrouted[^\n)]*\))?\.?\r?\n")
+# Freerouting 2.1.0 ignores its pass and time limits on the command line and keeps
+# retrying connections it cannot route (hundreds of passes were measured on real
+# boards). The launcher is asked to stop, keeping the partial route, when the
+# unrouted count has not improved for STALL_PASSES passes or the budget is spent.
+STALL_PASSES = 12
+RETRY_FRACTION = .6  # A stalled route is retried only while this much of the budget is unspent.
+STOP_GRACE_SECONDS = 30
+
+
+def route_budget(parts: int, timeout: float) -> float:
+    """Seconds of routing before a stop is requested, scaled to board size; the hard
+    timeout (process killed, nothing kept) stays STOP_GRACE_SECONDS behind it."""
+    return max(1.0, min(timeout - STOP_GRACE_SECONDS, max(60, 30 + 3 * parts)))
+
+
+class RouteWatch:
+    """Reports each router pass and decides when to stop a router that stalled."""
+    def __init__(self, progress, budget: float):
+        self.report, self.deadline = pass_reporter(progress), time.monotonic() + budget
+        self.best = self.last = None
+        self.best_pass = 0
+
+    def __call__(self, chunks):
+        self.report(chunks)
+        found = PASS_LINE.findall(bytes(chunks[-8192:]))
+        if found:
+            self.last = (int(found[-1][0]), int(found[-1][1] or 0))
+            if self.best is None or self.last[1] < self.best:
+                self.best, self.best_pass = self.last[1], self.last[0]
+
+    def should_stop(self) -> bool:
+        # best == 0: fully routed, only the optimizer is running; the budget bounds it.
+        return time.monotonic() > self.deadline or bool(
+            self.best and self.last[0] - self.best_pass >= STALL_PASSES)
 # Two crossing nets on SMD pads (needs vias): routed once at warm start-up to load
 # and JIT-compile the router before the user's first route, and to self-test it.
 WARMUP_DSN = """(pcb warmup
@@ -197,6 +232,31 @@ def constrained_dsn(text: str, constraints: tuple[Constraint, ...]) -> str:
     return _serialize(root)
 
 
+def route_outer_pours(text: str) -> str:
+    """Drop (plane ...) entries on the outer copper layers from the router's DSN copy.
+
+    Freerouting treats a plane as one solid conductor over its whole outline and
+    leaves that net's pads "connected" to it. A real pour on a layer shared with
+    signal tracks is cut into islands by those tracks, so KiCad's refilled-zone DRC
+    then reports those pads unconnected. Without the plane entry the net is routed
+    with tracks like any other; the pour still fills around them. Planes on inner
+    layers, where a via reaches solid copper, are kept."""
+    if "(plane" not in text:
+        return text
+    root = parse(text)
+    structure = one(root, "structure")
+    layers = [row[1] for row in structure[1:] if isinstance(row, list) and row[:1] == ["layer"] and len(row) > 1]
+    outer = {layers[0], layers[-1]} if layers else set()
+    def on_outer(row):
+        return (isinstance(row, list) and row[:1] == ["plane"]
+                and any(isinstance(shape, list) and len(shape) > 1 and shape[1] in outer for shape in row[2:]))
+    kept = [row for row in structure if not on_outer(row)]
+    if len(kept) == len(structure):
+        return text
+    structure[:] = kept
+    return _serialize(root)
+
+
 def _policy(directory: Path, jar: Path) -> str:
     # Paths are literals: no untrusted Java property expansion or quote injection.
     def quote(path):
@@ -266,7 +326,7 @@ class _WarmRouter:
     Start-up does everything a one-shot route does before launching Freerouting:
     pinned JAR hash, Java 21 check and the OfflineProbe in this exact directory.
     """
-    def __init__(self, owner: "Freerouting"):
+    def __init__(self, owner: "Freerouting", warmup: bool = True):
         owner.work_directory.mkdir(parents=True, exist_ok=True)
         self.directory = Path(tempfile.mkdtemp(prefix="warm-", dir=owner.work_directory))
         self.jar_lock = self.process = None
@@ -294,11 +354,12 @@ class _WarmRouter:
             threading.Thread(target=self._drain_log, daemon=True, name="velatrace-warm-log").start()
             if self._reply(WARM_START_SECONDS) != "VELATRACE_WARM_READY":
                 raise _WarmFailure("Warm router did not start")
-            warmup = self.directory / "warmup"
-            warmup.mkdir()
-            (warmup / "warmup.dsn").write_text(WARMUP_DSN, encoding="utf-8")
-            self.run(owner._router_args(warmup, warmup / "warmup.dsn", warmup / "warmup.ses"), WARM_START_SECONDS)
-            shutil.rmtree(warmup, ignore_errors=True)
+            if warmup:
+                folder = self.directory / "warmup"
+                folder.mkdir()
+                (folder / "warmup.dsn").write_text(WARMUP_DSN, encoding="utf-8")
+                self.run(owner._router_args(folder, folder / "warmup.dsn", folder / "warmup.ses"), WARM_START_SECONDS)
+                shutil.rmtree(folder, ignore_errors=True)
         except BaseException:
             self.close()
             raise
@@ -314,11 +375,13 @@ class _WarmRouter:
         with self.process.stderr as log:
             _drain(log, self.log, lambda chunks: self.on_log and self.on_log(chunks))
 
-    def _reply(self, timeout: float, cancel=None) -> str:
+    def _reply(self, timeout: float, cancel=None, tick=None) -> str:
         deadline = time.monotonic() + timeout
         while True:
             if cancel is not None and cancel.is_set():
                 raise RoutingCancelled(CANCELLED)
+            if tick is not None:
+                tick()
             try:
                 reply = self.replies.get(timeout=min(.1, max(0, deadline - time.monotonic())))
                 break
@@ -332,9 +395,20 @@ class _WarmRouter:
     def alive(self) -> bool:
         return self.process is not None and self.process.poll() is None
 
-    def run(self, args: list[str], timeout: float, cancel=None, on_log=None) -> str:
+    def run(self, args: list[str], timeout: float, cancel=None, on_log=None, should_stop=None) -> str:
         """Submit one job; return the log tail. Raises TimeoutError, _WarmFailure or
-        RoutingCancelled (the caller then kills this JVM)."""
+        RoutingCancelled (the caller then kills this JVM). When should_stop() turns
+        true the router is asked once to stop and write what it has routed;
+        self.stopped then records that the result is partial."""
+        self.stopped = False
+        def tick():
+            if should_stop is not None and not self.stopped and should_stop():
+                self.stopped = True
+                try:
+                    self.process.stdin.write(b"VELATRACE_STOP\n")
+                    self.process.stdin.flush()
+                except OSError:
+                    pass  # The reply loop reports the dead process.
         if any(ch in arg for arg in args for ch in "\t\r\n"):
             raise _WarmFailure("Argument cannot be sent to the warm router")
         del self.log[:]
@@ -345,11 +419,14 @@ class _WarmRouter:
         except OSError as exc:
             raise _WarmFailure("Warm router pipe closed") from exc
         try:
-            reply = self._reply(timeout, cancel)
+            reply = self._reply(timeout, cancel, tick)
         finally:
             self.on_log = None
-        if reply != "VELATRACE_JOB COMPLETED":
+        if reply not in {"VELATRACE_JOB COMPLETED", "VELATRACE_JOB STOPPED"}:
+            if self.stopped:  # Stopped before one pass finished: out of time, not a launcher fault.
+                raise TimeoutError
             raise _WarmFailure(reply)
+        self.stopped = reply.endswith("STOPPED")
         return self.log.decode("utf-8", errors="replace")
 
     def close(self, kill: bool = False):
@@ -371,8 +448,10 @@ class _WarmRouter:
 class Freerouting:
     def __init__(self, jar: Path, java: str | Path = "java", *, work_directory: Path,
                  timeout_seconds: float = 300, warm: bool = False):
-        """warm=True keeps one verified router JVM for the session (started by
-        check_startup, restarted if it dies); any failure falls back to one-shot."""
+        """Routes run through VelaTrace's launcher (WarmRouter), which can stop a
+        stalled router and keep its partial route; warm=True keeps that verified JVM
+        for the session (started by check_startup, restarted if it dies). Any launcher
+        failure falls back to the plain one-shot CLI, which can only be killed."""
         self.jar = local_path(jar)
         self.work_directory = local_path(work_directory)
         located = shutil.which(str(java))
@@ -381,6 +460,7 @@ class Freerouting:
             raise ValidationError("Router timeout must be between 1 and 3600 seconds.")
         self.timeout = timeout_seconds
         self.last_log = ""
+        self.stopped_early = False  # The last route was stopped with a partial result.
         self.warm = warm
         self._warm: _WarmRouter | None = None
         self._warm_lock = threading.Lock()
@@ -476,7 +556,7 @@ class Freerouting:
         if self._closed or self._warm_failures >= WARM_MAX_FAILURES:
             return None
         try:
-            self._warm = _WarmRouter(self)
+            self._warm = _WarmRouter(self, warmup=self.warm)
         except Exception:
             self._warm_failures += 1
             return None
@@ -506,15 +586,39 @@ class Freerouting:
                 copied = directory / dsn.path.name
                 copied.write_text(text, encoding="utf-8")
                 output = directory / "result.ses"
+                started = time.monotonic()
+                budget = route_budget(len(dsn.placements), self.timeout)
+                best = None  # (unrouted, SES, log, stopped) of the best attempt so far
                 try:
-                    self.last_log = warm.run(self._router_args(directory, copied, output), self.timeout,
-                                             cancel, pass_reporter(self.progress))
-                    if not output.is_file():
-                        raise _WarmFailure("No SES")
+                    # Freerouting's result varies from run to run: a route that stalls
+                    # with a few connections left often completes when simply started
+                    # again. Retry inside the same budget and keep the best attempt.
+                    while True:
+                        elapsed = time.monotonic() - started
+                        watch = RouteWatch(self.progress, budget - elapsed)
+                        try:
+                            output.unlink(missing_ok=True)
+                            log = warm.run(self._router_args(directory, copied, output), self.timeout - elapsed,
+                                           cancel, watch, watch.should_stop)
+                            if not output.is_file():
+                                raise _WarmFailure("No SES")
+                        except (TimeoutError, _WarmFailure):
+                            if best is None:
+                                raise
+                            self._stop_warm(kill=True)  # A failed retry never costs the route already in hand.
+                            break
+                        unrouted = (watch.best if warm.stopped else watch.last[1] if watch.last else 0) or 0
+                        if best is None or unrouted < best[0]:
+                            best = (unrouted, self._read_ses(output, dsn), log, bool(warm.stopped))
+                        if not unrouted or time.monotonic() - started >= budget * RETRY_FRACTION:
+                            break
+                        self.progress(f"Routing again · best so far {best[0]} unrouted")
+                    self.last_log, self.stopped_early = best[2], best[3]
                 except RoutingCancelled:
                     # Killing the JVM is the only way to stop a job; warm up a fresh one.
                     self._stop_warm(kill=True)
-                    threading.Thread(target=self._prewarm, daemon=True, name="velatrace-router-prewarm").start()
+                    if self.warm:
+                        threading.Thread(target=self._prewarm, daemon=True, name="velatrace-router-prewarm").start()
                     raise
                 except TimeoutError:
                     self._stop_warm(kill=True)
@@ -524,7 +628,7 @@ class Freerouting:
                     self._stop_warm(kill=True)
                     return None
                 self._warm_failures = 0
-                return self._read_ses(output, dsn)
+                return best[1]
 
     def route(self, dsn: DsnInput, constraints: tuple[Constraint, ...]) -> str:
         cancel = self.cancel
@@ -537,9 +641,14 @@ class Freerouting:
             raise CapabilityError("Some confirmed routing constraints cannot be enforced by this router.")
         if any(ch in dsn.path.name for ch in ('+', '\n', '\r')):
             raise ValidationError("DSN filename contains unsupported characters; export using a simple filename.")
-        text = constrained_dsn(dsn.path.read_text(encoding="utf-8"), constraints)
-        if self.warm and (ses := self._route_warm(dsn, text, cancel)) is not None:
-            return ses
+        text = route_outer_pours(constrained_dsn(dsn.path.read_text(encoding="utf-8"), constraints))
+        self.stopped_early = False
+        try:
+            if (ses := self._route_warm(dsn, text, cancel)) is not None:
+                return ses
+        finally:
+            if not self.warm:
+                self._stop_warm()  # One launcher JVM per route unless the user keeps it warm.
         if cancel.is_set():
             raise RoutingCancelled(CANCELLED)
         self._check_installation()

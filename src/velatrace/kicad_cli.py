@@ -42,6 +42,7 @@ def user_config_dir(version: tuple[int, int, int]) -> Path:
     return Path(root) / f"{version[0]}.{version[1]}"
 
 
+_FONT_FACE = re.compile(r'\(face "(?:[^"\\]|\\.)*"\)')
 _FOOTPRINT_ID = re.compile(r'\(footprint\s+"((?:[^"\\]|\\.)*)"')
 
 
@@ -96,8 +97,11 @@ def _issue(row) -> tuple | None:
     uuids = [item.get("uuid") for item in items]
     # Missing identifiers are not evidence that two warnings concern the same
     # items. Keep their counts, but make the baseline comparison fail closed.
+    # An issue KiCad reports with no items at all (a copper sliver in a filled
+    # zone) keeps an empty identity: it can never match the baseline (see
+    # candidate._carried), yet it no longer hides every other issue's identity.
     if (not isinstance(kind, str) or not kind or not isinstance(severity, str) or not severity
-            or not uuids or any(not isinstance(value, str) or not value for value in uuids)):
+            or any(not isinstance(value, str) or not value for value in uuids)):
         return None
     return kind, severity, tuple(sorted(uuids))
 
@@ -132,7 +136,7 @@ def parse_drc_report(path: Path) -> DrcResult:
 
 
 class KiCadCli:
-    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 120):
+    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 300):  # DRC refills pours: over a minute on big boards
         found = shutil.which(str(executable))
         if not found:
             raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its executable path.")
@@ -264,7 +268,10 @@ class KiCadCli:
         home = self._drc_config_home(footprint_libraries(candidate.read_text(encoding="utf-8")))
         with tempfile.TemporaryDirectory(prefix="velatrace-drc-", ignore_cleanup_errors=True) as directory:
             output = Path(directory) / "drc.json"
-            status = self._run(["pcb", "drc", "--format", "json", "--severity-all",
+            # --refill-zones: copper pours are filled in memory (the candidate file is
+            # not saved), so pour-connected pads count as connected and pour clearances
+            # are checked against the new tracks, exactly as after "Fill All Zones".
+            status = self._run(["pcb", "drc", "--format", "json", "--severity-all", "--refill-zones",
                                "--all-track-errors", "--exit-code-violations", "--output",
                                str(output), *parity, str(candidate)], candidate.parent, (0, 5), home)
             if not output.is_file():
@@ -314,7 +321,11 @@ class KiCadCli:
             raise ExportUnavailable("KiCad's bundled Python was not found next to kicad-cli.")
         board_path, folder = Path(board_path), Path(folder)
         board = folder / board_path.name
-        board.write_text(board_text, encoding="utf-8")
+        # KiCad's Python takes minutes to load a board whose text uses a font that is
+        # not installed (measured: >100 s against 0.5 s). The export copy only feeds
+        # the DSN, where a font matters solely for the size of a copper-text keepout,
+        # so it falls back to KiCad's built-in font. DRC always uses the real text.
+        board.write_text(_FONT_FACE.sub("", board_text), encoding="utf-8")
         project = board_path.with_suffix(".kicad_pro")
         if project.is_file():  # Net classes live in the project; the DSN carries them.
             shutil.copyfile(project, board.with_suffix(".kicad_pro"))
@@ -349,5 +360,34 @@ class KiCadCli:
 
 
 # Arguments, not formatted source: paths never become code.
-EXPORT_SCRIPT = ("import sys, pcbnew\n"
-                 "sys.exit(0 if pcbnew.ExportSpecctraDSN(pcbnew.LoadBoard(sys.argv[1]), sys.argv[2]) else 3)")
+# KiCad's exporter leaves copper text and graphics out of the DSN, so Freerouting
+# routes straight through them (real boards: tracks shorting a name written on
+# B.Cu). Each one gets a no-tracks/no-vias rule area on the in-memory board, which
+# the exporter writes as a keepout. The temporary board is never saved.
+# Copper graphics of pad-less footprints (logos) are covered too.
+# ponytail: bounding boxes, so a long diagonal copper line blocks its whole
+# rectangle; use the item's outline if that ever costs a routable board.
+EXPORT_SCRIPT = """import sys, pcbnew
+board = pcbnew.LoadBoard(sys.argv[1])
+try:
+    items = list(board.GetDrawings())
+    for footprint in board.GetFootprints():
+        if not list(footprint.Pads()):  # A copper logo; with pads it may be a net tie or antenna.
+            items += list(footprint.GraphicalItems())
+    for item in items:
+        if pcbnew.IsCopperLayer(item.GetLayer()):
+            box = item.GetBoundingBox()
+            area = pcbnew.ZONE(board)
+            area.SetLayer(item.GetLayer())
+            area.SetIsRuleArea(True)
+            area.SetDoNotAllowTracks(True)
+            area.SetDoNotAllowVias(True)
+            outline = area.Outline()
+            outline.NewOutline()
+            for x, y in ((box.GetLeft(), box.GetTop()), (box.GetRight(), box.GetTop()),
+                         (box.GetRight(), box.GetBottom()), (box.GetLeft(), box.GetBottom())):
+                outline.Append(x, y)
+            board.Add(area)
+except Exception:
+    pass  # Candidate DRC still rejects a route that touches copper graphics.
+sys.exit(0 if pcbnew.ExportSpecctraDSN(board, sys.argv[2]) else 3)"""

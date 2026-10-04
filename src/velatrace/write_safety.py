@@ -173,7 +173,7 @@ def _preview_like(item, layer):
     return bool(key and key[0] == layer and stroke.style == SLS_DASH and stroke.width.value_nm == 100_000)
 
 
-def _check_graphic_collisions(additions, existing, removed_ids):
+def _check_graphic_collisions(additions, existing, removed_ids, layer="User.9"):
     """KiCad may replace an existing coincident graphic when creating a segment."""
     foreign = {_segment_key(item) for item in existing if item.id.value not in removed_ids}
     foreign.discard(None)
@@ -189,10 +189,10 @@ def _check_graphic_collisions(additions, existing, removed_ids):
             raise ValidationError("Preview contains duplicate segments that KiCad may merge; no preview was written.")
         seen.add(value)
     if hits:
-        raise ValidationError(f"Preview would overlap {len(hits)} User.9 line(s) that VelaTrace did not create "
+        raise ValidationError(f"Preview would overlap {len(hits)} {layer} line(s) that VelaTrace did not create "
                               f"and cannot prove are its own: {_describe_lines(hits)}. KiCad may replace them, so "
                               "no preview was written. Delete them in KiCad if they are old previews, or move "
-                              "your own drawings off User.9, then retry.")
+                              f"your own drawings off {layer}, then retry.")
 
 
 def _echoes(sent, got) -> bool:
@@ -259,7 +259,13 @@ def _echoes(sent, got) -> bool:
     return subset(plain(sent), plain(got))
 
 
+PREVIEW_LAYERS = ("User.9", "User.8", "User.7", "User.6", "User.5", "User.4", "User.3", "User.2", "User.1",
+                  "Eco2.User", "Eco1.User", "Cmts.User", "Dwgs.User")
+
+
 class BoardSafety:
+    preview_layer_name = "User.9"
+
     def __init__(self, board, board_path: Path, *, factory=None):
         self.board = board
         self.path = Path(board_path).resolve(strict=True)
@@ -361,7 +367,8 @@ class BoardSafety:
             self._check_snapshot(backup, expected_digest, expected_board)
             removals = self._owned_items() if remove_owned else []
             if temporary:
-                _check_graphic_collisions(additions, self.board.get_shapes(), {item.id.value for item in removals})
+                _check_graphic_collisions(additions, self.board.get_shapes(), {item.id.value for item in removals},
+                                          self.preview_layer_name)
             expected = {item.id.value: _signature(item) for item in additions}
             if len(expected) != len(additions) or "" in expected:
                 raise ValidationError("Mutation item IDs must be unique and explicit.")
@@ -440,11 +447,19 @@ class BoardSafety:
                 raise UncertainWriteError("Board commit succeeded but its recovery journal failed; inspect KiCad before continuing.") from exc
 
     def _preview_layer(self):
-        from kipy.proto.board.board_types_pb2 import BL_User_9
+        """User.9 when the board has it, else the first enabled spare drawing layer:
+        a new KiCad board has no User.9, and VelaTrace never changes layer settings.
+        Only VelaTrace's own journaled graphics are ever removed from that layer."""
+        from kipy.proto.board import board_types_pb2
         _, root = read_board(self.path)
-        if not any(isinstance(row, list) and len(row) > 1 and row[1] == "User.9" for row in one_layers(root)):
-            raise CapabilityError("Temporary VelaTrace graphics need the User.9 layer. In KiCad: File > Board Setup > Board Stackup > Board Editor Layers > Add User Defined Layer... > User.9, then save the board. VelaTrace never changes layer settings itself.")
-        return BL_User_9
+        enabled = {row[1] for row in one_layers(root) if isinstance(row, list) and len(row) > 1}
+        for name in PREVIEW_LAYERS:
+            if name in enabled:
+                self.preview_layer_name = name
+                return getattr(board_types_pb2, "BL_" + name.replace(".", "_"))
+        raise CapabilityError("Temporary VelaTrace graphics need a user drawing layer (User.1-User.9, User.Eco1/2, "
+                              "User.Comments or User.Drawings). Enable one in File > Board Setup > Board Editor "
+                              "Layers, then save the board. VelaTrace never changes layer settings itself.")
 
     def _journaled_ids(self):
         """Temporary-graphic UUIDs committed by any VelaTrace run on this board (completion.json)."""
@@ -477,10 +492,10 @@ class BoardSafety:
             # foreign lines (the only realistic exact overlap); the post-route check stays.
             orphans = {_segment_key(item) for item in self.board.get_shapes() if _preview_like(item, layer)}
         if orphans:
-            raise ValidationError(f"User.9 has {len(orphans)} dashed 0.1 mm line(s) that look like old VelaTrace "
+            raise ValidationError(f"{self.preview_layer_name} has {len(orphans)} dashed 0.1 mm line(s) that look like old VelaTrace "
                                   f"previews, but no VelaTrace journal beside this board proves it created them, so "
                                   f"they were left untouched: {_describe_lines(orphans)}. Delete them in KiCad if they "
-                                  "are old previews, or move your own drawings off User.9, then retry. Routing was not started.")
+                                  f"are old previews, or move your own drawings off {self.preview_layer_name}, then retry. Routing was not started.")
 
     def show_preview(self, dsn, plan, expected_board=None):
         """Draw the preview; returns the live-board snapshot it was drawn against.

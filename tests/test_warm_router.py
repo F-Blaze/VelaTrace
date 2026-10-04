@@ -22,8 +22,10 @@ class FakeWarm:
     """Stands in for _WarmRouter; `mode` scripts what the next job does."""
     started: list = []
     mode = "ok"
+    after_stall = "stall"
+    stopped = False
 
-    def __init__(self, owner):
+    def __init__(self, owner, warmup=True):
         if FakeWarm.mode == "start-fails":
             raise freerouting._WarmFailure("start")
         owner.work_directory.mkdir(parents=True, exist_ok=True)
@@ -34,8 +36,9 @@ class FakeWarm:
     def alive(self):
         return self.closed is None
 
-    def run(self, args, timeout, cancel=None, on_log=None):
+    def run(self, args, timeout, cancel=None, on_log=None, should_stop=None):
         self.jobs += 1
+        self.stopped = False
         self.sent.append(args)
         if FakeWarm.mode == "crash":
             raise freerouting._WarmFailure("crash")
@@ -44,8 +47,17 @@ class FakeWarm:
         if FakeWarm.mode == "cancel":
             cancel.set()  # The user clicks Cancel mid-job.
             raise freerouting.RoutingCancelled("Cancelled")
-        if on_log is not None:
+        if on_log is not None and FakeWarm.mode != "stall":
             on_log(bytearray(b"Auto-router pass #2 on board 'x' was completed in 1 seconds (4 unrouted).\n"))
+            on_log(bytearray(b"Auto-router pass #3 on board 'x' was completed in 1 seconds.\n"))
+        if FakeWarm.mode == "stall":  # The launcher writes the partial route when asked to stop.
+            for number in range(1, 40):
+                on_log(bytearray(b"Auto-router pass #%d on board 'x' was completed in 1 seconds "
+                                 b"(3 unrouted and 2 violations).\n" % number))
+                if should_stop():
+                    self.stopped = number
+                    FakeWarm.mode = FakeWarm.after_stall
+                    break
         Path(args[args.index("-do") + 1]).write_text("warm result")
         return "warm log"
 
@@ -138,7 +150,7 @@ class WarmLifecycleTests(unittest.TestCase):
         seen = []
         self.router.progress = seen.append
         self.assertEqual(self.router.route(self.dsn, ()), "warm result")
-        self.assertEqual(seen, ["Routing · pass 2 · 4 unrouted"])
+        self.assertEqual(seen, ["Routing · pass 2 · 4 unrouted", "Routing · pass 3"])
 
     def test_unlocked_jar_is_rehashed_before_every_warm_job(self):
         self.assertEqual(self.router.route(self.dsn, ()), "warm result")
@@ -154,6 +166,48 @@ class WarmLifecycleTests(unittest.TestCase):
         sent = FakeWarm.started[0].sent[0]
         directory = Path(sent[sent.index("-de") + 1]).parent
         self.assertEqual(sent, Freerouting._router_args(directory, directory / "simple.dsn", directory / "result.ses"))
+
+
+    def test_stalled_router_is_stopped_and_its_partial_route_kept(self):
+        FakeWarm.mode = "stall"
+        with patch.object(freerouting, "RETRY_FRACTION", 0):  # No budget left for a retry.
+            self.assertEqual(self.router.route(self.dsn, ()), "warm result")
+        # Best count (3 unrouted) first seen at pass 1; stopped STALL_PASSES later.
+        self.assertEqual(FakeWarm.started[0].stopped, 1 + freerouting.STALL_PASSES)
+        self.assertEqual((self.router.stopped_early, FakeWarm.started[0].jobs), (True, 1))
+
+    def test_stalled_route_is_retried_within_the_budget_and_the_complete_attempt_wins(self):
+        FakeWarm.mode, FakeWarm.after_stall = "stall", "ok"
+        self.addCleanup(setattr, FakeWarm, "after_stall", "stall")
+        seen = []
+        self.router.progress = seen.append
+        self.assertEqual(self.router.route(self.dsn, ()), "warm result")
+        self.assertEqual((self.router.stopped_early, FakeWarm.started[0].jobs), (False, 2))
+        self.assertIn("Routing again · best so far 3 unrouted", seen)
+
+    def test_failed_retry_keeps_the_partial_route_already_in_hand(self):
+        FakeWarm.mode, FakeWarm.after_stall = "stall", "crash"
+        self.addCleanup(setattr, FakeWarm, "after_stall", "stall")
+        with patch.object(freerouting, "run_bounded") as run:
+            self.assertEqual(self.router.route(self.dsn, ()), "warm result")
+        run.assert_not_called()  # No one-shot rerun either.
+        self.assertTrue(self.router.stopped_early)
+        self.assertIs(FakeWarm.started[0].closed, True)
+
+    def test_without_warm_setting_each_route_uses_and_closes_one_launcher(self):
+        router = Freerouting(self.jar, sys.executable, work_directory=self.root / "work2")
+        router.check_startup()
+        self.assertEqual(FakeWarm.started, [])  # No pre-warm.
+        for count in (1, 2):
+            self.assertEqual(router.route(self.dsn, ()), "warm result")
+            self.assertEqual(len(FakeWarm.started), count)
+            self.assertIsNotNone(FakeWarm.started[-1].closed)
+
+    def test_route_budget_scales_with_board_size_and_leaves_stop_grace(self):
+        self.assertEqual(freerouting.route_budget(4, 300), 60)
+        self.assertEqual(freerouting.route_budget(40, 300), 150)
+        self.assertEqual(freerouting.route_budget(500, 300), 300 - freerouting.STOP_GRACE_SECONDS)
+        self.assertEqual(freerouting.route_budget(4, 10), 1)
 
 
 class WarmStartupPinTests(unittest.TestCase):

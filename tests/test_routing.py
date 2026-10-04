@@ -191,6 +191,26 @@ class RoutingTests(unittest.TestCase):
         self.assertIn("All connections verified", self.session.summary)
         self.assertEqual(self.session.command("/autoroute_exit"), Mode.AUDIT)
 
+    def test_partial_route_is_a_shortfall_preview_with_counts_and_repair_runs_before_it(self):
+        calls = []
+        def repair(plan, dsn, constraints, validator):
+            calls.append(self.session.stage)  # Still RUNNING: nothing has been shown yet.
+            return plan
+        self.session.repair = repair
+        report = ValidationReport("", 2, 3, routed_connections=32, total_connections=35, preexisting_errors=2)
+        def validate(dsn, plan, constraints):
+            return replace(report, plan_digest=plan_digest(plan), board_digest=dsn.ticket.board_digest)
+        self.ready()
+        with patch.object(self.validator, "validate", side_effect=validate):
+            self.session.run()
+        self.assertEqual((calls, self.session.stage), ([RoutingStage.RUNNING], RoutingStage.SHORTFALL))
+        summary = self.session.summary
+        self.assertIn("32 of 35 connections routed (91.4%)", summary)
+        self.assertIn("Partial route: 3 connection(s) left unrouted", summary)
+        self.assertIn("2 of these DRC error(s) were already on the unrouted board, not caused by this route (0 new)", summary)
+        with self.assertRaises(ValidationError):  # A partial route can be rejected, never approved.
+            self.session.approve(None)
+
     def test_reject_requires_reason_even_after_other_edits(self):
         self.ready()
         self.session.run()

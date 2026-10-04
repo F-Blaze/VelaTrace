@@ -71,6 +71,11 @@ def _rule_notes(project: dict, board_path: Path | None) -> list[str]:
         return min(values) if values else None
     clearance, width = least("clearance"), least("track_width")
     notes = []
+    severities = settings.get("rule_severities", {}) if isinstance(settings, dict) else {}
+    ignored = sum(1 for value in severities.values() if value == "ignore") if isinstance(severities, dict) else 0
+    if ignored:
+        notes.append(f"{ignored} DRC check(s) are set to Ignore in Board Setup; VelaTrace runs them as warnings "
+                     "when it checks the route, so a route cannot add such an issue unnoticed.")
     for key, name, floor in (("min_clearance", "minimum clearance", clearance),
                              ("min_track_width", "minimum track width", width),
                              ("min_copper_edge_clearance", "copper-to-edge clearance", clearance),

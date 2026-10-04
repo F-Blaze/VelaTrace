@@ -34,8 +34,15 @@ blocking issues are written to that commit's `intent.json` and `completion.json`
 and the result line says the route was applied despite DRC errors.
 
 The status shows the current stage and its elapsed seconds: **Exporting the board
-to DSN** → **Routing · pass N · K unrouted** (parsed from Freerouting's log) →
-**Importing the route and drawing the preview** → **Checking DRC…**. **Cancel
+to DSN** → **Routing · pass N · K unrouted** (parsed from Freerouting's log; a
+stalled router is stopped, and restarted while time remains: **Routing again**) →
+**Checking the route** (candidate DRC with copper pours filled; dead-end stubs it
+names are removed, so the preview, the DRC result and the applied copper are the
+same plan) → **Importing the route and drawing the preview** → **Checking DRC…**
+(reuses that DRC after re-checking that the board and rules are unchanged). A route
+with connections left over is shown as a shortfall preview, "N of M connections
+routed", which can be rejected but not approved. Errors that were already on the
+unrouted board are named as such; they still need **Approve anyway**. **Cancel
 routing** (below the pages, visible only while it can act) kills the export or
 router process (one-shot or warm JVM) and writes nothing; during DRC it discards
 the check and removes the preview. Finished runs show export, routing, preview
