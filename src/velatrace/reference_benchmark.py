@@ -7,12 +7,14 @@ from dataclasses import asdict
 import json
 import math
 from pathlib import Path
+from statistics import median
 import time
 
 from .benchmark import _FixtureSafety, _id, _save_new, fixture_texts
 from .candidate import SafeCandidateValidator, candidate_text, prepare_copper, route_issues, trusted_via_catalog
 from .dsn import DsnInput, ExportTicket, file_digest
 from .electrical_rules import ElectricalRules, NetRule, compile_electrical_dsn, validate_plan_rules
+from .endpoint_delay import EndpointRequirement, analyze_endpoint_delay
 from .errors import ValidationError
 from .external_copper import import_copper
 from .freerouting import Freerouting, JAR_SHA256, VERSION
@@ -81,11 +83,34 @@ def reference_fixture(layers=4):
             'reference.dsn': dsn}
 
 
-def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6, 8), seconds=120):
+def reference_comparison(cases):
+    """Describe repeated measurements; failed routes never count as fast successes."""
+    summary = {}
+    for count in sorted({case['layers'] for case in cases}):
+        selected = [case for case in cases if case['layers'] == count]
+        rows = {}
+        for name in ('baseline', 'reference-triangles', 'vela-routing'):
+            results = [case['solvers'][name] for case in selected]
+            rows[name] = {'attempts': len(results), 'accepted': sum(r['accepted'] is True for r in results),
+                          'median_total_seconds': median(r['total_seconds'] for r in results)}
+        pairs = [(c['solvers']['reference-triangles'], c['solvers']['vela-routing']) for c in selected]
+        successful = [(old, new) for old, new in pairs if old['accepted'] is True and new['accepted'] is True]
+        rows['projection_speedup'] = (median(old['total_seconds']/new['total_seconds']
+                                             for old, new in successful)
+                                     if len(successful) == len(selected) and len(selected) >= 3 else None)
+        # This is deliberately never promoted into a universal engineering claim.
+        rows['universal_superiority_proven'] = False
+        summary[str(count)] = rows
+    return summary
+
+
+def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6, 8), seconds=120, repeats=1):
     if (type(seconds) not in {int, float} or not math.isfinite(seconds) or not 10 <= seconds <= 3600
             or not layer_counts or len(set(layer_counts)) != len(layer_counts)):
         raise ValidationError('Reference benchmark needs distinct layer counts and a 10–3600 second budget.')
-    cases = [(n, reference_fixture(n)) for n in layer_counts]
+    if type(repeats) is not int or not 1 <= repeats <= 9:
+        raise ValidationError('Reference benchmark repeats must be an integer from 1 to 9.')
+    cases = [(n, trial, reference_fixture(n)) for n in layer_counts for trial in range(1, repeats+1)]
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     cli = KiCadCli(kicad_cli, timeout=min(seconds, 120), config_directory=output/'config')
@@ -95,13 +120,19 @@ def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6,
     router = Freerouting(jar, java, work_directory=output/'router', timeout_seconds=seconds)
     router.check_startup()
     requirements = (ReferenceRequirement('N1', 'F.Cu', 'In1.Cu', 'GND', .05),)
-    manifest = {'schema': 1, 'corpus': 'authored-reference-notch-v1', 'kicad_version': version,
+    manifest = {'schema': 2, 'router_name': 'Vela-routing', 'corpus': 'authored-reference-notch-v1',
+                'repeats': repeats, 'kicad_version': version,
                 'router_version': VERSION, 'router_sha256': JAR_SHA256,
+                'kicad_cli_sha256': file_digest(cli.executable), 'java_sha256': file_digest(router.java),
                 'requirements': [asdict(r) for r in requirements], 'cases': [],
+                'timing': 'Total includes shared preparation plus projection, routing and validation; '
+                          'tool startup checks excluded equally. Solver order rotates by trial.',
                 'limitations': 'Geometric reference coverage only; not SI, impedance or return-transition approval.',
-                'implementation_sha256': {p.name: file_digest(p) for p in Path(__file__).parent.glob('*.py')}}
-    for count, files in cases:
-        folder = output/f'{count}-layers'
+                'implementation_sha256': [{'file': p.name, 'sha256': file_digest(p)}
+                                          for p in sorted(Path(__file__).parent.glob('*.py'))]}
+    for count, trial, files in cases:
+        preparation_started = time.monotonic()
+        folder = output/(f'{count}-layers' if repeats == 1 else f'{count}-layers-run-{trial}')
         folder.mkdir()
         for name, content in files.items():
             _save_new(folder/name, content)
@@ -113,24 +144,37 @@ def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6,
         layers = tuple(row[1] for row in children(one(root, 'structure'), 'layer'))
         policies = ElectricalRules(tuple(NetRule(net, ('F.Cu',)) for net in ('N1', 'GND')))
         compiled = compile_electrical_dsn(files['reference.dsn'], policies)
-        projection = compile_reference_keepouts(compiled, source_fill.text, requirements)
-        case = {'layers': count, 'input_sha256': source_hashes, 'keepouts': projection.keepout_count,
+        preparation_seconds = time.monotonic()-preparation_started
+        case = {'layers': count, 'trial': trial, 'input_sha256': source_hashes,
+                'preparation_seconds': preparation_seconds,
                 'source_fill': {'source_digest': source_fill.source_digest, 'context_digest': source_fill.context_digest},
                 'solvers': {}}
         manifest['cases'].append(case)
-        for name, text in (('baseline', compiled), ('reference-aware', projection.dsn_text)):
+        variants = ('baseline', 'reference-triangles', 'vela-routing')
+        offset = (trial-1) % len(variants)
+        order = variants[offset:]+variants[:offset]
+        case['solver_order'] = order
+        for name in order:
+            started = time.monotonic()
+            stages = {}
             work = folder/name
             work.mkdir()
             path = work/'reference.dsn'
+            projection_started = time.monotonic()
+            projection = (None if name == 'baseline' else compile_reference_keepouts(
+                compiled, source_fill.text, requirements, merge_convex=name == 'vela-routing'))
+            stages['projection_seconds'] = time.monotonic()-projection_started
+            text = compiled if projection is None else projection.dsn_text
             _save_new(path, text)
             dsn = DsnInput(path, file_digest(path), ExportTicket.begin(board), frozenset({'N1', 'GND'}),
                            frozenset(layers), 'reference',
                            {'J1': (15, -40, 'front', 0), 'J5': (65, -40, 'front', 0), 'J2': (10, -10, 'front', 0)}, .0001)
-            started = time.monotonic()
-            outcome = {'accepted': False}
+            outcome = {'accepted': False, 'keepouts': projection.keepout_count if projection else 0}
             router.last_log = ''
             try:
+                routing_started = time.monotonic()
                 ses = router.route(dsn, ())
+                stages['routing_seconds'] = time.monotonic()-routing_started
                 _save_new(work/'route.ses', ses)
                 catalog = trusted_via_catalog(dsn)
                 plan = parse_ses(ses, expected_design='reference', nets=set(dsn.nets), layers=set(layers),
@@ -140,12 +184,16 @@ def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6,
                 if failures:
                     raise ValidationError('; '.join(failures))
                 validator = SafeCandidateValidator(_FixtureSafety(work), cli)
+                drc_started = time.monotonic()
                 report = validator.validate(dsn, plan, ())
+                stages['drc_seconds'] = time.monotonic()-drc_started
                 # Keep this deliverable separate from the immutable source board.
                 candidate = work/'reference.kicad_pcb'
                 _save_new(candidate, candidate_text(files['reference.kicad_pcb'], prepare_copper(plan, dsn)))
                 _save_new(work/'reference.kicad_pro', files['reference.kicad_pro'])
+                refill_started = time.monotonic()
                 fresh = cli.refill_for_analysis(candidate)
+                stages['refill_seconds'] = time.monotonic()-refill_started
                 _save_new(work/'fresh-filled.kicad_pcb', fresh.text)
                 # Check that native serialization/refill preserved routed copper,
                 # including net assignments. Refilled files are never applied.
@@ -155,25 +203,33 @@ def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6,
                 restored = import_copper(without_copper, fresh.text, dsn, via_catalog=catalog)
                 if candidate_geometry(restored)[0] != candidate_geometry(plan)[0]:
                     raise ValidationError('Native refill changed route geometry or net assignment.')
+                coverage_started = time.monotonic()
                 coverage = check_reference_coverage(plan, fresh.text, requirements)
+                stages['coverage_seconds'] = time.monotonic()-coverage_started
+                timing = (analyze_endpoint_delay(fresh.text, plan, EndpointRequirement(
+                    'N1', 'J1', '1', 'J5', '1', 'GND')) if coverage.status == 'covered' else None)
                 final_blocking, final_warnings = route_issues(source_fill.drc, fresh.drc)
                 elapsed = time.monotonic()-started
                 outcome.update(report=asdict(report), coverage=asdict(coverage), coverage_status=coverage.status,
+                               endpoint_delay=asdict(timing) if timing else None,
                                fresh_drc={'blocking': final_blocking, 'preexisting_warnings': final_warnings,
                                           'unconnected': fresh.drc.unconnected},
                                metrics=asdict(candidate_geometry(plan)[1]),
                                accepted=(report.drc_violations == 0 and report.unconnected_count == 0
                                          and not report.blocking_reasons and coverage.status == 'covered'
                                          and final_blocking == 0 and fresh.drc.unconnected == 0
-                                         and elapsed < seconds))
+                                         and preparation_seconds+elapsed < seconds))
             except Exception as exc:
                 outcome['error'] = f'{type(exc).__name__}: {exc}'
             outcome['wall_seconds'] = time.monotonic()-started
+            outcome['total_seconds'] = preparation_seconds+outcome['wall_seconds']
+            outcome['stages'] = stages
             _save_new(work/'router.log', router.last_log)
             _save_new(work/'result.json', json.dumps(outcome, indent=2, default=list))
             case['solvers'][name] = outcome
         case['source_unchanged'] = source_hashes == {name: file_digest(folder/name) for name in files}
         if not case['source_unchanged']:
             raise ValidationError('Reference benchmark source changed.')
+    manifest['comparison'] = reference_comparison(manifest['cases'])
     _save_new(output/'manifest.json', json.dumps(manifest, indent=2, default=list))
     return manifest

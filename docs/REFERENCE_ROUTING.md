@@ -1,4 +1,4 @@
-# Experimental reference-plane routing
+# Vela-routing: experimental reference-plane routing
 
 VelaTrace can steer an external router around missing reference-plane copper,
 then independently check the complete trace width against a freshly filled

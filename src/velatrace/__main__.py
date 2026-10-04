@@ -14,6 +14,7 @@ def main() -> None:
     parser.add_argument("--screenshot", type=Path, help="Save the explicit demo window and exit")
     parser.add_argument("--benchmark", type=Path, help="Create a NEW local geometry benchmark directory; no IPC or AI")
     parser.add_argument("--reference-benchmark", type=Path, help="Create a NEW reference-plane notch benchmark; requires KiCad 10")
+    parser.add_argument("--reference-repeats", type=int, default=1, help="Vela-routing trials per layer count (1–9)")
     parser.add_argument("--jar", type=Path, help="Pinned Freerouting 2.1.0 JAR for the benchmark")
     parser.add_argument("--java", type=Path, help="Java 21 executable for the benchmark")
     parser.add_argument("--kicad-cli", type=Path, help="KiCad 9+ CLI executable for the benchmark")
@@ -27,12 +28,15 @@ def main() -> None:
     parser.add_argument("--benchmark-solvers", nargs='+', choices=('baseline', 'portfolio', 'krt', 'hybrid', 'hybrid-fast'),
                         help="Run only selected solvers; default is every configured solver")
     args = parser.parse_args()
+    if args.reference_repeats != 1 and not args.reference_benchmark:
+        parser.error('--reference-repeats requires --reference-benchmark')
     if args.reference_benchmark:
         if not all((args.jar, args.java, args.kicad_cli)) or args.benchmark or args.netlist or args.demo or args.screenshot:
             parser.error('--reference-benchmark requires --jar, --java and --kicad-cli and no other mode')
         from .reference_benchmark import run_reference_benchmark
         run_reference_benchmark(args.reference_benchmark, jar=args.jar, java=args.java, kicad_cli=args.kicad_cli,
-                                seconds=args.benchmark_seconds, layer_counts=tuple(args.benchmark_layers))
+                                seconds=args.benchmark_seconds, layer_counts=tuple(args.benchmark_layers),
+                                repeats=args.reference_repeats)
         print(f'Reference benchmark complete: {args.reference_benchmark.resolve() / "manifest.json"}')
     elif args.benchmark:
         if not all((args.jar, args.java, args.kicad_cli)):

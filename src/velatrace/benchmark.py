@@ -171,7 +171,7 @@ def run_benchmark(output: Path, *, jar: Path, java: Path, kicad_cli: Path,
     texts = [(n, fixture_texts(n, dense=dense, obstacles=obstacles)) for n in layer_counts]
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
-    manifest = {'schema': 1, 'corpus': 'authored-crossed-bus-v1', 'electrical_validation': False,
+    manifest = {'schema': 1, 'router_name': 'Vela-routing', 'corpus': 'authored-crossed-bus-v1', 'electrical_validation': False,
                 'limitations': ['Geometry-only corpus; no reference planes, impedance or delay approval.',
                                 'No demonstrated superiority; this is a reproducible measurement harness.',
                                 'Single-thread cold JVM, no configurable seed; repeat runs for timing comparisons.'],

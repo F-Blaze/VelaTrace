@@ -1,4 +1,4 @@
-# Experimental hybrid routing benchmark
+# Vela-routing: experimental hybrid routing benchmark
 
 VelaTrace can now compare and select independently validated candidates from
 two existing open-source engines: external Freerouting 2.1.0 (GPLv3) and external

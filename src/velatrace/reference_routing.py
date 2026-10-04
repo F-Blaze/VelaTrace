@@ -6,6 +6,7 @@ Keepouts affect all nets on a profiled signal layer, a conservative restriction.
 """
 from dataclasses import dataclass
 import hashlib
+from collections import defaultdict
 
 from .dsn import dsn_scale
 from .electrical_rules import _serialize
@@ -22,13 +23,61 @@ class ReferenceProjection:
     keepout_count: int
 
 
-def compile_reference_keepouts(dsn_text, filled_text, requirements):
+def _merge_convex_neighbors(polygons, *, max_checks=50_000, max_passes=12):
+    """Greedily merge edge-neighbor polygons when their union is already convex.
+
+    Exact shared-edge indexing avoids all-pairs scans. Each pass merges disjoint
+    pairs, so a bounded number of passes and candidate checks caps extra work;
+    any polygons left behind remain the original exact triangulation pieces.
+    """
+    current = list(polygons)
+    checks = 0
+    for _ in range(max_passes):
+        edges = defaultdict(list)
+        for index, polygon in enumerate(current):
+            coordinates = list(polygon.exterior.coords)
+            for a, b in zip(coordinates, coordinates[1:]):
+                if a != b:
+                    edges[tuple(sorted((a, b)))].append(index)
+
+        used = set()
+        merged = []
+        changed = False
+        for owners in edges.values():
+            if len(owners) != 2 or owners[0] == owners[1]:
+                continue
+            left, right = owners
+            if left in used or right in used:
+                continue
+            if checks >= max_checks:
+                break
+            checks += 1
+            candidate = current[left].union(current[right])
+            if (candidate.geom_type == 'Polygon' and candidate.is_valid
+                    and candidate.equals(candidate.convex_hull)):
+                used.update((left, right))
+                merged.append(candidate)
+                changed = True
+        if not changed:
+            break
+        merged.extend(polygon for index, polygon in enumerate(current) if index not in used)
+        current = merged
+        if checks >= max_checks:
+            break
+    return current
+
+
+def compile_reference_keepouts(dsn_text, filled_text, requirements, *, merge_convex=False):
     """Keep existing DSN content and add layer-wide projected copper exclusions.
 
     Only one simple closed board boundary is supported. Constrained triangulation
     represents holes without filling them accidentally. This is a steering hint:
     output quantization and router clearance handling require final verification.
+    Exact convex compaction is opt-in: reduced polygon count has not demonstrated
+    a consistent end-to-end speed improvement on the repeated native corpus.
     """
+    if type(merge_convex) is not bool:
+        raise ValidationError('Reference keepout merging option must be boolean.')
     shape = geometry_library()
     fingerprint = requirement_digest(requirements)
     root = parse(dsn_text)
@@ -80,10 +129,15 @@ def compile_reference_keepouts(dsn_text, filled_text, requirements):
             raise ValidationError('Projected reference voids exceed the keepout budget.')
         if not shape.union_all(triangles.geoms).equals(forbidden):
             raise ValidationError('Reference triangulation did not preserve all voids.')
-        for triangle in triangles.geoms:
-            coordinates = list(triangle.exterior.coords)[:-1]
-            if len(coordinates) != 3 or triangle.area <= 0:
-                raise ValidationError('Reference projection produced invalid triangles.')
+        convex_parts = (_merge_convex_neighbors(triangles.geoms) if merge_convex
+                        else list(triangles.geoms))
+        if not shape.union_all(convex_parts).equals(forbidden):
+            raise ValidationError('Convex reference merging did not preserve all voids.')
+        for polygon in convex_parts:
+            coordinates = list(polygon.exterior.coords)[:-1]
+            if (len(coordinates) < 3 or polygon.area <= 0 or not polygon.is_valid
+                    or not polygon.equals(polygon.convex_hull)):
+                raise ValidationError('Reference projection produced invalid convex keepouts.')
             # Convert KiCad Y-down millimeters to the DSN's Y-up native units.
             points = [format(value, '.12g') for x, y in coordinates for value in (x/scale, -y/scale)]
             count += 1

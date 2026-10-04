@@ -1,4 +1,4 @@
-# Electrical routing development
+# Vela-routing development
 
 The objective is autonomous routing that can demonstrate improvements over open-source
 baselines on public, reproducible tests. No superiority claim is currently supported.
