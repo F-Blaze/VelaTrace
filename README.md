@@ -46,7 +46,7 @@ This reflects our reading of each tool's public documentation at the time of wri
 
 The audit favours silence over guessing: a check stays quiet when the data cannot show a problem clearly. How often it is right on real boards is being measured.
 
-<!-- BENCHMARK RESULTS: filled after measurement -->
+**Status: beta.** Measured in October 2026 against blind expert reviews of open-source KiCad boards: 91% of findings were correct on the 37 boards used to tune the rules, but only 44% on 12 further boards the rules had never seen. So three rules that caused most wrong findings (`decoupling.missing`, `i2c.pullup.missing`, `pin.input_floating`) are shown as Info notes for now, and the rest keep their normal severity. Planted-fault tests catch removed decoupling capacitors, missing or duplicate I2C pull-ups and LEDs without a resistor. Treat findings as a second pair of eyes, not a sign-off.
 
 Found a wrong or missing finding? Please file an [audit false positive](https://github.com/F-Blaze/VelaTrace/issues/new?template=audit_false_positive.yml) report; they directly improve the rules.
 
