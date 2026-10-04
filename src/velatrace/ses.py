@@ -107,7 +107,12 @@ def _sections(node: list, allowed: set[str], offset: int = 1):
 def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[str],
               via_catalog: Mapping[str, ViaSpec] | None = None,
               expected_placements: Mapping[str, tuple[float, float, str, float]] | None = None,
-              expected_placement_resolution_mm: float | None = None) -> RoutePlan:
+              expected_placement_resolution_mm: float | None = None,
+              layer_aliases: Mapping[str, str] | None = None) -> RoutePlan:
+    """`layers` are the DSN's layer names; layer_aliases maps renamed ones to the
+    canonical board names (e.g. Front -> F.Cu) that the plan and via specs use."""
+    def board(name):
+        return (layer_aliases or {}).get(name, name)
     root = parse(text)
     if root[0] != "session" or len(root) < 3 or not isinstance(root[1], str):
         raise ValidationError("Expected a Specctra session root.")
@@ -186,7 +191,7 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                         or (len(circle) == 5 and (number(circle[3]) != 0 or number(circle[4]) != 0))):
                     raise ValidationError("SES padstack geometry differs from verified board via.")
                 circle_layers.add(circle[1])
-            if not set(spec.layers) <= circle_layers:
+            if not set(spec.layers) <= {board(name) for name in circle_layers}:
                 raise ValidationError("SES via layer span differs from verified board via.")
             if any(attach != ["attach", "off"] for attach in children(padstack, "attach")):
                 raise ValidationError("Unsupported SES padstack attachment.")
@@ -212,14 +217,14 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                     raise ValidationError("Invalid SES track width.")
                 points = tuple((coordinate(path[i], scale), coordinate(path[i+1], scale))
                                for i in range(3, len(path), 2))
-                tracks.append(Track(net[1], path[1], width, points))
+                tracks.append(Track(net[1], board(path[1]), width, points))
             else:
                 if len(geometry) not in {4, 5} or not isinstance(geometry[1], str):
                     raise ValidationError("Unsupported SES via geometry.")
                 if len(geometry) == 5 and geometry[4] != ["type", "route"]:
                     raise ValidationError("Unsupported SES via type.")
                 spec = (via_catalog or {}).get(geometry[1])
-                if spec is None or not 0 < spec.drill_mm < spec.diameter_mm <= 100 or not set(spec.layers) <= layers:
+                if spec is None or not 0 < spec.drill_mm < spec.diameter_mm <= 100 or not set(spec.layers) <= {board(name) for name in layers}:
                     raise ValidationError("SES via lacks a verified board padstack/drill mapping.")
                 vias.append(Via(net[1], (coordinate(geometry[2], scale), coordinate(geometry[3], scale)), spec))
     return RoutePlan(base[1], *_normalised(tracks, vias))

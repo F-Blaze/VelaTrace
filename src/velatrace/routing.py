@@ -217,7 +217,8 @@ class RoutingSession:
             plan = parse_ses(ses, expected_design=self.input.base_design or self.input.path.name, nets=set(self.input.nets),
                              layers=set(self.input.layers), via_catalog=via_catalog,
                              expected_placements=self.input.placements,
-                             expected_placement_resolution_mm=self.input.placement_resolution_mm)
+                             expected_placement_resolution_mm=self.input.placement_resolution_mm,
+                             layer_aliases=self.input.layer_aliases)
             self.plan = plan
             self.stage = RoutingStage.VALIDATING
             return plan

@@ -136,7 +136,7 @@ def trusted_via_catalog(dsn: DsnInput) -> dict[str, ViaSpec]:
                     abs(float(circle[2])*scale - diameter) > 1e-6):
                 raise ValidationError("Only matching circular through-via padstacks are supported.")
             layers.add(circle[1])
-        if layers != set(dsn.layers) or not {"F.Cu", "B.Cu"} <= layers:
+        if layers != set(dsn.layers) or not {"F.Cu", "B.Cu"} <= dsn.board_layers:
             raise ValidationError("Via padstack must span every existing copper layer.")
         result[name] = ViaSpec(diameter, drill, ("F.Cu", "B.Cu"))
     return result
@@ -175,7 +175,7 @@ def prepare_copper(plan: RoutePlan, dsn: DsnInput, *, source: str | None = None)
     # Inner planes are commonly typed power/mixed; they are still copper layers in the DSN.
     actual_layers = {row[1] for row in one(root, "layers")[1:] if isinstance(row, list) and len(row) > 2
                      and row[2] in {"signal", "power", "mixed", "jumper"}}
-    if actual_layers != set(dsn.layers):
+    if actual_layers != dsn.board_layers:
         raise ValidationError("Saved board copper layers differ from DSN.")
     nets = board_nets(root)
     catalog = set(trusted_via_catalog(dsn).values()) if plan.vias else set()

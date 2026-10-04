@@ -7,6 +7,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 import hashlib
 from pathlib import Path, PureWindowsPath
+import re
 import time
 
 from .errors import ValidationError
@@ -43,10 +44,34 @@ class DsnInput:
     base_design: str = ""
     placements: dict[str, tuple[float, float, str, float]] = field(default_factory=dict)
     placement_resolution_mm: float | None = None
+    # DSN layer name -> KiCad canonical name, for boards whose copper layers were
+    # renamed (e.g. "Front" for F.Cu). The DSN and SES use the user's names; board
+    # items always use canonical ones.
+    layer_aliases: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def board_layers(self) -> frozenset[str]:
+        """The DSN's copper layers under their canonical board names."""
+        return frozenset(self.layer_aliases.get(name, name) for name in self.layers)
 
     def assert_unchanged(self):
         if file_digest(self.path) != self.digest or file_digest(self.ticket.board_path) != self.ticket.board_digest:
             raise ValidationError("The saved board or DSN changed during routing; click Route board again.")
+
+
+_LAYER_ROW = re.compile(r'\(\s*\d+\s+"([^"]+)"\s+(?:signal|power|mixed|jumper)\s+"([^"]+)"\s*\)')
+
+
+def layer_aliases(board_text: str) -> dict[str, str]:
+    """User copper-layer name -> canonical name, from a board's (layers ...) table.
+    Refuses a user name that is another layer's canonical name: it would be ambiguous."""
+    start = board_text.find("(layers")
+    rows = _LAYER_ROW.findall(board_text[start:start + 20_000]) if start >= 0 else []
+    aliases = {user: name for name, user in rows if user != name}
+    canonical = set(re.findall(r'\(\s*\d+\s+"([^"]+\.Cu)"', board_text[start:start + 20_000])) if start >= 0 else set()
+    if len(aliases) != len([1 for name, user in rows if user != name]) or set(aliases) & canonical:
+        raise ValidationError("Copper layer names are ambiguous; give each copper layer a unique name.")
+    return aliases
 
 
 def dsn_scale(root: list) -> float:
@@ -97,7 +122,12 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
     structure = one(root, "structure")
     layer_rows = children(structure, "layer")
     layers = frozenset(row[1] for row in layer_rows if len(row) >= 2 and isinstance(row[1], str))
-    if not snapshot.copper_layers or layers != frozenset(snapshot.copper_layers):
+    # The saved file is digest-pinned by the ticket; DSN layers carry the user's names.
+    aliases = layer_aliases(ticket.board_path.read_text(encoding="utf-8"))
+    aliases = {name: aliases[name] for name in layers if name in aliases}
+    canonical_layers = frozenset(aliases.get(name, name) for name in layers)
+    if (not snapshot.copper_layers or len(canonical_layers) != len(layers)
+            or canonical_layers != frozenset(snapshot.copper_layers)):
         raise ValidationError("DSN layers differ from the board or board stackup evidence is unavailable.")
     network = one(root, "network")
     actual_nets = {}
@@ -139,14 +169,29 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
                                 and isinstance(extra[1], str)) for extra in place[6:])):
                 raise ValidationError("Unsupported or duplicate DSN placement.")
             placements[place[1]] = (coordinate(place[2], scale), coordinate(place[3], scale), place[4], number(place[5]))
-    if set(placements) != {item.reference for item in snapshot.components}:
+    # KiCad exports every footprint and renames repeated or empty references
+    # (logos, mounting holes: "G***" -> "G***_1"). Uniquely named footprints must match
+    # by name and position; the renamed rest must be non-electrical and match the
+    # leftover DSN placements position for position.
+    counts = Counter(item.reference for item in snapshot.components)
+    named = [item for item in snapshot.components if item.reference and counts[item.reference] == 1]
+    renamed = [item for item in snapshot.components if not item.reference or counts[item.reference] > 1]
+    if (any(pin.net for item in renamed for pin in item.pins)
+            or not {item.reference for item in named} <= set(placements)
+            or len(placements) != len(snapshot.components)):
         raise ValidationError("DSN footprint list differs from the board.")
-    for item in snapshot.components:
+    def spot(x, y):
+        return round(x, 4), round(y, 4)
+    for item in named:
         position = (placements[item.reference][0], -placements[item.reference][1])
         if item.position_mm is None or any(abs(a-b) > .00001 for a,b in zip(position, item.position_mm)):
             raise ValidationError("DSN footprint placement differs from the board.")
+    leftover = Counter(spot(place[0], -place[1]) for name, place in placements.items()
+                       if name not in {item.reference for item in named})
+    if any(item.position_mm is None for item in renamed) or leftover != Counter(spot(*item.position_mm) for item in renamed):
+        raise ValidationError("DSN footprint placement differs from the board.")
     result = DsnInput(path, digest, ticket, frozenset(actual_nets), layers, root[1], placements,
-                      placement_resolution_mm)
+                      placement_resolution_mm, aliases)
     result.assert_unchanged()
     return result
 
