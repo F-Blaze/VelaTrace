@@ -136,7 +136,7 @@ def parse_drc_report(path: Path) -> DrcResult:
 
 
 class KiCadCli:
-    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 120):
+    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 300):  # DRC refills pours: over a minute on big boards
         found = shutil.which(str(executable))
         if not found:
             raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its executable path.")
