@@ -38,7 +38,7 @@ UI integration order:
    `intent.json` and `completion.json`. Its single
    transaction removes the preview and adds the candidate copper. Do not call
    `board.save()` afterward: saving is the user's explicit KiCad action.
-6. On normal close or `/autoroute_exit`, clear temporary graphics. If cleanup
+6. On normal close or when leaving Route mode, clear temporary graphics. If cleanup
    refuses or IPC is uncertain, display the error and backup path; do not silently
    dismiss the window or retry a copper commit.
 

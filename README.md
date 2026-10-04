@@ -27,7 +27,7 @@ VelaTrace is a companion window for KiCad's PCB Editor. Its mission is to save h
 - **Shareable offline report.** **Save report** writes one self-contained HTML file (no scripts, no external requests). [Details](docs/report.md)
 - **One-click routing.** **Route board** runs pre-flight checks, exports the DSN, runs [Freerouting](https://github.com/freerouting/freerouting), draws a `User.9` preview, then validates it with KiCad DRC in the background. **Approve** (or **Approve anyway**, after a confirmation that lists the findings) writes the copper as a single undoable commit, after a backup. **Cancel routing** stops a run.
 - **Optional warm router.** Opt in to keep one verified Freerouting JVM running so repeat routes start faster.
-- **Safe by construction.** Suggestions only: VelaTrace never deletes a component. Backup before every live write, KiCad's official IPC API only (no SWIG/`pcbnew`), no backend, no telemetry. [Write safety](docs/write-safety.md)
+- **Safe by construction.** Suggestions only: VelaTrace never deletes a component. Backup before every live write, all board reads and writes go through KiCad's official IPC API (the DSN export alone runs KiCad's bundled Python on a private copy), no backend, no telemetry. [Write safety](docs/write-safety.md)
 
 ## Comparison
 
@@ -54,7 +54,7 @@ Found a wrong or missing finding? Please file an [audit false positive](https://
 
 > **Status: 0.1.0a1, development alpha.** No signed release exists yet, and the maintainer recommends reviewing the code before installing. Live preview, cleanup and approval were accepted on KiCad 10.0.4/10.0.6. Details: [build status](docs/BUILD_STATUS.md), [release review](docs/RELEASE_REVIEW.md).
 
-**Requirements:** KiCad 9+ (tested on 10.0.4 / 10.0.6) with the IPC API enabled, and Python 3.11+. For routing also: Temurin **Java 21** and the **Freerouting 2.1.0** JAR.
+**Requirements:** KiCad 10 (tested on 10.0.4 / 10.0.6; KiCad 9 is untested) with the IPC API enabled, and Python 3.11+. For routing also: Temurin **Java 21** and the **Freerouting 2.1.0** JAR.
 
 1. **Install the plugin.** Clone into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace`:
 
