@@ -81,7 +81,7 @@ def test_parse_resistance(text, ohms):
 def test_decoupling_missing_and_present():
     found = rules(design(ic()), "decoupling")
     assert [(f.rule, f.severity, f.refs, f.nets) for f in found] == [
-        ("decoupling.missing", Severity.ERROR, ("U1",), ("+3V3",))]
+        ("decoupling.missing", Severity.INFO, ("U1",), ("+3V3",))]  # beta rule
     assert found[0].title == "U1 has no decoupling capacitor on +3V3"
     assert found[0].cost_delta > 0
     assert rules(design(ic(), cap()), "decoupling") == []
@@ -125,7 +125,7 @@ def bus(*extra):
 
 def test_i2c_missing_pullup():
     found = rules(bus(), "i2c")
-    assert [(f.rule, f.severity, f.nets) for f in found] == [("i2c.pullup.missing", Severity.WARNING, ("SDA",))]
+    assert [(f.rule, f.severity, f.nets) for f in found] == [("i2c.pullup.missing", Severity.INFO, ("SDA",))]  # beta rule
     assert rules(bus(res("R1", "SDA", "+3V3")), "i2c") == []
 
 
@@ -199,7 +199,7 @@ def test_floating_ic_inputs_need_pin_types():
         return part("U1", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
                     ("2", "GND", "GND", "power_in"), ("3", "unconnected-(U1-EN-Pad3)", "EN", kind))
     found = rules(design(chip("input")), "pin")
-    assert [(f.rule, f.severity, f.refs) for f in found] == [("pin.input_floating", Severity.WARNING, ("U1",))]
+    assert [(f.rule, f.severity, f.refs) for f in found] == [("pin.input_floating", Severity.INFO, ("U1",))]  # beta rule
     assert "EN" in found[0].title
     assert rules(design(chip("input+no_connect")), "pin") == []
     assert rules(design(chip("passive")), "pin") == []
