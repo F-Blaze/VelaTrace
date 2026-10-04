@@ -239,12 +239,13 @@ def test_missing_pullup_on_plug_in_board_is_info_but_on_board_controller_still_w
     host = header("J1", "/SDA", "GND", "+3V3")
     assert i2c_found(eeprom, host) == [("i2c.pullup.missing", Severity.INFO)]
     mcu = ic("U2", ("5", "/SDA", "GPIO21"), value="ESP32-S3")
-    assert i2c_found(eeprom, mcu, host) == [("i2c.pullup.missing", Severity.WARNING)]
+    # Beta rule: run_rules shows it as a note until a benchmark round proves it.
+    assert i2c_found(eeprom, mcu, host) == [("i2c.pullup.missing", Severity.INFO)]
     # Two-device on-board bus relying on MCU internal pull-ups: still a warning (user decision).
     gauge = ic("U6", ("3", "BAT_I2C_SDA", "SDA"), value="MAX17048")
     nrf = ic("U1", ("5", "BAT_I2C_SDA", "P0.04"), value="nRF52840")
     found = rules(design(cap(), gauge, nrf), "i2c")
-    assert [(f.severity, "internal pull-ups" in f.fix) for f in found] == [(Severity.WARNING, True)]
+    assert [(f.severity, "internal pull-ups" in f.fix) for f in found] == [(Severity.INFO, True)]
 
 
 def compute_module(net="/IO/SDA"):

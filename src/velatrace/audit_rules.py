@@ -21,6 +21,7 @@ Heuristics (documented in docs/behavior-and-limits.md):
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from decimal import Decimal
 from math import dist
 import re
@@ -832,6 +833,11 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
                                             item.nets, item.title))
 
 
+# Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
+# warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
+BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "pin.input_floating"})
+
+
 def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
     """All built-in checks plus extra providers, sorted by severity.
 
@@ -846,7 +852,8 @@ def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None
         except Exception as exc:  # a check bug must not block the rest of the audit
             findings.append(Finding("audit.check_failed", Severity.INFO,
                                     f"The {name} check could not run", evidence=str(exc) or type(exc).__name__))
-    return sort_findings(findings)
+    return sort_findings([replace(item, severity=Severity.INFO) if item.rule in BETA_RULES else item
+                          for item in findings])
 
 
 def saving_total(findings: Iterable[Finding]) -> Decimal:

@@ -17,6 +17,8 @@ The [feasibility report](feasibility.md), [UI guide](ui.md) and [routing boundar
 
 Deterministic, local and conservative: when the data cannot show a problem clearly, a check stays silent. Findings are grouped as **error** (likely defect), **warning** (risky or non-standard), **saving** (cost or time can be saved) and **info**. Each has evidence, a concrete fix and, where a small passive is added or removed, an illustrative per-board cost ($0.01 per passive, not a quote). Nothing is changed automatically.
 
+**Beta rules.** `decoupling.missing`, `i2c.pullup.missing` and `pin.input_floating` measured below 50% precision on held-out boards in the 2026-10 benchmark, so the audit shows them as Info notes regardless of the severity listed below (`BETA_RULES` in `audit_rules.py`). They return to their listed severity once a benchmark round proves them.
+
 | Rule | Severity | Fires when | Known false-positive risk |
 |---|---|---|---|
 | `decoupling.missing` | error | An IC supply pin's net has no capacitor to ground, to another power/ground pin net of the same IC, or one fuse/ferrite/≤1 Ω hop away. Supply pins are `power_in` pins, plus `power_out` pins on a named rail that feeds more than resistors; pins named SW/LX/PH/DCC*/EN/PG/BOOT or like ground are skipped, as are battery nets and pins whose only other connection is one resistor ≥1 kΩ or ≤100 Ω to ground. Addressable LEDs (WS28xx, SK6xxx, APA1xx, SK98xx) count as ICs | Without pin types (PCB source) supply pins are found by net name, so a logic pin tied to a rail counts too; it only matters if that rail has no capacitor at all |
