@@ -88,6 +88,32 @@ class DrcResult:
     issues: tuple = ()
 
 
+@dataclass(frozen=True)
+class RefilledBoard:
+    """A private, zone-refilled board snapshot for downstream analysis only."""
+    text: str
+    source_digest: str
+    context_digest: str
+    tool_version: tuple[int, int, int]
+    drc: DrcResult
+
+
+def _board_text_and_zones(path: Path) -> tuple[str, bool]:
+    """Read a bounded KiCad board and detect copper zones, excluding keepouts."""
+    from .sexpr import children, parse
+
+    path = Path(path)
+    if path.stat().st_size > 32_000_000:
+        raise ValidationError("Board exceeds the 32 MB safety limit.")
+    text = path.read_text(encoding="utf-8")
+    if not re.search(r"\(\s*zone\s", text):
+        return text, False
+    root = parse(text, kicad=True)
+    if not isinstance(root, list) or not root or root[0] != "kicad_pcb":
+        raise ValidationError("Expected a saved KiCad PCB.")
+    return text, any(not children(zone, "keepout") for zone in children(root, "zone"))
+
+
 def _issue(row) -> tuple | None:
     items = row.get("items", [])
     if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
@@ -267,23 +293,113 @@ class KiCadCli:
         candidate = Path(candidate).resolve(strict=True)
         if candidate.suffix.lower() != ".kicad_pcb":
             raise ValidationError("DRC requires a KiCad candidate board.")
+        board_text, has_copper_zones = _board_text_and_zones(candidate)
         parity = []
         schematic = candidate.with_suffix(".kicad_sch")
         if schematic.exists():
             self._prove_exportable(schematic)
             parity = ["--schematic-parity"]
-        home = self._drc_config_home(footprint_libraries(candidate.read_text(encoding="utf-8")))
+        arguments = ["pcb", "drc", "--format", "json", "--severity-all",
+                     "--all-track-errors", "--exit-code-violations"]
+        if has_copper_zones:
+            version = getattr(self, "version", None) or self.check_startup()
+            if version < (10, 0, 0):
+                raise CapabilityError(
+                    "KiCad 9 cannot refill zones through the CLI; zone-bearing candidate DRC is unavailable.")
+            arguments.append("--refill-zones")
+        home = self._drc_config_home(footprint_libraries(board_text))
         with tempfile.TemporaryDirectory(prefix="velatrace-drc-", ignore_cleanup_errors=True) as directory:
             output = Path(directory) / "drc.json"
-            status = self._run(["pcb", "drc", "--format", "json", "--severity-all",
-                               "--all-track-errors", "--exit-code-violations", "--output",
-                               str(output), *parity, str(candidate)], candidate.parent, (0, 5), home)
+            arguments += ["--output", str(output)]
+            status = self._run([*arguments, *parity, str(candidate)], candidate.parent, (0, 5), home)
             if not output.is_file():
                 raise ValidationError("KiCad did not produce a DRC report; approval is unavailable.")
             report = parse_drc_report(output)
-            if status == 5 and not (report.violations or report.unconnected or report.schematic_parity):
+            has_issues = bool(report.violations or report.unconnected or report.schematic_parity)
+            if (status == 5) != has_issues:
                 raise ValidationError("KiCad DRC status disagrees with its report; approval is unavailable.")
             return report
+
+    def refill_for_analysis(self, candidate: Path) -> RefilledBoard:
+        """Return a fresh-filled private copy with exact input/context provenance.
+
+        KiCad's ``--save-board`` mutates its input, so the command only ever sees
+        a staged copy in this method's private temporary directory. The backup is
+        retained through the command and input/context bytes are checked again
+        before returning. This is analysis evidence, not an approved board.
+        """
+        from .candidate import project_context
+        from .sexpr import parse
+
+        candidate = Path(candidate).resolve(strict=True)
+        if candidate.suffix.lower() != ".kicad_pcb":
+            raise ValidationError("Zone refill requires a KiCad candidate board.")
+        version = getattr(self, "version", None) or self.check_startup()
+        if version < (10, 0, 0):
+            raise CapabilityError("Fresh-filled board snapshots require KiCad CLI 10 or newer.")
+        if candidate.stat().st_size > 32_000_000:
+            raise ValidationError("Board exceeds the 32 MB safety limit.")
+        source_bytes = candidate.read_bytes()
+        if len(source_bytes) > 32_000_000:
+            raise ValidationError("Board exceeds the 32 MB safety limit.")
+        source_digest = hashlib.sha256(source_bytes).hexdigest()
+        source_text = source_bytes.decode("utf-8")
+        source_root = parse(source_text, kicad=True)
+        if not isinstance(source_root, list) or not source_root or source_root[0] != "kicad_pcb":
+            raise ValidationError("Expected a saved KiCad PCB.")
+
+        _, context = project_context(candidate)
+        context_files = {}
+        for path, digest in context.items():
+            if digest is None:
+                continue
+            data = path.read_bytes()
+            if hashlib.sha256(data).hexdigest() != digest:
+                raise ValidationError("Project/rules changed before zone refill; route again.")
+            context_files[path.name] = data
+        context_digest = hashlib.sha256(repr(sorted(
+            (name, hashlib.sha256(data).hexdigest()) for name, data in context_files.items()
+        )).encode()).hexdigest()
+
+        parity = []
+        with tempfile.TemporaryDirectory(prefix="velatrace-zone-refill-", ignore_cleanup_errors=True) as folder:
+            folder = Path(folder)
+            staged = folder / candidate.name
+            staged.write_bytes(source_bytes)
+            for name, data in context_files.items():
+                (folder / name).write_bytes(data)
+            schematic = staged.with_suffix(".kicad_sch")
+            if schematic.is_file():
+                self._prove_exportable(schematic)
+                parity = ["--schematic-parity"]
+            home = self._drc_config_home(footprint_libraries(source_text))
+            output = folder / "drc.json"
+            backup = staged.with_name(staged.name + ".before-refill.bak")
+            shutil.copyfile(staged, backup)
+            status = self._run(["pcb", "drc", "--format", "json", "--severity-all",
+                                "--all-track-errors", "--exit-code-violations", "--refill-zones",
+                                "--save-board", "--output", str(output), *parity, str(staged)],
+                               folder, (0, 5), home)
+            if not output.is_file():
+                raise ValidationError("KiCad did not produce a DRC report; zone analysis is unavailable.")
+            report = parse_drc_report(output)
+            has_issues = bool(report.violations or report.unconnected or report.schematic_parity)
+            if (status == 5) != has_issues:
+                raise ValidationError("KiCad DRC status disagrees with its report; zone analysis is unavailable.")
+            if not staged.is_file() or staged.stat().st_size > 32_000_000:
+                raise ValidationError("KiCad did not produce a valid-sized refilled board.")
+            text = staged.read_text(encoding="utf-8")
+            root = parse(text, kicad=True)
+            if not isinstance(root, list) or not root or root[0] != "kicad_pcb":
+                raise ValidationError("KiCad produced an invalid refilled board.")
+
+        if hashlib.sha256(candidate.read_bytes()).hexdigest() != source_digest:
+            raise ValidationError("Candidate changed during zone refill; analysis is unavailable.")
+        for path, digest in context.items():
+            actual = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+            if actual != digest:
+                raise ValidationError("Project/rules changed during zone refill; analysis is unavailable.")
+        return RefilledBoard(text, source_digest, context_digest, version, report)
 
     def kicad_python(self) -> Path | None:
         """The Python that ships with this KiCad (it has the pcbnew module)."""

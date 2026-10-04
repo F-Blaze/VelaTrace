@@ -27,6 +27,9 @@
 /src/velatrace/benchmark.py @F-Blaze
 /src/velatrace/route_repair.py @F-Blaze
 /src/velatrace/external_copper.py @F-Blaze
+/src/velatrace/reference_planes.py @F-Blaze
+/src/velatrace/reference_routing.py @F-Blaze
+/src/velatrace/reference_benchmark.py @F-Blaze
 
 # Writes outside the project: application config, consent, temp reports, demo export.
 /src/velatrace/privacy.py @F-Blaze

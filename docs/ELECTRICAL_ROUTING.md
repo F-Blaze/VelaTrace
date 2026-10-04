@@ -138,7 +138,13 @@ separately against installed tools; they are not simulated by the unit tests.
 
 ## Remaining engineering gates
 
-The next milestone adds a pinned second external engine and fast/optimization
+The next reference-plane increment is implemented as an authored-fixture research
+command: [REFERENCE_ROUTING.md](REFERENCE_ROUTING.md). It adds official fresh
+zone filling, full-width vector coverage checks and projected router keepouts.
+Native 4/6/8-layer notch tests pass; reference-net connectivity and via return
+transitions remain unresolved. It is not integrated into the live routing UI.
+
+The hybrid-engine milestone adds a pinned second external engine and fast/optimization
 search policies. Setup, boundaries and measured comparisons are documented in
 [KRT_BENCHMARK.md](KRT_BENCHMARK.md). It remains a synthetic research harness;
 the live preview/approval path has not been switched to it.

@@ -26,6 +26,8 @@ Development work on electrically aware multilayer routing now includes strict
 stackup/geometry APIs and a local 4/6/8-layer candidate benchmark. These are
 experimental and are not yet an electrical-routing option in the companion
 window. See [scope, benchmark instructions and remaining gates](docs/ELECTRICAL_ROUTING.md).
+The new [reference-plane experiment](docs/REFERENCE_ROUTING.md) adds fresh-fill
+coverage checks and routing around ground-plane gaps on authored 4/6/8-layer boards.
 
 ## Why VelaTrace
 
@@ -43,6 +45,10 @@ window. See [scope, benchmark instructions and remaining gates](docs/ELECTRICAL_
 > **Status: 0.1.0a1, development alpha.** No signed release exists yet, and the maintainer recommends reviewing the code before installing. Live preview, cleanup and approval were accepted on KiCad 10.0.4/10.0.6. Details: [build status](docs/BUILD_STATUS.md), [release review](docs/RELEASE_REVIEW.md).
 
 **Requirements:** KiCad 9+ (tested on 10.0.4 / 10.0.6) with the IPC API enabled, and Python 3.11+. For routing also: Temurin **Java 21** and the **Freerouting 2.1.0** JAR.
+
+Route validation on boards containing copper zones requires **KiCad 10+** for
+official CLI zone refilling. KiCad 9 reports this limitation instead of validating
+against potentially stale fills.
 
 1. **Install the plugin.** Clone into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace`:
 
