@@ -204,6 +204,11 @@ class RepairTests(unittest.TestCase):
                 self.assertIs(repair_dangling(self.PLAN, None, (), validator), self.PLAN)
                 self.assertEqual(validator.reused.plan_digest, repr(self.PLAN))
 
+    def test_no_trial_starts_after_the_time_budget(self):
+        validator = FakeValidator(lambda ids: dangling("s0.2", "v0"))
+        self.assertIs(repair_dangling(self.PLAN, None, (), validator, budget_seconds=-1), self.PLAN)
+        self.assertEqual((validator.trials, validator.reused.plan_digest), (1, repr(self.PLAN)))
+
     def test_unknown_issue_identities_leave_the_plan_alone(self):
         validator = FakeValidator(lambda ids: DrcResult(1, 0, 0))
         self.assertIs(repair_dangling(self.PLAN, None, (), validator), self.PLAN)

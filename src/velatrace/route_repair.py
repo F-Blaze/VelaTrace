@@ -8,6 +8,7 @@ returned plan as usual; this module never writes a board and uses only the
 validator's public inspect() hook.
 """
 from collections import Counter
+import time
 
 from .ses import RoutePlan, Track
 
@@ -46,9 +47,13 @@ def _dangling(result, ids) -> set:
     return {uuids[0] for kind, _, uuids in result.issues if kind in DANGLING and len(uuids) == 1 and uuids[0] in ids}
 
 
-def repair_dangling(plan: RoutePlan, dsn, constraints, validator, *, max_passes: int = 4) -> RoutePlan:
+def repair_dangling(plan: RoutePlan, dsn, constraints, validator, *, max_passes: int = 4,
+                    budget_seconds: float = 45) -> RoutePlan:
     """The plan without DRC-identified dead ends, or the plan itself when nothing can
-    be removed safely."""
+    be removed safely. No trial starts once budget_seconds have passed: on a board
+    whose pours take a minute to fill, the stubs stay as the DRC warnings they are
+    rather than delaying the preview by several more DRC runs."""
+    deadline = time.monotonic() + budget_seconds
     first = validator.inspect(dsn, plan, constraints)
     items, sources = first.items, _sources(plan, first.items)
     if not sources or any(len(candidate.issues) != candidate.violations + candidate.schematic_parity
@@ -60,7 +65,7 @@ def repair_dangling(plan: RoutePlan, dsn, constraints, validator, *, max_passes:
         current = [candidate for _, candidate in best[1].passes]
         ids = set(sources) - removed
         targets = set.intersection(*(_dangling(result, ids) for result in current))
-        if not targets:
+        if not targets or time.monotonic() > deadline:
             break
         trial_plan = _without(plan, {sources[i] for i in removed | targets})
         trial_items = tuple(item for item in items if item.id not in removed | targets)
