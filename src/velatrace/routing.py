@@ -224,7 +224,8 @@ class RoutingSession:
                              layers=set(self.input.layers), via_catalog=via_catalog,
                              expected_placements=self.input.placements,
                              expected_placement_resolution_mm=self.input.placement_resolution_mm,
-                             layer_aliases=self.input.layer_aliases)
+                             layer_aliases=self.input.layer_aliases,
+                             optional_placements=self.input.unconnected_references)
             if self.repair is not None:
                 # Before anything is shown: preview, DRC and applied copper are all this plan.
                 self.progress("Checking the route")

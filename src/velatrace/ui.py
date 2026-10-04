@@ -286,8 +286,10 @@ class SettingsDialog(QDialog):
         text(tools, "java", "Java 21", browse="All files (*)")
         text(tools, "cli", "kicad-cli", "Must match the running KiCad version exactly.", browse="All files (*)")
         self.warm_router = QCheckBox("Keep Freerouting running (faster)")
-        self.warm_router.setToolTip("Runs VelaTrace's MIT launcher and the GPLv3 Freerouting JAR in one Java "
-                                    "process. Off starts a fresh Freerouting per route.")
+        self.warm_router.setToolTip("Keeps one Freerouting Java process between routes. Every route runs "
+                                    "VelaTrace's MIT launcher and the GPLv3 Freerouting JAR in one Java process "
+                                    "(needed to stop a stalled router and keep its partial route); "
+                                    "off starts a fresh process per route.")
         self.warm_router.setChecked(settings.warm_router)
         tools.addRow(self.warm_router)
 

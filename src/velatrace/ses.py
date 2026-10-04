@@ -108,7 +108,8 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
               via_catalog: Mapping[str, ViaSpec] | None = None,
               expected_placements: Mapping[str, tuple[float, float, str, float]] | None = None,
               expected_placement_resolution_mm: float | None = None,
-              layer_aliases: Mapping[str, str] | None = None) -> RoutePlan:
+              layer_aliases: Mapping[str, str] | None = None,
+              optional_placements: frozenset[str] = frozenset()) -> RoutePlan:
     """`layers` are the DSN's layer names; layer_aliases maps renamed ones to the
     canonical board names (e.g. Front -> F.Cu) that the plan and via specs use."""
     def board(name):
@@ -138,10 +139,13 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
             raise ValidationError("SES placement resolution differs from the verified DSN precision.")
         seen_places = set()
         for component in children(placement, "component"):
-            if len(component) < 2 or not isinstance(component[1], str):
+            # A footprint with no library name is written as (component "" ...) in the
+            # DSN and comes back with the name left out. The name is never used.
+            first = 2 if len(component) > 1 and isinstance(component[1], str) else 1
+            if len(component) <= first:
                 raise ValidationError("Malformed SES component placement.")
-            _sections(component, {"place"}, 2)
-            for place in component[2:]:
+            _sections(component, {"place"}, first)
+            for place in component[first:]:
                 if (len(place) != 6 or not isinstance(place[1], str)
                         or place[1] in seen_places or place[1] not in expected_placements):
                     raise ValidationError("Unknown, duplicate or unsupported SES placement.")
@@ -155,7 +159,8 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                         or not 0 <= rotation <= 360
                         or int(rotation) % 360 != _rounded(angle % 360) % 360):
                     raise ValidationError("SES moved, rotated or flipped a footprint; entire route refused.")
-        if seen_places != set(expected_placements):
+        # Only footprints without a connected pad (optional_placements) may be left out.
+        if not set(expected_placements) - set(optional_placements) <= seen_places:
             raise ValidationError("SES placement reference list changed.")
     routes = one(root, "routes")
     _sections(routes, {"resolution", "parser", "library_out", "network_out"})

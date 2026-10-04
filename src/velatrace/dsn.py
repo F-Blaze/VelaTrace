@@ -48,6 +48,9 @@ class DsnInput:
     # renamed (e.g. "Front" for F.Cu). The DSN and SES use the user's names; board
     # items always use canonical ones.
     layer_aliases: dict[str, str] = field(default_factory=dict)
+    # DSN references of footprints with no connected pad (logos, mounting holes).
+    # Freerouting leaves pad-less footprints out of the SES placement list.
+    unconnected_references: frozenset[str] = frozenset()
 
     @property
     def board_layers(self) -> frozenset[str]:
@@ -190,8 +193,9 @@ def accept_export(ticket: ExportTicket, path: Path, snapshot: DesignSnapshot,
                        if name not in {item.reference for item in named})
     if any(item.position_mm is None for item in renamed) or leftover != Counter(spot(*item.position_mm) for item in renamed):
         raise ValidationError("DSN footprint placement differs from the board.")
+    connected = {item.reference for item in named if any(pin.net for pin in item.pins)}
     result = DsnInput(path, digest, ticket, frozenset(actual_nets), layers, root[1], placements,
-                      placement_resolution_mm, aliases)
+                      placement_resolution_mm, aliases, frozenset(placements) - connected)
     result.assert_unchanged()
     return result
 

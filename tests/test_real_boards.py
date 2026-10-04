@@ -81,7 +81,19 @@ class RenamedLayersAndFootprintsTests(unittest.TestCase):
             parse_ses(ses, **kwargs)
 
     def test_footprints_kicad_renames_on_export_match_by_position(self):
-        self.assertEqual(set(self.accept().placements), {"R1", "G***", "G***_1"})
+        result = self.accept()
+        self.assertEqual(set(result.placements), {"R1", "G***", "G***_1"})
+        # Freerouting omits pad-less footprints from the SES placement; connected ones must stay.
+        self.assertEqual(result.unconnected_references, {"G***", "G***_1"})
+        ses = "(session board (base_design board.dsn) (placement (resolution um 10) %s) (routes (resolution um 10) (network_out)))"
+        kwargs = dict(expected_design="board.dsn", nets=set(), layers={"Front"}, expected_placements=result.placements,
+                      expected_placement_resolution_mm=result.placement_resolution_mm)
+        r1 = "(component R0805 (place R1 300000 -200000 front 0))"
+        parse_ses(ses % r1, **kwargs, optional_placements=result.unconnected_references)
+        parse_ses(ses % r1.replace("R0805 ", ""), **kwargs, optional_placements=result.unconnected_references)
+        for text, optional in ((ses % r1, frozenset()), (ses % "", result.unconnected_references)):
+            with self.subTest(text=text), self.assertRaisesRegex(ValidationError, "reference list changed"):
+                parse_ses(text, **kwargs, optional_placements=optional)
         moved = (*PARTS[:2], Component("G***", "", "Logo", (), position_mm=(1, 2.5)))
         netted = (*PARTS[:2], Component("G***", "", "Logo", (Pin("1", "GND"),), position_mm=(1, 2)))
         for parts in (moved, netted, PARTS[:2], (*PARTS, Component("H1", "", "Hole", (), position_mm=(0, 0)))):
