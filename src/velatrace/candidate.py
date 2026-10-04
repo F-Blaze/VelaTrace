@@ -1,5 +1,5 @@
 """Non-destructive candidate construction and independent official CLI validation."""
-from collections import Counter
+from collections import Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -240,12 +240,23 @@ def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
     if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
         return ("DRC issue identities unavailable; review the full KiCad DRC report",)
     before, after = Counter(baseline.issues), Counter(candidate.issues)
-    blocked = after - before
-    blocked.update({issue: count for issue, count in (after & before).items() if issue[1] != "warning"})
-    counts = Counter()
-    for (kind, severity, _), count in blocked.items():
-        counts[(kind, severity)] += count
-    return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}" for (kind, severity), count in sorted(counts.items()))
+    def summary(issues, note=""):
+        counts = Counter()
+        for (kind, severity, _), count in issues.items():
+            counts[(kind, severity)] += count
+        return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}{note}" for (kind, severity), count in sorted(counts.items()))
+    carried = Counter({issue: count for issue, count in (after & before).items() if issue[1] != "warning"})
+    # Same type, severity and items as on the unrouted board: not caused by the route.
+    return summary(after - before) + summary(carried, " already on the unrouted board")
+
+
+def preexisting_errors(baseline, candidate) -> int:
+    """Blocking issues of route_issues() that were already on the unrouted board."""
+    total = candidate.violations + candidate.schematic_parity
+    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
+        return 0
+    carried = Counter(candidate.issues) & Counter(baseline.issues)
+    return sum(count for issue, count in carried.items() if issue[1] != "warning")
 
 
 def _parallel(function, values):
@@ -253,6 +264,10 @@ def _parallel(function, values):
     values = list(values)
     with ThreadPoolExecutor(max(1, len(values))) as pool:
         return list(pool.map(function, values))
+
+
+# One inspect() result: candidate DRC of `items` for a plan, bound to the inputs checked.
+Inspection = namedtuple("Inspection", "dsn_digest plan_digest constraints items context snapshot passes")
 
 
 class SafeCandidateValidator:
@@ -263,6 +278,7 @@ class SafeCandidateValidator:
         # ponytail: unbounded per-session cache, one small entry per board/rules revision.
         self._baselines = {}
         self._lock = threading.Lock()
+        self._inspected = None  # Last inspect(): reused by validate() for the same plan.
 
     def supports(self, constraints):
         return all(item.kind in {"clearance", "trace-width"} and item.target == "all nets" for item in constraints)
@@ -324,15 +340,30 @@ class SafeCandidateValidator:
         _parallel(lambda clearance: self._drc(name, source, self._with_rule(files, name, clearance), True),
                   self._rule_sets(constraints))
 
-    def validate(self, dsn, plan, constraints):
-        self.evidence = None
+    def inspect(self, dsn, plan, constraints, items=None):
+        """Candidate DRC without approval evidence: an Inspection whose passes are
+        (baseline, candidate) DRC results per rule set. The public hook for route repair.
+
+        `items` defaults to the plan's copper. A repair passes a subset of an earlier
+        call's items for the plan it derived from them: ids are kept, so DRC issues
+        compare across calls, and the subset must be exactly that plan's copper.
+        validate() reuses the latest result (or one handed back through reuse()) for
+        the same plan, after re-checking that board, project and DSN are unchanged."""
+        self.evidence = self._inspected = None
         if not self.supports(constraints):
             raise CapabilityError("Only all-nets width and clearance constraints are validated.")
         dsn.assert_unchanged()
         source = self.safety.assert_matches(dsn)
         snapshot = canonical(parse(source, kicad=True))
         _, context = project_context(dsn.ticket.board_path)
-        items = prepare_copper(plan, dsn, source=source)
+        expected = prepare_copper(plan, dsn, source=source)
+        def shape(item):
+            ends = (item.start, item.end) if item.end is None else tuple(sorted((item.start, item.end)))
+            return item.kind, item.net, item.layer, ends, item.width, item.drill
+        if items is None:
+            items = expected
+        elif Counter(map(shape, items)) != Counter(map(shape, expected)):
+            raise ValidationError("Candidate copper differs from the route plan.")
         for constraint in constraints:
             if constraint.kind == "trace-width" and any(item.width + 1e-9 < constraint.minimum_mm for item in items if item.kind == "segment"):
                 raise ValidationError("Router violated the confirmed minimum trace width.")
@@ -349,13 +380,39 @@ class SafeCandidateValidator:
         if not context_matches(context):
             raise ValidationError("Project/rules changed during DRC; route again.")
         self.safety.assert_matches(dsn, expected_board=snapshot)
+        self._inspected = Inspection(dsn.digest, plan_digest(plan), tuple(constraints), tuple(items), context,
+                                     snapshot, passes)
+        return self._inspected
+
+    def reuse(self, inspection: Inspection):
+        """Make an earlier inspect() result the one validate() may reuse."""
+        self._inspected = inspection
+
+    def validate(self, dsn, plan, constraints):
+        self.evidence = None
+        cached = self._inspected
+        if cached is not None and cached[:3] == (dsn.digest, plan_digest(plan), tuple(constraints)):
+            # Same plan, constraints and DSN: the DRC results stand if nothing else moved.
+            items, context, snapshot, passes = cached[3:]
+            dsn.assert_unchanged()
+            if not context_matches(context):
+                raise ValidationError("Project/rules changed during DRC; route again.")
+            self.safety.assert_matches(dsn, expected_board=snapshot)
+        else:
+            items, context, snapshot, passes = self.inspect(dsn, plan, constraints)[3:]
+        self._inspected = None
         judged = [route_issues(baseline, candidate) for baseline, candidate in passes]
-        report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged),
-                                  max(candidate.unconnected for _, candidate in passes),
+        unconnected = max(candidate.unconnected for _, candidate in passes)
+        # Connections open on the unrouted board (pours filled) are the routing job.
+        total = max(max(baseline.unconnected for baseline, _ in passes), unconnected)
+        report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged), unconnected,
+                                  routed_connections=total - unconnected, total_connections=total,
                                   enforced_constraint_ids=frozenset(c.id for c in constraints),
                                   details="Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
                                   board_digest=dsn.ticket.board_digest,
                                   preexisting_warnings=max(carried for _, carried in judged),
+                                  preexisting_errors=min(preexisting_errors(baseline, candidate)
+                                                         for baseline, candidate in passes),
                                   blocking_reasons=tuple(dict.fromkeys(reason for baseline, candidate in passes
                                                                       for reason in blocking_reasons(baseline, candidate))))
         self.evidence = (dsn.digest, plan_digest(plan), report, items, context, snapshot)

@@ -46,6 +46,7 @@ from .parts_db import cache_paths, download_catalogue, load_catalogue
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
+from .route_repair import repair_dangling
 from .routing import Mode, RoutingSession, RoutingStage
 from .sexpr import parse
 from .tokens import LocalChatTokenizer
@@ -1409,7 +1410,7 @@ class MainWindow(QMainWindow):
             if self.safety is None or self.safety.path != snapshot.path.resolve():
                 self.safety = BoardSafety(board, snapshot.path)
             self.validator = SafeCandidateValidator(self.safety, cli)
-            self.routing = RoutingSession(self.constraints, self.router, self.validator)
+            self.routing = RoutingSession(self.constraints, self.router, self.validator, repair_dangling)
             self.routing.command("/autoroute")
             self.writer = SafeBoardWriter(self.safety, self.validator)
         self.safety.board = board  # A fresh IPC handle; owned preview items carry over.
@@ -1621,7 +1622,7 @@ class MainWindow(QMainWindow):
             self.note(f"Applied {plan.trace_count} copper track segments and {len(plan.vias)} vias "
                 f"on {', '.join(plan.layers_used)} in {elapsed:.1f}s, as one KiCad commit.{override} "
                 "Refresh before further routing, including after Undo.")
-            self.status.setText("Copper applied. Review, then save in KiCad (Undo reverts it).")
+            self.status.setText("Copper applied. Press B to refill any copper pours, review, then save in KiCad (Undo reverts it).")
         def failed(message):
             self.blocking("Copper application was not confirmed; check KiCad before retrying. " + message,
                           "The panel keeps the previous preview; the live outcome may be uncertain.")
