@@ -60,7 +60,7 @@ name alone is not trusted. There is no stackup setter.
 The candidate is local temporary data under the project `.velatrace/backups`
 directory. It copies the corresponding project, rules and non-hierarchical
 schematic context. The validator binds both contents and absence of optional
-files, refuses DRC exclusions/ignored checks, and invokes official `kicad-cli`
+files, refuses DRC exclusions, runs checks the project sets to Ignore as warnings (in its temporary copy only), and invokes official `kicad-cli`
 DRC. The routing UI requires an exact editor/CLI version match before creating the
 routing session. Matching saved schematic context must export successfully before
 DRC explicitly enables schematic parity; malformed context refuses validation.

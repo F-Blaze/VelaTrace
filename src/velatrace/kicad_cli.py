@@ -364,12 +364,17 @@ class KiCadCli:
 # routes straight through them (real boards: tracks shorting a name written on
 # B.Cu). Each one gets a no-tracks/no-vias rule area on the in-memory board, which
 # the exporter writes as a keepout. The temporary board is never saved.
+# Copper graphics of pad-less footprints (logos) are covered too.
 # ponytail: bounding boxes, so a long diagonal copper line blocks its whole
 # rectangle; use the item's outline if that ever costs a routable board.
 EXPORT_SCRIPT = """import sys, pcbnew
 board = pcbnew.LoadBoard(sys.argv[1])
 try:
-    for item in list(board.GetDrawings()):
+    items = list(board.GetDrawings())
+    for footprint in board.GetFootprints():
+        if not list(footprint.Pads()):  # A copper logo; with pads it may be a net tie or antenna.
+            items += list(footprint.GraphicalItems())
+    for item in items:
         if pcbnew.IsCopperLayer(item.GetLayer()):
             box = item.GetBoundingBox()
             area = pcbnew.ZONE(board)

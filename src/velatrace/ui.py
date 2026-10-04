@@ -1499,7 +1499,7 @@ class MainWindow(QMainWindow):
                                       f"preview {preview_seconds:.1f}s")
                 self.note(
                     f"{plan.trace_count} traces · {len(plan.vias)} vias · {', '.join(plan.layers_used)}. "
-                    f"{self._route_timing}. Preview only (User.9). Checking DRC…" + "".join(" " + note for note in notes))
+                    f"{self._route_timing}. Preview only ({self.safety.preview_layer_name}). Checking DRC…" + "".join(" " + note for note in notes))
                 self.canvas.plan = plan
                 self.canvas.update()
                 self.check_drc(self.routing, self.validator, plan, generation, snapshot)
@@ -1561,12 +1561,12 @@ class MainWindow(QMainWindow):
         else:
             timing = f"{self._route_timing}; DRC {session.timings['validation']:.1f}s."
             if session.stage == RoutingStage.PREVIEW and report.drc_violations == 0:
-                self.note(f"{session.summary} {timing} Preview only (User.9). "
+                self.note(f"{session.summary} {timing} Preview only ({self.safety.preview_layer_name}). "
                           "Approve and apply copper, or reject.")
             else:  # approval blocked: the reason stays visible
                 self.blocking(session.summary + (" Reject and reroute, or Approve anyway."
                                                  if session.stage == RoutingStage.PREVIEW else " Reject and reroute."),
-                              timing + " Preview only: User.9 graphics do not change copper.")
+                              timing + f" Preview only: {self.safety.preview_layer_name} graphics do not change copper.")
             if self.worker is None:
                 self.status.setText("DRC finished.")
                 self.status.setToolTip("")

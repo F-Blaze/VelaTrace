@@ -88,8 +88,6 @@ def project_context(board_path: Path):
             raise ValueError()
         if settings.get("drc_exclusions"):
             raise CapabilityError("Remove DRC exclusions before routing; excluded checks cannot prove safety.")
-        if any(value == "ignore" for value in settings.get("rule_severities", {}).values()):
-            raise CapabilityError("Enable all DRC checks before routing; the project contains ignored checks.")
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ValidationError("Project design rules are missing or malformed.") from exc
     paths = [project]
@@ -102,6 +100,20 @@ def project_context(board_path: Path):
                 raise CapabilityError("Hierarchical schematic context is not supported by candidate validation yet.")
         paths.append(path)
     return data, {path: file_digest(path) if path.exists() else None for path in paths}
+
+
+def checked_project(data: bytes) -> bytes:
+    """The project as candidate DRC uses it: every check set to "ignore" runs as a
+    warning instead. A new KiCad project ignores several checks by default; rather
+    than refuse it, the temporary DRC copy (never the user's file) checks them, so a
+    route still cannot add an issue of any kind unnoticed."""
+    project = json.loads(data)
+    severities = project["board"]["design_settings"].get("rule_severities", {})
+    ignored = [name for name, value in severities.items() if value == "ignore"]
+    if not ignored:
+        return data
+    severities.update(dict.fromkeys(ignored, "warning"))
+    return json.dumps(project, indent=2).encode("utf-8")
 
 
 def context_matches(context):
@@ -301,7 +313,7 @@ class SafeCandidateValidator:
                 data = path.read_bytes()
                 if hashlib.sha256(data).hexdigest() != digest:
                     raise ValidationError("Project/rules changed during DRC; route again.")
-                files[path.name] = data
+                files[path.name] = checked_project(data) if path.suffix == ".kicad_pro" else data
         return files
 
     @staticmethod
