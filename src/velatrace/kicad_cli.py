@@ -97,8 +97,11 @@ def _issue(row) -> tuple | None:
     uuids = [item.get("uuid") for item in items]
     # Missing identifiers are not evidence that two warnings concern the same
     # items. Keep their counts, but make the baseline comparison fail closed.
+    # An issue KiCad reports with no items at all (a copper sliver in a filled
+    # zone) keeps an empty identity: it can never match the baseline (see
+    # candidate._carried), yet it no longer hides every other issue's identity.
     if (not isinstance(kind, str) or not kind or not isinstance(severity, str) or not severity
-            or not uuids or any(not isinstance(value, str) or not value for value in uuids)):
+            or any(not isinstance(value, str) or not value for value in uuids)):
         return None
     return kind, severity, tuple(sorted(uuids))
 

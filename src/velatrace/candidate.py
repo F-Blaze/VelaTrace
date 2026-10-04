@@ -218,6 +218,13 @@ def candidate_text(source: str, items: tuple[CopperItem, ...]) -> str:
     return source[:boundary] + "\n" + "\n".join(lines) + "\n" + source[boundary:]
 
 
+def _carried(baseline, candidate) -> Counter:
+    """Candidate issues already on the unrouted board: same type, severity and items.
+    An issue without items cannot be matched to anything, so it always counts as new."""
+    both = Counter(candidate.issues) & Counter(baseline.issues)
+    return Counter({issue: count for issue, count in both.items() if issue[2]})
+
+
 def route_issues(baseline, candidate) -> tuple[int, int]:
     """(blocking, pre-existing warnings) for one DRC pass.
 
@@ -227,10 +234,8 @@ def route_issues(baseline, candidate) -> tuple[int, int]:
     total = candidate.violations + candidate.schematic_parity
     if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
         return total, 0
-    before, after = Counter(baseline.issues), Counter(candidate.issues)
-    carried = after & before  # Same type, severity and items: already on the unrouted board.
-    errors = sum(count for issue, count in carried.items() if issue[1] != "warning")
-    return (after - before).total() + errors, carried.total() - errors
+    warnings = sum(count for issue, count in _carried(baseline, candidate).items() if issue[1] == "warning")
+    return total - warnings, warnings
 
 
 def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
@@ -239,15 +244,14 @@ def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
         return ()
     if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
         return ("DRC issue identities unavailable; review the full KiCad DRC report",)
-    before, after = Counter(baseline.issues), Counter(candidate.issues)
+    carried = _carried(baseline, candidate)
     def summary(issues, note=""):
         counts = Counter()
         for (kind, severity, _), count in issues.items():
             counts[(kind, severity)] += count
         return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}{note}" for (kind, severity), count in sorted(counts.items()))
-    carried = Counter({issue: count for issue, count in (after & before).items() if issue[1] != "warning"})
-    # Same type, severity and items as on the unrouted board: not caused by the route.
-    return summary(after - before) + summary(carried, " already on the unrouted board")
+    errors = Counter({issue: count for issue, count in carried.items() if issue[1] != "warning"})
+    return summary(Counter(candidate.issues) - carried) + summary(errors, " already on the unrouted board")
 
 
 def preexisting_errors(baseline, candidate) -> int:
@@ -255,8 +259,7 @@ def preexisting_errors(baseline, candidate) -> int:
     total = candidate.violations + candidate.schematic_parity
     if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
         return 0
-    carried = Counter(candidate.issues) & Counter(baseline.issues)
-    return sum(count for issue, count in carried.items() if issue[1] != "warning")
+    return sum(count for issue, count in _carried(baseline, candidate).items() if issue[1] != "warning")
 
 
 def _parallel(function, values):

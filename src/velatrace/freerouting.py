@@ -596,10 +596,17 @@ class Freerouting:
                     while True:
                         elapsed = time.monotonic() - started
                         watch = RouteWatch(self.progress, budget - elapsed)
-                        log = warm.run(self._router_args(directory, copied, output), self.timeout - elapsed,
-                                       cancel, watch, watch.should_stop)
-                        if not output.is_file():
-                            raise _WarmFailure("No SES")
+                        try:
+                            output.unlink(missing_ok=True)
+                            log = warm.run(self._router_args(directory, copied, output), self.timeout - elapsed,
+                                           cancel, watch, watch.should_stop)
+                            if not output.is_file():
+                                raise _WarmFailure("No SES")
+                        except (TimeoutError, _WarmFailure):
+                            if best is None:
+                                raise
+                            self._stop_warm(kill=True)  # A failed retry never costs the route already in hand.
+                            break
                         unrouted = (watch.best if warm.stopped else watch.last[1] if watch.last else 0) or 0
                         if best is None or unrouted < best[0]:
                             best = (unrouted, self._read_ses(output, dsn), log, bool(warm.stopped))

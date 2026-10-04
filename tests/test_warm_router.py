@@ -185,6 +185,15 @@ class WarmLifecycleTests(unittest.TestCase):
         self.assertEqual((self.router.stopped_early, FakeWarm.started[0].jobs), (False, 2))
         self.assertIn("Routing again · best so far 3 unrouted", seen)
 
+    def test_failed_retry_keeps_the_partial_route_already_in_hand(self):
+        FakeWarm.mode, FakeWarm.after_stall = "stall", "crash"
+        self.addCleanup(setattr, FakeWarm, "after_stall", "stall")
+        with patch.object(freerouting, "run_bounded") as run:
+            self.assertEqual(self.router.route(self.dsn, ()), "warm result")
+        run.assert_not_called()  # No one-shot rerun either.
+        self.assertTrue(self.router.stopped_early)
+        self.assertIs(FakeWarm.started[0].closed, True)
+
     def test_without_warm_setting_each_route_uses_and_closes_one_launcher(self):
         router = Freerouting(self.jar, sys.executable, work_directory=self.root / "work2")
         router.check_startup()
