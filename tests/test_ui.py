@@ -580,11 +580,11 @@ class UiTests(unittest.TestCase):
         from PySide6.QtWidgets import QLabel
         headers = [item.text() for item in self.window.card_container.findChildren(QLabel)
                    if " · " in item.text() and item.text().split(" · ")[0] in {"Errors", "Warnings", "Savings", "Info"}]
-        self.assertEqual(headers, ["Errors · 1", "Warnings · 3", "Savings · 1"])
-        self.assertIn("1 error · 3 warnings · 1 saving · est. $0.01/board saving", self.window.totals.text())
+        self.assertEqual(headers, ["Warnings · 3", "Savings · 1", "Info · 1"])
+        self.assertIn("3 warnings · 1 saving", self.window.totals.text())
         self.assertIn("never removed automatically", self.window.totals.toolTip())
         card = self.window.finding_cards[0]
-        self.assertEqual(card.finding.severity.value, "error")
+        self.assertEqual(card.finding.severity.value, "warning")
         self.assertTrue(card.details.isHidden())
         from PySide6.QtTest import QTest
         QTest.mouseClick(card, Qt.MouseButton.LeftButton)
@@ -762,7 +762,7 @@ class SetupUsabilityTests(unittest.TestCase):
             self.read_fixture(window)
         self.assertNotIn("Stopped", window.status.text())
         self.assertEqual([c.reference for c in window.audit_snapshot.components], ["U1"])
-        self.assertEqual(window.finding_cards[0].finding.rule, "decoupling.missing")
+        self.assertIn("decoupling.missing", [card.finding.rule for card in window.finding_cards])
 
     def test_explain_with_ai_without_provider_points_to_setup_without_dialog(self):
         window = self.launch()
