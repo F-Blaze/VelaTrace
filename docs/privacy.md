@@ -18,7 +18,7 @@ Policy review: **2026-09-22**. Google's unpaid-service terms allow product/model
 
 Groq documents default non-retention of inference inputs/outputs, with exceptions for reliability and abuse investigations that can retain data for up to 30 days (or longer if legally required). Usage metadata is retained. Its data controls offer zero data retention; do not confuse the plugin's lack of telemetry with the provider collecting none. [Groq data policy](https://console.groq.com/docs/your-data).
 
-Groq's built-in web search uses Tavily, so enabling search adds provider-side processing beyond ordinary inference. [Groq web search](https://console.groq.com/docs/compound/built-in-tools/web-search). Groq's Compound Mini page records its decommissioning on September 21, 2026; do not configure that retired model. [Compound Mini status](https://console.groq.com/docs/compound/systems/compound-mini).
+Groq's built-in web search uses Tavily, so enabling search adds provider-side processing beyond ordinary inference. See Groq's documentation for its built-in web search. Groq's Compound Mini page records its decommissioning on September 21, 2026; do not configure that retired model. [Compound Mini status](https://console.groq.com/docs/compound/systems/compound-mini).
 
 ## Gemini pricing limitation
 
