@@ -100,6 +100,7 @@ class FreeroutingTests(unittest.TestCase):
         dsn = DsnInput(path, file_digest(path), ExportTicket.begin(board),
                        frozenset({"N"}), frozenset({"F.Cu", "B.Cu"}))
         router = Freerouting(jar, sys.executable, work_directory=self.root / "processes")
+        router._warm_failures = 99  # The launcher is unavailable: this is the one-shot fallback.
         for failed_step in (None, "java", "probe"):
             launches = []
             def run(args, directory, timeout, cancel=None, on_data=None):
@@ -196,10 +197,16 @@ class NativeFreeroutingTests(unittest.TestCase):
                                  work_directory=directory / "processes", timeout_seconds=60)
             for constraints, width in (((), .25), ((Constraint("w", Scope.SESSION, "trace-width", "all nets", .5),
                                                     Constraint("c", Scope.SESSION, "clearance", "all nets", .3)), .5)):
+                # Launcher first, then the one-shot fallback (whose update check the policy denies).
                 result = router.route(dsn, constraints)
                 plan = FreeroutingTests.parse_actual(self, result)
                 self.assertEqual(plan.tracks[0].width_mm, width)
-                self.assertIn('access denied ("java.net.URLPermission"', router.last_log)
+                self.assertIn("Auto-router pass #1", router.last_log)
+                self.assertFalse(router.stopped_early)
+                if constraints:
+                    router._warm_failures = 99
+                    self.assertEqual(FreeroutingTests.parse_actual(self, router.route(dsn, constraints)).tracks[0].width_mm, width)
+                    self.assertIn('access denied ("java.net.URLPermission"', router.last_log)
                 self.assertFalse(any((directory / "processes").iterdir()))
 
 

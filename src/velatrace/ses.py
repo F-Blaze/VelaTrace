@@ -210,7 +210,9 @@ def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[st
                     if kind not in [["type", "route"], ["type", "normal"]]:
                         raise ValidationError("Unsupported SES wire type.")
                 path = one(geometry, "path")
-                if len(path) < 7 or len(path) % 2 != 1 or not isinstance(path[1], str) or path[1] not in layers:
+                # Freerouting 2.1.0 also emits one-point paths (at vias and pad centres).
+                # They have no length: like KiCad's own SES import, _normalised drops them.
+                if len(path) < 5 or len(path) % 2 != 1 or not isinstance(path[1], str) or path[1] not in layers:
                     raise ValidationError("Unsupported SES path or layer.")
                 width = number(path[2]) * scale
                 if not 0 < width <= 100:

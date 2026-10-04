@@ -187,7 +187,7 @@ javac --release 21 -proc:none -cp freerouting-2.1.0.jar src/velatrace/router_res
 ```
 
 Expected class SHA-256 (Temurin 21.0.12 javac):
-`4283bd5219bf2bf1f85ea7ae07a28d0fa41121f8d8bb9020ae381db4a284adae`.
+`61af2ebe3249918f488a006b6aecdf1afb36118033b56e64290ba45c9be7645b`.
 It uses only public classes of the unmodified JAR and is verified before each start.
 
 ## Requirements for the board safety adapter
