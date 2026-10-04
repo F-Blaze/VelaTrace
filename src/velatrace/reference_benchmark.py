@@ -3,15 +3,16 @@
 Never loads a user's board or invokes IPC. A longer route can be preferable when
 the shortest geometric path crosses a required reference-plane void.
 """
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 import math
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from statistics import median
 import time
 
 from .benchmark import _FixtureSafety, _id, _save_new, fixture_texts
-from .candidate import SafeCandidateValidator, candidate_text, prepare_copper, route_issues, trusted_via_catalog
+from .candidate import (SafeCandidateValidator, candidate_text, context_matches, prepare_copper,
+                        project_context, route_issues, trusted_via_catalog)
 from .dsn import DsnInput, ExportTicket, file_digest
 from .electrical_rules import ElectricalRules, NetRule, compile_electrical_dsn, validate_plan_rules
 from .endpoint_delay import EndpointRequirement, analyze_endpoint_delay
@@ -22,6 +23,7 @@ from .kicad_cli import KiCadCli
 from .portfolio import candidate_geometry
 from .reference_planes import ReferenceRequirement, check_reference_coverage
 from .reference_routing import compile_reference_keepouts
+from .refilled_candidate import RefilledCandidateValidator
 from .ses import parse_ses
 from .sexpr import QuotedAtom, children, one, parse, render
 
@@ -104,12 +106,63 @@ def reference_comparison(cases):
     return summary
 
 
-def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6, 8), seconds=120, repeats=1):
+def validate_and_refill(dsn, plan, cli, work, *, fused=True):
+    """Research validation; retain a legacy arm for controlled timing comparisons.
+
+    Both arms check original rules and produce fresh fill. The fused arm reuses
+    the strict DRC returned by refill on the exact candidate, avoiding a second
+    candidate DRC. Neither arm applies copper to a live editor board.
+    """
+    started = time.monotonic()
+    _, context = project_context(dsn.ticket.board_path)
+    validator_type = RefilledCandidateValidator if fused else SafeCandidateValidator
+    validator = validator_type(_FixtureSafety(work), cli)
+    report = validator.validate(dsn, plan, ())
+    candidate = work/dsn.ticket.board_path.name
+    if fused:
+        fresh = validator.fresh_result
+        _save_new(candidate, validator.candidate_text)
+    else:
+        source = dsn.ticket.board_path.read_text(encoding='utf-8')
+        _save_new(candidate, candidate_text(source, prepare_copper(plan, dsn)))
+    for name, data in validator._context_files(context).items():
+        with (work/name).open('xb') as target:
+            target.write(data)
+    if not fused:
+        fresh = cli.refill_for_analysis(candidate)
+    dsn.assert_unchanged()
+    if not context_matches(context):
+        raise ValidationError('Source context changed during validation and refill.')
+    return report, fresh, time.monotonic()-started
+
+
+def refill_preserves_copper(plan, filled_text, dsn, *, via_catalog):
+    """Compare copper under one bound DSN despite SES basename-only identity.
+
+    KiCad exports a full DSN path, while Freerouting returns its basename (or
+    stem). The external PCB importer retains the full DSN name. Normalize only
+    these proven aliases here; the general portfolio key remains identity-aware.
+    """
+    design = PureWindowsPath(dsn.base_design)
+    if plan.base_design not in {dsn.base_design, design.name, design.stem}:
+        raise ValidationError('Route identity differs from the bound DSN.')
+    filled_root = parse(filled_text, kicad=True)
+    without_copper = render([filled_root[0], *(r for r in filled_root[1:]
+                           if not isinstance(r, list) or r[0] not in {'segment', 'via', 'arc'})])
+    restored = import_copper(without_copper, filled_text, dsn, via_catalog=via_catalog)
+    restored = replace(restored, base_design=plan.base_design)
+    return candidate_geometry(restored)[0] == candidate_geometry(plan)[0]
+
+
+def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6, 8), seconds=120, repeats=1,
+                            fused_validation=True):
     if (type(seconds) not in {int, float} or not math.isfinite(seconds) or not 10 <= seconds <= 3600
             or not layer_counts or len(set(layer_counts)) != len(layer_counts)):
         raise ValidationError('Reference benchmark needs distinct layer counts and a 10–3600 second budget.')
     if type(repeats) is not int or not 1 <= repeats <= 9:
         raise ValidationError('Reference benchmark repeats must be an integer from 1 to 9.')
+    if type(fused_validation) is not bool:
+        raise ValidationError('Fused validation must be a boolean.')
     cases = [(n, trial, reference_fixture(n)) for n in layer_counts for trial in range(1, repeats+1)]
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -120,7 +173,8 @@ def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6,
     router = Freerouting(jar, java, work_directory=output/'router', timeout_seconds=seconds)
     router.check_startup()
     requirements = (ReferenceRequirement('N1', 'F.Cu', 'In1.Cu', 'GND', .05),)
-    manifest = {'schema': 2, 'router_name': 'Vela-routing', 'corpus': 'authored-reference-notch-v1',
+    manifest = {'schema': 3, 'router_name': 'Vela-routing', 'corpus': 'authored-reference-notch-v1',
+                'validation': 'fused-refill' if fused_validation else 'separate-refill',
                 'repeats': repeats, 'kicad_version': version,
                 'router_version': VERSION, 'router_sha256': JAR_SHA256,
                 'kicad_cli_sha256': file_digest(cli.executable), 'java_sha256': file_digest(router.java),
@@ -183,25 +237,13 @@ def run_reference_benchmark(output, *, jar, java, kicad_cli, layer_counts=(4, 6,
                 failures = validate_plan_rules(plan, policies, layers)
                 if failures:
                     raise ValidationError('; '.join(failures))
-                validator = SafeCandidateValidator(_FixtureSafety(work), cli)
-                drc_started = time.monotonic()
-                report = validator.validate(dsn, plan, ())
-                stages['drc_seconds'] = time.monotonic()-drc_started
-                # Keep this deliverable separate from the immutable source board.
-                candidate = work/'reference.kicad_pcb'
-                _save_new(candidate, candidate_text(files['reference.kicad_pcb'], prepare_copper(plan, dsn)))
-                _save_new(work/'reference.kicad_pro', files['reference.kicad_pro'])
-                refill_started = time.monotonic()
-                fresh = cli.refill_for_analysis(candidate)
-                stages['refill_seconds'] = time.monotonic()-refill_started
+                report, fresh, validation_seconds = validate_and_refill(
+                    dsn, plan, cli, work, fused=fused_validation)
+                stages['validation_and_refill_seconds'] = validation_seconds
                 _save_new(work/'fresh-filled.kicad_pcb', fresh.text)
                 # Check that native serialization/refill preserved routed copper,
                 # including net assignments. Refilled files are never applied.
-                filled_root = parse(fresh.text, kicad=True)
-                without_copper = render([filled_root[0], *(r for r in filled_root[1:]
-                                       if not isinstance(r, list) or r[0] not in {'segment', 'via', 'arc'})])
-                restored = import_copper(without_copper, fresh.text, dsn, via_catalog=catalog)
-                if candidate_geometry(restored)[0] != candidate_geometry(plan)[0]:
+                if not refill_preserves_copper(plan, fresh.text, dsn, via_catalog=catalog):
                     raise ValidationError('Native refill changed route geometry or net assignment.')
                 coverage_started = time.monotonic()
                 coverage = check_reference_coverage(plan, fresh.text, requirements)
