@@ -171,6 +171,26 @@ class HttpsGetTests(unittest.TestCase):
                 (FakeResponse(200, b"x" * 5, {"Content-Length": "10"}), "truncated")):
             with self.subTest(message=message), self.assertRaisesRegex(PartsDBError, message):
                 self.get(response)
+    def test_trickling_server_is_cut_off_at_the_overall_deadline(self):
+        # VT-S2: every recv stays under the socket timeout, yet the body never ends.
+        import threading
+        import time
+        cut = threading.Event()
+        class Trickle(FakeResponse):
+            def read(self, size):
+                if cut.wait(10):
+                    raise OSError("connection shut down")
+                return b"x"
+        connection = fake_connection(Trickle(200), [])
+        connection.sock = type("Sock", (), {"shutdown": lambda self, how: cut.set(),
+                                            "settimeout": lambda self, value: None})()
+        started = time.monotonic()
+        with patch("velatrace.parts_db.http.client.HTTPSConnection", connection), \
+                self.assertRaisesRegex(PartsDBError, "timed out"):
+            https_get(self.url, 1000, .3)
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_foreign_urls_are_refused(self):
         for url in ("http://lrks.github.io/jlcpcb-economic-parts/economic-parts.csv",
                     "https://example.com/economic-parts.csv"):
             with self.subTest(url=url), self.assertRaisesRegex(PartsDBError, "built-in"):

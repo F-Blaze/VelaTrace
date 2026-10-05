@@ -24,6 +24,7 @@ import re
 import socket
 import ssl
 import tempfile
+import threading
 from time import monotonic
 from typing import Callable, Iterable
 from urllib.parse import urlsplit
@@ -284,6 +285,22 @@ def https_get(url: str, max_bytes: int, timeout: float) -> bytes:
     connection._create_connection = lambda address, timeout, source_address=None: connect_before(
         address, deadline, source_address)
     response = None
+    expired = threading.Event()
+
+    def expire():
+        # The socket timeout bounds one recv, and one read() may issue many: a server
+        # that trickles bytes would hold the worker (and the window) indefinitely.
+        expired.set()
+        active = connection.sock
+        if active is not None:
+            try:
+                active.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    watchdog = threading.Timer(timeout, expire)
+    watchdog.daemon = True
+    watchdog.start()
     try:
         connection.request("GET", parsed.path, headers={
             "User-Agent": USER_AGENT, "Accept": "text/csv, text/plain;q=0.5",
@@ -315,8 +332,11 @@ def https_get(url: str, max_bytes: int, timeout: float) -> bytes:
     except (TimeoutError, socket.timeout) as exc:
         raise PartsDBError("Parts-list download timed out.") from exc
     except (OSError, http.client.HTTPException) as exc:
+        if expired.is_set():
+            raise PartsDBError("Parts-list download timed out.") from exc
         raise PartsDBError("Cannot download the parts list. Check the network connection.") from exc
     finally:
+        watchdog.cancel()
         if response is not None:
             response.close()
         connection.close()
