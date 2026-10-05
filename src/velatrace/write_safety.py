@@ -4,9 +4,11 @@ No API in this module saves over the user's board file. Approved copper remains
 in KiCad's undo history until the user saves it using KiCad.
 """
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import threading
 import uuid
@@ -14,6 +16,7 @@ import uuid
 from .candidate import canonical, context_matches, file_digest, live_board_text, read_board
 from .sexpr import parse
 from .errors import CapabilityError, ValidationError, VelaTraceError
+from .flags import Bucket
 from .routing import plan_digest
 
 
@@ -173,6 +176,21 @@ def _preview_like(item, layer):
     return bool(key and key[0] == layer and stroke.style == SLS_DASH and stroke.width.value_nm == 100_000)
 
 
+_ANNOTATION = re.compile(r"[^\s:]{1,40}: (?:%s)" % "|".join(re.escape(bucket.value) for bucket in Bucket))
+
+
+def _adoptable(item, layer, trusted):
+    """Does this item look like a temporary graphic VelaTrace draws on `layer`?
+
+    A preview line is a dashed 0.1 mm segment. An annotation is plain text, which has
+    no distinctive style: a record from the project folder (untrusted) therefore also
+    needs the "REF: bucket" wording, a record from the user's own journal does not."""
+    from kipy.board_types import BoardText
+    if isinstance(item, BoardText):
+        return item.proto.layer == layer and (trusted or bool(_ANNOTATION.fullmatch(item.value)))
+    return _preview_like(item, layer)
+
+
 def _check_graphic_collisions(additions, existing, removed_ids, layer="User.9"):
     """KiCad may replace an existing coincident graphic when creating a segment."""
     foreign = {_segment_key(item) for item in existing if item.id.value not in removed_ids}
@@ -266,7 +284,10 @@ PREVIEW_LAYERS = ("User.9", "User.8", "User.7", "User.6", "User.5", "User.4", "U
 class BoardSafety:
     preview_layer_name = "User.9"
 
-    def __init__(self, board, board_path: Path, *, factory=None):
+    def __init__(self, board, board_path: Path, *, factory=None, journal_dir: Path | None = None):
+        """journal_dir: a folder outside the project (the user's VelaTrace settings
+        folder) for the record of temporary graphics VelaTrace drew on each board.
+        Records inside the project travel with it and are not proof of anything."""
         self.board = board
         self.path = Path(board_path).resolve(strict=True)
         if self.path.suffix != ".kicad_pcb":
@@ -275,6 +296,12 @@ class BoardSafety:
         if not self.directory.resolve().is_relative_to(self.path.parent):
             raise ValidationError("Backup directory resolves outside the board's project folder.")
         self.directory.mkdir(parents=True, exist_ok=True)
+        try:  # Backups and journals are local working data, never something to commit.
+            (self.directory.parent / ".gitignore").open("x", encoding="utf-8").write("*\n")
+        except OSError:
+            pass  # Already there, or read-only: only a convenience.
+        name = hashlib.sha256(os.path.normcase(str(self.path)).encode("utf-8")).hexdigest()[:32]
+        self.journal = Path(journal_dir) / f"{name}.json" if journal_dir else None
         self.factory = factory or ItemFactory()
         self.owned = {}
         self.blocked = False
@@ -380,6 +407,10 @@ class BoardSafety:
             self._identity()
             if file_digest(self.path) != file_digest(backup.saved) or (context is not None and not context_matches(context)):
                 raise ValidationError("Saved board/project changed before transaction.")
+            if temporary:
+                # Before the commit: an id recorded but never drawn is harmless, an
+                # item drawn but never recorded would be an orphan nobody may remove.
+                self._record_temporary(list(expected))
             commit = None
             try:
                 commit = self.board.begin_commit()
@@ -461,8 +492,37 @@ class BoardSafety:
                               "User.Comments or User.Drawings). Enable one in File > Board Setup > Board Editor "
                               "Layers, then save the board. VelaTrace never changes layer settings itself.")
 
+    def _trusted_ids(self):
+        """Temporary-graphic UUIDs this installation drew on this board (user's journal)."""
+        try:
+            data = json.loads(self.journal.read_text(encoding="utf-8")) if self.journal else {}
+            return {value for value in data.get("owned_ids", ()) if isinstance(value, str)}
+        except (OSError, ValueError, AttributeError, TypeError):
+            return set()
+
+    def _record_temporary(self, ids):
+        if self.journal is None or not ids:
+            return
+        try:
+            data = json.loads(self.journal.read_text(encoding="utf-8"))
+            old = [value for value in data["owned_ids"] if isinstance(value, str)]
+        except (OSError, ValueError, KeyError, TypeError):
+            old = []
+        # ponytail: the newest 50,000 ids (or one whole preview, if larger); an older
+        # preview restored by Undo is then reported as a look-alike instead of removed.
+        kept = (old + ids)[-max(50_000, len(ids)):]
+        try:
+            self.journal.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.journal.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"board": str(self.path), "owned_ids": kept}), encoding="utf-8")
+            os.replace(temporary, self.journal)
+        except OSError:
+            pass  # The project-folder record below still covers preview-styled items.
+
     def _journaled_ids(self):
-        """Temporary-graphic UUIDs committed by any VelaTrace run on this board (completion.json)."""
+        """Temporary-graphic UUIDs named by records in the project folder (completion.json).
+        Untrusted: the folder travels with the project, so prepare_preview() believes
+        them only for items that look exactly like VelaTrace's own graphics."""
         ids = set()
         for path in self.directory.glob("*/completion.json"):
             try:
@@ -476,16 +536,21 @@ class BoardSafety:
     def prepare_preview(self):
         """Before routing, fail fast on everything that would refuse the later preview.
 
-        Old VelaTrace previews (saved into the board, restored by Undo, or left by an
-        earlier run) are recognised by journaled UUID on User.9 and removed through the
-        normal backed-up transaction. Unjournaled look-alikes are never deleted.
+        Old VelaTrace graphics (saved into the board, restored by Undo, or left by an
+        earlier run) are removed through the normal backed-up transaction when they
+        are on the preview layer, look like what VelaTrace draws, and their UUID is
+        recorded: in the user's own journal, or (records made before that journal
+        existed) in the project folder. A project-folder record alone can therefore
+        never remove a drawing that is not a VelaTrace look-alike, and unrecorded
+        look-alikes are never deleted.
         """
         layer = self._preview_layer()
         with self._lock:
             self._identity()
-            journaled = self._journaled_ids()
+            trusted, journaled = self._trusted_ids(), self._journaled_ids()
             for item in [*self.board.get_shapes(), *self.board.get_text()]:
-                if item.id.value in journaled and item.proto.layer == layer:
+                known = item.id.value in trusted
+                if (known or item.id.value in journaled) and _adoptable(item, layer, known):
                     self.owned.setdefault(item.id.value, _signature(item))
             self.clear_preview()
             # ponytail: pre-route we cannot know the route, so refuse on preview-styled
@@ -493,7 +558,7 @@ class BoardSafety:
             orphans = {_segment_key(item) for item in self.board.get_shapes() if _preview_like(item, layer)}
         if orphans:
             raise ValidationError(f"{self.preview_layer_name} has {len(orphans)} dashed 0.1 mm line(s) that look like old VelaTrace "
-                                  f"previews, but no VelaTrace journal beside this board proves it created them, so "
+                                  f"previews, but no VelaTrace record proves it created them, so "
                                   f"they were left untouched: {_describe_lines(orphans)}. Delete them in KiCad if they "
                                   f"are old previews, or move your own drawings off {self.preview_layer_name}, then retry. Routing was not started.")
 

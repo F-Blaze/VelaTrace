@@ -6,6 +6,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import uuid
 
 from velatrace.candidate import (SafeCandidateValidator, candidate_text, canonical,
                                 context_matches, live_board_text, prepare_copper, project_context)
@@ -344,6 +345,98 @@ class SafetyTests(unittest.TestCase):
         self.safety.prepare_preview()
         self.assertIn(other.id.value, self.board.items)
         self.assertNotIn("begin", self.board.events)
+
+    def note(self, text, layer=None):
+        from kipy.board_types import BoardText
+        from kipy.geometry import Vector2
+        from kipy.proto.board.board_types_pb2 import BL_User_9
+        item = BoardText()
+        item.id.value = str(uuid.uuid4())
+        item.value, item.layer, item.position = text, layer or BL_User_9, Vector2.from_xy_mm(5, 5)
+        item.signature = item.id.value.encode()
+        self.board.items[item.id.value] = item
+        self.with_text()
+        return item
+
+    def with_text(self):
+        """Let the fake board hold text, and the real annotation factory work with it."""
+        from kipy.board_types import BoardText
+        from velatrace.write_safety import ItemFactory
+        self.board.get_text = lambda: [value for value in self.board.items.values() if isinstance(value, BoardText)]
+        self.board.get_shapes = lambda: [value for value in self.board.items.values() if not isinstance(value, BoardText)]
+        def annotations(rows, layer):
+            items = ItemFactory.annotations(rows, layer)
+            for item in items:
+                item.signature = item.id.value.encode()
+            return items
+        self.safety.factory.annotations = annotations
+
+    def user_folder(self):
+        folder = tempfile.TemporaryDirectory()  # The user's settings folder: outside the project.
+        self.addCleanup(folder.cleanup)
+        return Path(folder.name)
+
+    def forge(self, *items):
+        folder = self.safety.directory / "seed"
+        folder.mkdir()
+        (folder / "completion.json").write_text(json.dumps(
+            {"status": "committed", "owned_ids": [item.id.value for item in items]}))
+
+    def test_project_supplied_journal_cannot_delete_foreign_drawings(self):
+        # VT-03: a downloaded project ships .velatrace records naming the author's own
+        # User.9 documentation (synthetic: a solid 0.15 mm line and an assembly note).
+        from kipy.proto.board.board_types_pb2 import BL_User_9
+        line = self.preview_items(self.plan, BL_User_9)[0]
+        line.attributes.stroke.width = 150_000
+        self.board.items[line.id.value] = line
+        note = self.note("ASSEMBLY NOTE: fit C12 AFTER conformal coat")
+        self.forge(line, note)
+        for journal_dir in (None, self.user_folder() / "journals"):
+            with self.subTest(journal_dir=journal_dir):
+                self.safety = BoardSafety(self.board, self.path, journal_dir=journal_dir)
+                self.safety.prepare_preview()
+                self.assertEqual(set(self.board.items), {line.id.value, note.id.value})
+                self.assertNotIn("begin", self.board.events)
+
+    def test_old_project_records_still_clear_velatrace_lookalikes_only(self):
+        # Records written before the user-folder journal existed must not strand old
+        # previews and annotations; they are believed for exact look-alikes only.
+        from kipy.proto.board.board_types_pb2 import BL_User_9
+        preview = self.preview_items(self.plan, BL_User_9)[0]
+        self.board.items[preview.id.value] = preview
+        annotation, foreign = self.note("R1: redundant"), self.note("R1: do not fit")
+        self.forge(preview, annotation, foreign)
+        self.safety.prepare_preview()
+        self.assertEqual(set(self.board.items), {foreign.id.value})
+
+    def test_own_journal_lives_outside_the_project_and_survives_without_project_records(self):
+        journals = self.user_folder() / "journals"
+        self.safety = BoardSafety(self.board, self.path, journal_dir=journals)
+        self.routed_preview()
+        self.with_text()
+        self.safety.show_annotations([("free-form text", 1, 1)])  # replaces the preview
+        mine = set(self.board.items)
+        record, = journals.glob("*.json")
+        self.assertTrue(mine <= set(json.loads(record.read_text(encoding="utf-8"))["owned_ids"]))
+        self.assertFalse(record.is_relative_to(self.path.parent))
+        # The project's own records are gone (fresh clone, cleaned folder): still recognised.
+        import shutil
+        shutil.rmtree(self.safety.directory)
+        foreign = self.note("free-form text of the author")
+        self.safety = BoardSafety(self.board, self.path, journal_dir=journals)
+        self.safety.prepare_preview()
+        self.assertEqual(set(self.board.items), {foreign.id.value})
+        # Another board is a different record.
+        other = self.path.with_name("other.kicad_pcb")
+        other.write_text(BOARD, encoding="utf-8")
+        self.assertNotEqual(BoardSafety(self.board, other, journal_dir=journals).journal, self.safety.journal)
+
+    def test_working_folder_is_git_ignored(self):
+        ignore = self.path.parent / ".velatrace" / ".gitignore"
+        self.assertEqual(ignore.read_text(encoding="utf-8"), "*\n")
+        ignore.write_text("# mine\n", encoding="utf-8")
+        BoardSafety(self.board, self.path)
+        self.assertEqual(ignore.read_text(encoding="utf-8"), "# mine\n")  # Never overwritten.
 
     def test_collision_check_is_direction_independent_and_preserves_layers(self):
         from kipy.proto.board.board_types_pb2 import BL_User_9, BL_User_8

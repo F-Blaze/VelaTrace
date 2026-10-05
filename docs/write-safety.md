@@ -162,10 +162,26 @@ User.9 to violet in KiCad if desired. The separate panel can always draw violet.
 Before temporary segment creation, a collision check compares the layer and
 undirected endpoints with nonowned existing graphics, and rejects duplicate
 requested segments. `prepare_preview()` runs before routing: it verifies User.9,
-adopts User.9 items whose UUIDs appear in committed `completion.json` journals
-beside the board (earlier runs, saved or Undo-restored previews) and removes them
-with the usual backup, then refuses before routing if unjournaled dashed 0.1 mm
-User.9 lines remain. This prevents a verified KiCad behavior that replaces an
+adopts its own earlier graphics on that layer (earlier runs, saved or
+Undo-restored previews) and removes them with the usual backup, then refuses
+before routing if unrecorded dashed 0.1 mm User.9 lines remain.
+
+An item is adopted only when both hold:
+1. its UUID is recorded as drawn by VelaTrace. The record that counts is the
+   journal in the user's VelaTrace settings folder (`journals/<hash of the board
+   path>.json`, written before each temporary-graphics commit; the newest 50,000
+   ids per board are kept). Records in the project's `.velatrace/backups/*/completion.json`
+   travel with the project and can be written by anyone, so they are only believed
+   for items that pass the stricter test below. They are still read so that
+   previews drawn by releases before this journal existed are not stranded;
+2. it looks like what VelaTrace draws on the preview layer: a dashed 0.1 mm
+   segment, or text. For a project-folder record, text must also read exactly like
+   an audit annotation (`REF: critical|important|nice-to-have|redundant`).
+
+So a project that ships a forged record cannot make VelaTrace remove the author's
+own drawings or notes; the most it can name are exact look-alikes of VelaTrace's
+temporary graphics. `.velatrace` gets a `.gitignore` containing `*` when it is
+created, so backups and records are not committed by accident. This prevents a verified KiCad behavior that replaces an
 existing coincident User.9 line with the new UUID. The board-change check must not
 ignore that disappearance. Approved copper is read back by UUID and exact geometry
 after the commit; missing/mismatched copper blocks retries as an uncertain write.

@@ -1126,7 +1126,7 @@ class MainWindow(QMainWindow):
                 reader = KiCadReader.connect()
                 snapshot = reader.read_board()
                 if snapshot.path:
-                    safety = BoardSafety(reader.client.get_board(), snapshot.path)
+                    safety = BoardSafety(reader.client.get_board(), snapshot.path, journal_dir=self.config_dir / "journals")
             elif choice == 1:
                 # Picking the saved file is the confirmation; the step line says so.
                 snapshot = KiCadCli(self.settings.cli, forbidden=(path.parent,)).schematic_snapshot(path, saved_confirmed=True)
@@ -1426,7 +1426,7 @@ class MainWindow(QMainWindow):
             cli.require_editor_version(reader.version)
             self._remember_tool("cli", cli.executable)
             if self.safety is None or self.safety.path != snapshot.path.resolve():
-                self.safety = BoardSafety(board, snapshot.path)
+                self.safety = BoardSafety(board, snapshot.path, journal_dir=self.config_dir / "journals")
             self.validator = SafeCandidateValidator(self.safety, cli)
             self.routing = RoutingSession(self.constraints, self.router, self.validator, repair_dangling)
             self.routing.command("/autoroute")
