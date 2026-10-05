@@ -195,6 +195,17 @@ class KiCadCliTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "Save the schematic"):
             cli.schematic_snapshot(Path("example.kicad_sch"), saved_confirmed=False)
 
+    def test_netlist_export_never_runs_with_the_users_own_settings(self):
+        # kicad-cli rewrites kicad_common.json on exit; found by the live editor test.
+        cli = object.__new__(KiCadCli)
+        with tempfile.TemporaryDirectory() as directory:
+            schematic, private = Path(directory) / "board.kicad_sch", Path(directory) / "private"
+            schematic.write_text("(kicad_sch)")
+            with patch.object(cli, "_export_config_home", return_value=private),                     patch.object(cli, "_run", return_value=0) as run:
+                with self.assertRaisesRegex(ValidationError, "did not produce"):
+                    cli.schematic_snapshot(schematic, saved_confirmed=True)
+            self.assertEqual(run.call_args.kwargs["config_home"], private)
+
 
 if __name__ == "__main__":
     unittest.main()
