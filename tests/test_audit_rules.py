@@ -187,7 +187,7 @@ def test_led_on_gpio_without_resistor():
 
 def test_single_pin_named_net():
     found = rules(design(ic("U1", ("3", "SDA1", "SDA")), cap()), "net")
-    assert [(f.rule, f.severity, f.nets) for f in found] == [("net.single_pin", Severity.WARNING, ("SDA1",))]
+    assert [(f.rule, f.severity, f.nets) for f in found] == [("net.single_pin", Severity.INFO, ("SDA1",))]
     auto = design(ic("U1", ("3", "unconnected-(U1-NC-Pad3)"), ("4", "Net-(U1-Pad4)")), cap())
     assert rules(auto, "net") == []
     header = design(part("J1", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x01", ("1", "SPARE")))

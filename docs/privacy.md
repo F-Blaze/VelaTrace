@@ -1,6 +1,13 @@
 # Privacy and provider setup
 
-VelaTrace has no backend and no telemetry. At runtime its remote API requests go only to the HTTPS endpoint you configure, using your own API key. It connects to KiCad through local IPC. Freerouting runs as a separate process with network access denied by the verified Java policy. Provider-side search can contact the provider's search services; that processing is outside the plugin and follows their terms. Installation downloads are separate from runtime activity.
+VelaTrace has no backend and no telemetry. It is offline by default: network use is opt-in, and this is the full list.
+
+- **Optional AI provider calls** (**Explain with AI**): go only to the HTTPS endpoint you configure, using your own API key.
+- **Optional JLCPCB parts-list download** (BOM Basic/Extended hints): a one-off download of a public CSV from a third-party GitHub Pages site, which can see your IP address and user agent. See [BOM](bom.md) for sources and licence status.
+- **Optional provider-side search** (for example Groq search, which uses Tavily): processed by the provider and its search services outside the plugin, under their terms.
+- **Installation downloads** (the plugin source, Python packages, Java, the Freerouting JAR) are separate from runtime activity.
+
+VelaTrace connects to KiCad through local IPC. Freerouting runs in a Java process with network access denied by the verified Java policy.
 
 **Check design** runs entirely on this computer: it reads KiCad over local IPC or a saved file and sends nothing anywhere. Only the optional **Explain with AI** step contacts a provider.
 
@@ -30,4 +37,4 @@ The local config folder shown in Setup (the platform's Qt `AppConfigLocation`) c
 
 Board data **is** saved locally for write safety. Before every live board mutation, `.velatrace/backups` beside the board holds saved/live recovery copies and transaction journals. These are retained for recovery and may contain confidential design information. Candidate board files use temporary directories under that backups folder. KiCad CLI DRC JSON reports use the operating system temporary folder. Router DSN/SES work files use temporary directories under the application config folder's `router-work`; normal completion cleans them up. A crash may leave temporary files. Router output is bounded and retained only in memory during the launch. Inspect and remove obsolete backups or abandoned temporary directories yourself after verifying recovery is no longer needed; VelaTrace never uploads them automatically.
 
-Missing/invalid keys, unavailable providers and exhausted quotas produce visible errors. A failed pricing search uses a clearly marked local estimate and displays its failure count and sanitized reason above the cards. Privacy boundary tests are offline. Earlier consented synthetic Groq calls are recorded in [review notes](REVIEW_2026_09_26.md); those calls did not establish exact tokenizer parity or complete provider acceptance.
+Missing/invalid keys, unavailable providers and exhausted quotas produce visible errors. A failed pricing search uses a clearly marked local estimate and displays its failure count and sanitized reason above the cards. Privacy boundary tests are offline. Earlier consented synthetic Groq calls are recorded in [review notes](internal/REVIEW_2026_09_26.md); those calls did not establish exact tokenizer parity or complete provider acceptance.
