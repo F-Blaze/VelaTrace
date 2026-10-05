@@ -52,19 +52,23 @@ def parse(text: str, *, kicad: bool = False) -> list:
                     i += 1
                     continue
                 i += 1
-                token = ''
-                while i < len(text) and text[i] != '"':
-                    if kicad and text[i] == '\\':
-                        i += 1
-                        if i >= len(text):
-                            break
-                        token += KICAD_ESCAPES.get(text[i], text[i])
-                    else:
-                        token += text[i]
-                    i += 1
-                if i == len(text):
-                    raise ValidationError("Unterminated Specctra string.")
-                i += 1
+                # Slices between escapes, not one character at a time: a single
+                # 31 MB quoted token used to take 40 s per parse.
+                parts, end = [], text.find('"', i)
+                while True:
+                    if end < 0:
+                        raise ValidationError("Unterminated Specctra string.")
+                    escape = text.find('\\', i, end) if kicad else -1
+                    if escape < 0:
+                        parts.append(text[i:end])
+                        break
+                    parts.append(text[i:escape])
+                    parts.append(KICAD_ESCAPES.get(text[escape + 1], text[escape + 1]))
+                    i = escape + 2
+                    if i > end:  # That quote was escaped; look for the next one.
+                        end = text.find('"', i)
+                token = ''.join(parts)
+                i = end + 1
                 tail_start = i
                 while not kicad and i < len(text) and not text[i].isspace() and text[i] not in '()"':
                     i += 1
@@ -82,7 +86,7 @@ def parse(text: str, *, kicad: bool = False) -> list:
             stack[-1].append(token)
         count += 1
         if count > 2_000_000:
-            raise ValidationError("Specctra input contains too many tokens.")
+            raise ValidationError("The file has more than 2,000,000 tokens; designs this large are not supported.")
     if stack or len(roots) != 1 or not roots[0]:
         raise ValidationError("Malformed Specctra document; nothing was applied.")
     return roots[0]

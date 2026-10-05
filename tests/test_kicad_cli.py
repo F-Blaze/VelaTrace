@@ -35,6 +35,27 @@ class KiCadCliTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 parse_drc_report(path)
 
+    def test_settings_copies_left_by_a_killed_session_are_swept(self):
+        # VT-07: only VelaTrace's own day-old temp folders; nothing else in the temp folder.
+        import time
+        from velatrace.kicad_cli import sweep_stale_settings
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            names = {"velatrace-kicad-settings-old": True, "velatrace-kicad-export-old": True,
+                     "velatrace-kicad-settings-live": False, "velatrace-other-old": True, "kicad-old": True}
+            for name, stale in names.items():
+                (temp / name / "10.0").mkdir(parents=True)
+                (temp / name / "10.0" / "kicad_common.json").write_text("{}")
+                if stale:
+                    os.utime(temp / name, (time.time() - 3 * 86_400,) * 2)
+            (temp / "velatrace-kicad-settings-file").write_text("a file, not a folder")
+            os.utime(temp / "velatrace-kicad-settings-file", (time.time() - 3 * 86_400,) * 2)
+            with patch("velatrace.kicad_cli.tempfile.gettempdir", return_value=str(temp)):
+                self.assertEqual(sweep_stale_settings(), 2)
+            self.assertEqual(sorted(path.name for path in temp.iterdir()),
+                             ["kicad-old", "velatrace-kicad-settings-file", "velatrace-kicad-settings-live",
+                              "velatrace-other-old"])
+
     def test_benchmark_drc_config_never_reads_personal_config(self):
         cli = object.__new__(KiCadCli)
         cli.version = (10, 0, 6)
@@ -49,7 +70,7 @@ class KiCadCliTests(unittest.TestCase):
                 self.assertEqual(run.call_args.args[-1], home)
 
     def test_missing_cli_is_actionable(self):
-        with patch("velatrace.kicad_cli.shutil.which", return_value=None):
+        with patch.dict(os.environ, {"PATH": ""}):
             with self.assertRaisesRegex(CapabilityError, "Install KiCad 9"):
                 KiCadCli()
 
