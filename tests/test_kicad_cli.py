@@ -24,7 +24,7 @@ class KiCadCliTests(unittest.TestCase):
                 parse_drc_report(path)
 
     def test_missing_cli_is_actionable(self):
-        with patch("velatrace.kicad_cli.shutil.which", return_value=None):
+        with patch.dict(os.environ, {"PATH": ""}):
             with self.assertRaisesRegex(CapabilityError, "Install KiCad 9"):
                 KiCadCli()
 

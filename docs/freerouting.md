@@ -17,6 +17,17 @@ including when a newer Java is installed for other applications. The integration
 was executed with Windows x64 Temurin **21.0.12.1+1**. Other OS/runtime combinations
 still need native verification before release.
 
+**Where programs are looked up.** `java` and `kicad-cli` (and `python3` on Linux)
+are never taken from the folder VelaTrace was started in or from the project
+folder, because a downloaded project could ship its own. A bare name is searched
+only in the absolute folders of `PATH`; a configured path must be absolute; on
+Windows both must be native `.exe` files (a `.cmd`/`.bat` shim is refused, since
+`cmd.exe` would re-parse the command line, board file name included). The path
+that passed the start-up check is saved in `settings.json`, so later launches use
+it directly. `launch.py` and `python -m velatrace` leave the starting folder before
+anything is imported or run, and the latter also drops that folder from Python's
+module search path.
+
 ## Why the older router and exact Java major
 
 Freerouting 2.4.1, 2.1.0 and other inspected releases start an update check even

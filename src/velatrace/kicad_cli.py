@@ -29,6 +29,34 @@ def local_tool_environment() -> dict[str, str]:
                 r"KICAD\d+_(?:FOOTPRINT|SYMBOL|3DMODEL|3RD_PARTY|TEMPLATE)_DIR", key)}
 
 
+def find_tool(tool: str | Path, *, forbidden=()) -> Path | None:
+    """Absolute path of an external program, or None when it is not installed.
+
+    A bare name is searched in the absolute PATH folders only: never in the working
+    directory (where shutil.which and Windows itself look first) and never in a
+    `forbidden` folder (the project being opened), so a downloaded project cannot
+    supply the program. For the same reason a configured path must be absolute.
+    On Windows a bare name means the native .exe; callers refuse scripts."""
+    text = os.fspath(tool)
+    if os.path.dirname(text):
+        candidates, banned = ([Path(text)] if Path(text).is_absolute() else []), set()
+    else:
+        if os.name == "nt" and not text.lower().endswith(".exe"):
+            text += ".exe"
+        banned = {Path(folder).resolve() for folder in (Path.cwd(), *forbidden)}
+        candidates = [Path(folder) / text for folder in os.environ.get("PATH", "").split(os.pathsep)
+                      if folder and Path(folder).is_absolute()]
+    for candidate in candidates:
+        try:
+            found = candidate.resolve(strict=True)
+        except OSError:
+            continue
+        if (found.is_file() and (os.name == "nt" or os.access(found, os.X_OK))
+                and not banned & {candidate.parent.resolve(), found.parent}):
+            return found
+    return None
+
+
 def user_config_dir(version: tuple[int, int, int]) -> Path:
     """The settings folder kicad-cli reads when VelaTrace does not override it."""
     root = os.environ.get("KICAD_CONFIG_HOME")
@@ -136,11 +164,11 @@ def parse_drc_report(path: Path) -> DrcResult:
 
 
 class KiCadCli:
-    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 300):  # DRC refills pours: over a minute on big boards
-        found = shutil.which(str(executable))
+    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 300, *, forbidden=()):  # DRC refills pours: over a minute on big boards
+        found = find_tool(executable, forbidden=forbidden)
         if not found:
-            raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its executable path.")
-        self.executable = Path(found).resolve(strict=True)
+            raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its full executable path.")
+        self.executable = found
         if os.name == "nt" and self.executable.suffix.lower() != ".exe":
             raise CapabilityError("Select the native kicad-cli.exe, not a shell script.")
         if not isinstance(timeout, (float, int)) or not 0 < timeout <= 600:
@@ -291,8 +319,7 @@ class KiCadCli:
             if path.is_file():
                 return path
         # Linux packages install pcbnew into the system Python.
-        found = shutil.which("python3") if os.name != "nt" and sys.platform != "darwin" else None
-        return Path(found) if found else None
+        return find_tool("python3") if os.name != "nt" and sys.platform != "darwin" else None
 
     def _export_config_home(self) -> Path:
         """Private settings for the export process: only path variables are copied, so

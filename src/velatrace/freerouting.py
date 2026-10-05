@@ -19,6 +19,7 @@ import time
 from .constraints import Constraint
 from .dsn import DsnInput, dsn_scale
 from .errors import CapabilityError, RoutingCancelled, ValidationError
+from .kicad_cli import find_tool
 from .ses import number
 from .sexpr import JoinedAtom, QuotedAtom, one, parse
 
@@ -447,15 +448,20 @@ class _WarmRouter:
 
 class Freerouting:
     def __init__(self, jar: Path, java: str | Path = "java", *, work_directory: Path,
-                 timeout_seconds: float = 300, warm: bool = False):
+                 timeout_seconds: float = 300, warm: bool = False, forbidden=()):
         """Routes run through VelaTrace's launcher (WarmRouter), which can stop a
         stalled router and keep its partial route; warm=True keeps that verified JVM
         for the session (started by check_startup, restarted if it dies). Any launcher
         failure falls back to the plain one-shot CLI, which can only be killed."""
         self.jar = local_path(jar)
         self.work_directory = local_path(work_directory)
-        located = shutil.which(str(java))
-        self.java = local_path(Path(located or java))
+        # None when Java is not installed: a bare name is never run, because Windows
+        # would look for it in the working directory first.
+        located = find_tool(java, forbidden=forbidden)
+        self.java = local_path(located) if located else None
+        if located and os.name == "nt" and located.suffix.lower() != ".exe":
+            # cmd.exe would re-parse a batch file's command line, board file name included.
+            raise CapabilityError("Select the native java.exe, not a script (.cmd/.bat).")
         if not 1 <= timeout_seconds <= 3600:
             raise ValidationError("Router timeout must be between 1 and 3600 seconds.")
         self.timeout = timeout_seconds
@@ -497,7 +503,7 @@ class Freerouting:
             raise CapabilityError(f"Freerouting is missing. Download unmodified freerouting-{VERSION}.jar from {RELEASE_URL} and configure its path.")
         if self.jar.stat().st_size > 100_000_000 or hashlib.sha256(self.jar.read_bytes()).hexdigest() != JAR_SHA256:
             raise CapabilityError(f"Freerouting version/hash mismatch. Install exactly {VERSION} from {RELEASE_URL}; other JARs are refused.")
-        if not self.java.is_file():
+        if self.java is None or not self.java.is_file():
             raise CapabilityError("Java is missing. Install Eclipse Temurin Java 21 (JRE or JDK) and configure its bin/java executable.")
         self.work_directory.mkdir(parents=True, exist_ok=True)
 
