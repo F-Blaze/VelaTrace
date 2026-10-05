@@ -130,11 +130,73 @@ class ExternalCopperTests(unittest.TestCase):
         self.dsn = DsnInput(self.dsn_path, file_digest(self.dsn_path), ExportTicket.begin(self.board_path),
                             frozenset({"N", "OTHER"}), frozenset({"F.Cu", "B.Cu"}), "board")
         via = f'''(via (at 7 8) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu")
-                    (net 1) (uuid "{UUID2}"))'''
+                    (net 1) (uuid "{UUID2}") (capping no)
+                    (covering (front no) (back no)) (plugging (front no) (back no))
+                    (filling no))'''
         plan = import_copper(BOARD, self.result(SEGMENT + " " + via), self.dsn,
                              via_catalog={"Via[0-1]_600:300_um": spec})
         self.assertEqual(plan.vias[0].position_mm, (7, -8))
         self.assertIs(plan.vias[0].spec, spec)
+
+    def test_accepts_absent_or_exact_default_no_via_fabrication_metadata(self):
+        spec = ViaSpec(.6, .3, ("F.Cu", "B.Cu"))
+        self.board_path.with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {
+            "rule_severities": {}, "via_dimensions": [{"diameter": .6, "drill": .3}]}}}), encoding="utf-8")
+        self.dsn_path.write_text('''(pcb "board" (unit mm) (library
+          (padstack "Via[0-1]_600:300_um" (shape (circle F.Cu 0.6))
+            (shape (circle B.Cu 0.6)))))''', encoding="utf-8")
+        self.dsn = DsnInput(self.dsn_path, file_digest(self.dsn_path), ExportTicket.begin(self.board_path),
+                            frozenset({"N", "OTHER"}), frozenset({"F.Cu", "B.Cu"}), "board")
+        base = f'''(via (at 7 8) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu")
+                     (net 1) (uuid "{UUID2}")'''
+        metadata = (
+            "(capping no)",
+            "(covering (front no) (back no))",
+            "(plugging (front no) (back no))",
+            "(filling no)",
+        )
+        candidates = (base + ")", base + " " + " ".join(metadata) + ")")
+        candidates += tuple(base + " " + item + ")" for item in metadata)
+        for via in candidates:
+            with self.subTest(via=via):
+                plan = import_copper(BOARD, self.result(via), self.dsn, via_catalog={"trusted": spec})
+                self.assertEqual(len(plan.vias), 1)
+
+    def test_rejects_nondefault_malformed_duplicate_and_nested_via_metadata(self):
+        spec = ViaSpec(.6, .3, ("F.Cu", "B.Cu"))
+        self.board_path.with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {
+            "rule_severities": {}, "via_dimensions": [{"diameter": .6, "drill": .3}]}}}), encoding="utf-8")
+        self.dsn_path.write_text('''(pcb "board" (unit mm) (library
+          (padstack "Via[0-1]_600:300_um" (shape (circle F.Cu 0.6))
+            (shape (circle B.Cu 0.6)))))''', encoding="utf-8")
+        self.dsn = DsnInput(self.dsn_path, file_digest(self.dsn_path), ExportTicket.begin(self.board_path),
+                            frozenset({"N", "OTHER"}), frozenset({"F.Cu", "B.Cu"}), "board")
+        base = f'''(via (at 7 8) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu")
+                     (net 1) (uuid "{UUID2}")'''
+        bad_metadata = (
+            "(capping yes)",
+            "(capping)",
+            "(capping (front no))",
+            "(covering (front yes) (back no))",
+            "(covering (front no))",
+            "(covering (front no) (back no) (inside no))",
+            "(plugging (front no) (back yes))",
+            "(plugging (front no) (back no) (foo no))",
+            "(filling yes)",
+            "(filling no (extra no))",
+            "(unknown_metadata no)",
+        )
+        duplicate_metadata = (
+            "(capping no) (capping no)",
+            "(covering (front no) (back no)) (covering (front no) (back no))",
+            "(plugging (front no) (back no)) (plugging (front no) (back no))",
+            "(filling no) (filling no)",
+        )
+        for metadata in bad_metadata + duplicate_metadata:
+            with self.subTest(metadata=metadata):
+                with self.assertRaises(ValidationError):
+                    import_copper(BOARD, self.result(base + " " + metadata + ")"), self.dsn,
+                                  via_catalog={"trusted": spec})
 
     def test_via_dimensions_must_match_catalog(self):
         via = f'''(via (at 7 8) (size 0.7) (drill 0.3) (layers "F.Cu" "B.Cu")

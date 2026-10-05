@@ -139,42 +139,11 @@ kept separate from regression tests and other routing jobs. Reference manifest
 schema 3 identifies `fused-refill` and reports combined validation/refill time;
 schema 2 had separate stage fields.
 
-### Real-board evidence and remaining failures
+### Private development evidence
 
-A private local inventory found 44 byte-distinct boards, including 14 modern
-4–8-layer files. Forty entries had projects with ignored DRC checks and eight had exclusions;
-the existing strict validator refuses these settings. Most boards were already
-routed. These counts establish available development data, not benchmark
-successes. Held-out folders were not inspected and no designs were published.
-
-Two small, unrouted two-layer projects had usable saved DSNs and unchanged
-strict project rules. We copied their board/project/schematic context and
-verified archived connectivity, layer membership and footprint placement
-locally. Archived exports are **not fresh-export certification** of all DSN
-geometry/settings. Six sequential trials per board used the same Freerouting
-2.1.0 settings and 60-second router timeout, alternating old/new validation.
-No candidate repair or KRT routing was used in this latency-isolation test.
-
-| Private case | Previous accepted / attempts | Fused accepted / attempts | Previous / fused all-attempt median |
-|---|---|---|---|
-| Real board A | 0/3 | 0/3 | 32.05 / 31.84 s |
-| Real board B | 3/3 | 2/3 | 21.36 / 18.53 s |
-
-Times include shared preparation, routing and validation; common startup is
-excluded. Failed routes remain in the medians, so **these times cannot establish
-an accepted-routing speed win**. A still has clearance/shorting errors. One new
-B attempt had dangling-track warnings; independent router attempts returned
-different copper. Fused validation medians alone were 4.00 vs 6.94 s for A and
-2.69 vs 4.45 s for B, but these were not identical-route pairs.
-
-The first geometry checker compared full DSN paths with SES basenames and
-incorrectly marked unchanged copper as changed. The correction recognizes only
-the bound DSN's full name, basename or stem, retaining exact net/layer/width/via
-geometry comparison. Every saved real candidate was freshly filled and checked
-again; all preserved copper. Original observations remain private alongside a
-separate corrected manifest. Additional recheck time is recorded separately and
-excluded from the original timing measurements. Original user files remained
-byte-identical. No overall router superiority or electrical sign-off is claimed.
+Private-board measurements are retained in local workspace reports. Public
+comparisons in this repository use only authored fixtures. Neither corpus
+establishes universal superiority or full electrical sign-off.
 
 Regression verification: 550 tests and 245 subtests passed, four optional native
 tests skipped; Ruff passed. A fresh four-layer end-to-end run with the fused
@@ -206,6 +175,12 @@ The reference benchmark emits this advisory only for geometrically covered
 candidates; its presence never changes route acceptance into electrical sign-off.
 
 ## Status
+
+The quality-focused copper-text increment adds official-rendering-based obstacle
+projection and strict native via-default compatibility. Its authored 4/6/8-layer
+surface-routing regression accepted 9/9 Vela routes versus 0/9 plain baseline
+routes. See [scope, failures and reproducible evidence](COPPER_TEXT_ROUTING.md).
+This is a targeted quality result, not universal superiority or an installation.
 
 The name, exact keepout compaction, repeated comparison reporting and endpoint
 delay advisory are implemented. Fully autonomous electrical design and broad

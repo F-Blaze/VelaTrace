@@ -1,0 +1,274 @@
+{
+  "schema": 1,
+  "corpus": "authored-copper-text-v1",
+  "scope": "Quality, not runtime or SI sign-off",
+  "kicad_version": [
+    10,
+    0,
+    4
+  ],
+  "router_version": "2.1.0",
+  "router_sha256": "2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def",
+  "kicad_cli_sha256": "e2fa37ddc9119a4b3c40cd61f5282c70ffc02c0190670d2fdb46dc11f3c95a93",
+  "java_sha256": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55",
+  "router_timeout_seconds": 120,
+  "repeats": 1,
+  "cases": [
+    {
+      "layers": 4,
+      "input_sha256": {
+        "reference.kicad_pcb": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "bad74db6a5e39136813efaa75badaee707b12b329ed55eedc1c436c2efd28405"
+      },
+      "obstacles": 1,
+      "text_items": 1,
+      "trials": [
+        {
+          "trial": 1,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "fba8a4861d960c20a8114e361c54b922728789385ef7847efcdf223a9046d885",
+            "drc_violations": 2,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "track dangling (warning): 2"
+            ]
+          },
+          "fresh_blocking": 2,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 59.27759892530073,
+            "via_count": 2
+          }
+        },
+        {
+          "trial": 1,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 2,
+            "passes": 1,
+            "details": [
+              "Removed 2 DRC-identified dangling segment(s); final independent DRC passed."
+            ]
+          },
+          "report": {
+            "plan_digest": "e15bf5da2e54565bcc3d1d85d203678a6afbfda346b4c1e08ba90c9b2f2ae2aa",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 53.81919892530073,
+            "via_count": 2
+          }
+        }
+      ],
+      "source_unchanged": true,
+      "accepted": {
+        "freerouting": 0,
+        "vela-routing": 1
+      }
+    }
+  ],
+  "surface_only": false,
+  "vela_cleanup": "Existing DRC-guided dangling-segment repair, max 60 s",
+  "implementation_sha256": [
+    {
+      "file": "__init__.py",
+      "sha256": "cf08501ca96e5ffbfa4f9b11b1d9493b26b189f7946fe6c64b049524d063d59d"
+    },
+    {
+      "file": "__main__.py",
+      "sha256": "b47f52caa02fb33eb67f865300a06d3007507938733dc85abaaff640b24371a1"
+    },
+    {
+      "file": "audit.py",
+      "sha256": "3b8a86588b1a2c794d0feae1f275661020af7bdecdad284cd25733602de12345"
+    },
+    {
+      "file": "audit_rules.py",
+      "sha256": "ed3dfc31694782b49326594e103f61c325da3a8f018ea83decc2246ab92acb18"
+    },
+    {
+      "file": "benchmark.py",
+      "sha256": "e21a11ee477ce2b40955f033a583e216628a97369a35d8f1a4e83acb9ad8eccc"
+    },
+    {
+      "file": "bom.py",
+      "sha256": "23053c61a76d8229ce44ce20138a420d62b7434eea439a78c3d5cae4babb4a1b"
+    },
+    {
+      "file": "candidate.py",
+      "sha256": "22e1f7733fc1fb1f4850d7466dea94df1d1dec9ccf0d1c3d21b3e2ca727a80bb"
+    },
+    {
+      "file": "constraints.py",
+      "sha256": "49444b392c1ea0b03927ee5dba5063f30d78a7fb8e0f20296a519e2ed160ee57"
+    },
+    {
+      "file": "copper_obstacles.py",
+      "sha256": "509ca160a37c24fc96ba534ec5e267b6f8e3ac981befb70ac4ef4dc2ba694dcf"
+    },
+    {
+      "file": "copper_text.py",
+      "sha256": "58b634a5fe9f80e69dbde22d3d06989215fcf99079c0e3a5073987a0a1a3c000"
+    },
+    {
+      "file": "copper_text_benchmark.py",
+      "sha256": "5cd732918e79d6e51cf56d861db9ebf3cbe59ede27b777bba53a991db143fbf0"
+    },
+    {
+      "file": "dsn.py",
+      "sha256": "a2635ebf9bd6482edb139e0bcf9aaeea2b7f43a11cb7bac8e6dfd0edbcf069ea"
+    },
+    {
+      "file": "electrical_rules.py",
+      "sha256": "c5237f98f6151b34b55841340cb8f5007be464714d1dbe38d33312206a9319e8"
+    },
+    {
+      "file": "endpoint_delay.py",
+      "sha256": "23c904d3a91af7b48333b05939c55a7540b9344c22c497f111e7b6e6bc1c9c79"
+    },
+    {
+      "file": "errors.py",
+      "sha256": "eaa8075bdb028f1b6b5e3afc4ac06ae0ea277c9347ae12603b7dbd27ca8865a6"
+    },
+    {
+      "file": "external_copper.py",
+      "sha256": "de686e1671cae359df85213383cf4ecc1ace10d4fdf96e45b9fd935c7366d160"
+    },
+    {
+      "file": "findings.py",
+      "sha256": "a3a5dc355e11701dd60d70992a3fb6e6e5b83de44c3c6d754cd71ab588b36d8a"
+    },
+    {
+      "file": "flags.py",
+      "sha256": "a1423b201940d14d1684fedf582ba98e59fde2efc2123e0c229a38829a798253"
+    },
+    {
+      "file": "freerouting.py",
+      "sha256": "bd7fb06c10c6e47e835e64682b4e0fac9de8d5a5ae0a47c2cf0a2c4c9ce4c405"
+    },
+    {
+      "file": "ipc.py",
+      "sha256": "4cd8b763ad3d33cda9ad8e1b190602162937e37244ac4aa966939ee2200144a0"
+    },
+    {
+      "file": "kicad_cli.py",
+      "sha256": "d82085aff8d10a8018a7ba9d419f51a41c6a20d26f09f9ac4dbc8ce8bdca7eb3"
+    },
+    {
+      "file": "krt_benchmark.py",
+      "sha256": "be77a43ae2c25bdc49fa5ab78753c024bd817a3e3b174092b170d7d37d3fcd57"
+    },
+    {
+      "file": "models.py",
+      "sha256": "fb4e495eb8ba246fbb3e83dc2bf709ea0e85f0324dd6760d75a71307e158ac22"
+    },
+    {
+      "file": "netlist.py",
+      "sha256": "937e2c9ecfea4b3db9de0905aafe04f6261bd08df6d542942785c44a4a5713b8"
+    },
+    {
+      "file": "network.py",
+      "sha256": "baf4f2e0df7b38e35da89f378148d03ed5366561eee2b85bfd7707f8c01f2029"
+    },
+    {
+      "file": "parts_db.py",
+      "sha256": "487db6c556fb38cea8928bebc2ce8bfb8b10e49cf4035795533a11e91b7fceda"
+    },
+    {
+      "file": "portfolio.py",
+      "sha256": "9fc3bd89d018ad85fd8b4cafe0b38d349e7a098505eb10d55a55b4132b62ba39"
+    },
+    {
+      "file": "preflight.py",
+      "sha256": "47d93172fa070cde1bdeaa942e4093840d7b4ed288989be3482398ef99671852"
+    },
+    {
+      "file": "pricing.py",
+      "sha256": "75939d26b95b6e74499216dde6db52acfc055d1c8f4198ec68e217f0c74465ef"
+    },
+    {
+      "file": "privacy.py",
+      "sha256": "d35137dbaab960ddcabe7cd5cb000954d538e46ad49415298439d75990daa3d3"
+    },
+    {
+      "file": "provider.py",
+      "sha256": "807d4e696244c2e16270288f0d290cc6287de9ce5d245fead4e00147ca6febf6"
+    },
+    {
+      "file": "reference_benchmark.py",
+      "sha256": "5c1d7282f1625828914d1a28268caf913e0b02e5c08d119455502908e3d7653d"
+    },
+    {
+      "file": "reference_planes.py",
+      "sha256": "6a1b8848d3787da82d908dcddd63e7da2fa2b25accbfc046ab17ca3a17aa9776"
+    },
+    {
+      "file": "reference_routing.py",
+      "sha256": "cb5873c86b17e5b7662fb7289ff1755b69e7ce85c00b22fa17c72e1b30eacbbf"
+    },
+    {
+      "file": "refilled_candidate.py",
+      "sha256": "885ed1685e5c191994b53a965320b37eb16c9608a001a922ccc28effd486782b"
+    },
+    {
+      "file": "report.py",
+      "sha256": "465cab03facbaadc68941fe03f33cfcfacc225e45581a58e4231b95fb1dc1103"
+    },
+    {
+      "file": "route_repair.py",
+      "sha256": "d14667fb9cb8e5950d3d7a4e53bcd0efd2ea6fe3ddbf062edc904621d14e9275"
+    },
+    {
+      "file": "routing.py",
+      "sha256": "ff385f58f6949989d6a10a7f327b3cf98c9b9402c4009971bd7d65c3946c5e64"
+    },
+    {
+      "file": "ses.py",
+      "sha256": "1836efc1b0ffacdb145f354c450b9a067b3d13be885450c891e27ae2e8c89925"
+    },
+    {
+      "file": "sexpr.py",
+      "sha256": "baddc8ffd35df43c9b0bfe2a390c621612f533f219b1c130d7f58f6f3a1860e3"
+    },
+    {
+      "file": "stackup.py",
+      "sha256": "daed080cfebe5b46944a1cbbad235a5e5e225c218d1fe14c7f47add633a1f3a0"
+    },
+    {
+      "file": "theme.py",
+      "sha256": "bf2edf1a91333d367af57c58c1ef4ec5bd57f56cc2ed900bed62df3c933ef047"
+    },
+    {
+      "file": "tokens.py",
+      "sha256": "1493128b777d448d063c484bb9cba4797bb90deb9b335ffea246fd2f579f576c"
+    },
+    {
+      "file": "ui.py",
+      "sha256": "da9cf8c6ca7a21794d6ff1e56d5feba82415a7407e5e2d90e1588e3d949859d5"
+    },
+    {
+      "file": "write_safety.py",
+      "sha256": "0a165d442f0dd5fc96b5de72cfc3793e01281a05e837e1cf1bef19598d73b801"
+    }
+  ]
+}

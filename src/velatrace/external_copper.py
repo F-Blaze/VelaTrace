@@ -64,6 +64,25 @@ def _all_ids(root: list) -> set[str]:
     return found
 
 
+def _validate_default_no_via_metadata(row: list) -> None:
+    """Accept only KiCad's explicit, non-fabricating via metadata defaults.
+
+    KiCad 10 writes these four fields on ordinary vias after refill. Explicit
+    ``no`` values preserve the standard via semantics; any enabled or unknown
+    fabrication setting can change the manufactured via and is unsupported.
+    """
+    defaults = {
+        "capping": ["capping", "no"],
+        "covering": ["covering", ["front", "no"], ["back", "no"]],
+        "plugging": ["plugging", ["front", "no"], ["back", "no"]],
+        "filling": ["filling", "no"],
+    }
+    for name, expected in defaults.items():
+        found = children(row, name)
+        if len(found) > 1 or (found and found[0] != expected):
+            raise ValidationError("External router returned unsupported via fabrication settings.")
+
+
 def _non_copper_snapshot(root: list):
     """Use VelaTrace's canonicalizer per row while retaining top-level order.
 
@@ -152,9 +171,11 @@ def import_copper(source_text: str, output_text: str, dsn, *,
         tracks.append(Track(net, layer, width, ((x1, -y1), (x2, -y2))))
 
     for row in output_vias:
-        allowed = {"at", "size", "drill", "layers", "net", "uuid", "type"}
+        allowed = {"at", "size", "drill", "layers", "net", "uuid", "type",
+                   "capping", "covering", "plugging", "filling"}
         if any(not isinstance(attr, list) or not attr or attr[0] not in allowed for attr in row[1:]):
             raise ValidationError("External router returned unrecognized via attributes.")
+        _validate_default_no_via_metadata(row)
         at = _single(row, "at", 3)
         size_row = _single(row, "size", 2)
         drill_row = _single(row, "drill", 2)
