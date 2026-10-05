@@ -241,11 +241,10 @@ def route_issues(baseline, candidate) -> tuple[int, int]:
     """(blocking, pre-existing warnings) for one DRC pass.
 
     A route may not add any DRC issue, and pre-existing errors still block. Warnings
-    already on the unrouted board are reported only. Without issue identities every
-    candidate issue blocks."""
+    with matching identities already on the unrouted board are reported only.
+    Unidentified candidate issues remain blocking, while identifiable carried
+    warnings can still be recognized."""
     total = candidate.violations + candidate.schematic_parity
-    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
-        return total, 0
     warnings = sum(count for issue, count in _carried(baseline, candidate).items() if issue[1] == "warning")
     return total - warnings, warnings
 
@@ -254,8 +253,6 @@ def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
     total = candidate.violations + candidate.schematic_parity
     if not total:
         return ()
-    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
-        return ("DRC issue identities unavailable; review the full KiCad DRC report",)
     carried = _carried(baseline, candidate)
     def summary(issues, note=""):
         counts = Counter()
@@ -263,14 +260,16 @@ def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
             counts[(kind, severity)] += count
         return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}{note}" for (kind, severity), count in sorted(counts.items()))
     errors = Counter({issue: count for issue, count in carried.items() if issue[1] != "warning"})
-    return summary(Counter(candidate.issues) - carried) + summary(errors, " already on the unrouted board")
+    reasons = list(summary(Counter(candidate.issues) - carried))
+    unknown = total - len(candidate.issues)
+    if unknown > 0:
+        reasons.append(f"DRC issue identities unavailable: {unknown}")
+    return tuple(reasons) + summary(errors, " already on the unrouted board")
 
 
 def preexisting_errors(baseline, candidate) -> int:
     """Blocking issues of route_issues() that were already on the unrouted board."""
     total = candidate.violations + candidate.schematic_parity
-    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
-        return 0
     return sum(count for issue, count in _carried(baseline, candidate).items() if issue[1] != "warning")
 
 

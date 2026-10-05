@@ -1,0 +1,748 @@
+{
+  "schema": 1,
+  "corpus": "authored-copper-text-v1",
+  "scope": "Quality, not runtime or SI sign-off",
+  "kicad_version": [
+    10,
+    0,
+    4
+  ],
+  "router_version": "2.1.0",
+  "router_sha256": "2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def",
+  "kicad_cli_sha256": "e2fa37ddc9119a4b3c40cd61f5282c70ffc02c0190670d2fdb46dc11f3c95a93",
+  "java_sha256": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55",
+  "router_timeout_seconds": 120,
+  "repeats": 3,
+  "cases": [
+    {
+      "layers": 4,
+      "input_sha256": {
+        "reference.kicad_pcb": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "1f3d44ea7275d0051e6902145991d49ae1ae60b69a4d16f2c82b5b0c6f596988"
+      },
+      "obstacles": 1,
+      "text_items": 1,
+      "trials": [
+        {
+          "trial": 1,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "shorting items (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 1,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "881d14067df35736066397987f9e59ec0cca5fab590264d4ce049c64b6c80e27",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 2,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "881d14067df35736066397987f9e59ec0cca5fab590264d4ce049c64b6c80e27",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 2,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "clearance (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 3,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "shorting items (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 3,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "453813bde74c2ef39d915267f480077a0c57f6a973678d6292b55acfe0b6d1de",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "cc66e5f1140e4a2a2be46ba4e674582f47120abfb2fc676aeb79a83104d07bc6",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        }
+      ],
+      "source_unchanged": true,
+      "accepted": {
+        "freerouting": 0,
+        "vela-routing": 3
+      }
+    },
+    {
+      "layers": 6,
+      "input_sha256": {
+        "reference.kicad_pcb": "ec49a15b3b8ba27b04e668a463dc0fa5cc3cc1889c6d75ff27d7f847af561e16",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "c189394a0a5171be490ed25baacc3c3ecb2d8e090dd82cbcd1a68e3ac15689f6"
+      },
+      "obstacles": 1,
+      "text_items": 1,
+      "trials": [
+        {
+          "trial": 1,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec49a15b3b8ba27b04e668a463dc0fa5cc3cc1889c6d75ff27d7f847af561e16",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "clearance (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 1,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "881d14067df35736066397987f9e59ec0cca5fab590264d4ce049c64b6c80e27",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec49a15b3b8ba27b04e668a463dc0fa5cc3cc1889c6d75ff27d7f847af561e16",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 2,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "453813bde74c2ef39d915267f480077a0c57f6a973678d6292b55acfe0b6d1de",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec49a15b3b8ba27b04e668a463dc0fa5cc3cc1889c6d75ff27d7f847af561e16",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 2,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec49a15b3b8ba27b04e668a463dc0fa5cc3cc1889c6d75ff27d7f847af561e16",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "clearance (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 3,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec49a15b3b8ba27b04e668a463dc0fa5cc3cc1889c6d75ff27d7f847af561e16",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "shorting items (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 3,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "881d14067df35736066397987f9e59ec0cca5fab590264d4ce049c64b6c80e27",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec49a15b3b8ba27b04e668a463dc0fa5cc3cc1889c6d75ff27d7f847af561e16",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        }
+      ],
+      "source_unchanged": true,
+      "accepted": {
+        "freerouting": 0,
+        "vela-routing": 3
+      }
+    },
+    {
+      "layers": 8,
+      "input_sha256": {
+        "reference.kicad_pcb": "c2f4d00cb6dd4ebb9481c3555c48268132bdec513f0dde0162097f77c3632c0a",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "40f803508a10f957ba08b44703ab999208cc585cef388d732b046b8e26ec0972"
+      },
+      "obstacles": 1,
+      "text_items": 1,
+      "trials": [
+        {
+          "trial": 1,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "c2f4d00cb6dd4ebb9481c3555c48268132bdec513f0dde0162097f77c3632c0a",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "shorting items (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 1,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "881d14067df35736066397987f9e59ec0cca5fab590264d4ce049c64b6c80e27",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "c2f4d00cb6dd4ebb9481c3555c48268132bdec513f0dde0162097f77c3632c0a",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 2,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "881d14067df35736066397987f9e59ec0cca5fab590264d4ce049c64b6c80e27",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "c2f4d00cb6dd4ebb9481c3555c48268132bdec513f0dde0162097f77c3632c0a",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 2,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "c2f4d00cb6dd4ebb9481c3555c48268132bdec513f0dde0162097f77c3632c0a",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "shorting items (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 3,
+          "arm": "freerouting",
+          "accepted": false,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 1,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "c2f4d00cb6dd4ebb9481c3555c48268132bdec513f0dde0162097f77c3632c0a",
+            "preexisting_warnings": 3,
+            "blocking_reasons": [
+              "shorting items (error): 1"
+            ]
+          },
+          "fresh_blocking": 1,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          }
+        },
+        {
+          "trial": 3,
+          "arm": "vela-routing",
+          "accepted": true,
+          "cleanup": {
+            "removed_segments": 0,
+            "passes": 0,
+            "details": [
+              "Initial independent validation is already clean."
+            ]
+          },
+          "report": {
+            "plan_digest": "453813bde74c2ef39d915267f480077a0c57f6a973678d6292b55acfe0b6d1de",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "c2f4d00cb6dd4ebb9481c3555c48268132bdec513f0dde0162097f77c3632c0a",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "fresh_blocking": 0,
+          "geometry_preserved": true,
+          "metrics": {
+            "copper_length_mm": 54.369456026761306,
+            "via_count": 0
+          }
+        }
+      ],
+      "source_unchanged": true,
+      "accepted": {
+        "freerouting": 0,
+        "vela-routing": 3
+      }
+    }
+  ],
+  "surface_only": true,
+  "vela_cleanup": "Existing DRC-guided dangling-segment repair, max 60 s",
+  "implementation_sha256": [
+    {
+      "file": "__init__.py",
+      "sha256": "cf08501ca96e5ffbfa4f9b11b1d9493b26b189f7946fe6c64b049524d063d59d"
+    },
+    {
+      "file": "__main__.py",
+      "sha256": "b47f52caa02fb33eb67f865300a06d3007507938733dc85abaaff640b24371a1"
+    },
+    {
+      "file": "audit.py",
+      "sha256": "3b8a86588b1a2c794d0feae1f275661020af7bdecdad284cd25733602de12345"
+    },
+    {
+      "file": "audit_rules.py",
+      "sha256": "ed3dfc31694782b49326594e103f61c325da3a8f018ea83decc2246ab92acb18"
+    },
+    {
+      "file": "benchmark.py",
+      "sha256": "e21a11ee477ce2b40955f033a583e216628a97369a35d8f1a4e83acb9ad8eccc"
+    },
+    {
+      "file": "bom.py",
+      "sha256": "23053c61a76d8229ce44ce20138a420d62b7434eea439a78c3d5cae4babb4a1b"
+    },
+    {
+      "file": "candidate.py",
+      "sha256": "22e1f7733fc1fb1f4850d7466dea94df1d1dec9ccf0d1c3d21b3e2ca727a80bb"
+    },
+    {
+      "file": "constraints.py",
+      "sha256": "49444b392c1ea0b03927ee5dba5063f30d78a7fb8e0f20296a519e2ed160ee57"
+    },
+    {
+      "file": "copper_obstacles.py",
+      "sha256": "8ed9e915c1d9f4b87ba4b17330709ed39d559e789b8865a47638c9c653d04651"
+    },
+    {
+      "file": "copper_text.py",
+      "sha256": "85f6bf8a7d0d4a28c84bd6e32e3f3290c8d825a98e1f4420909b1be97d186935"
+    },
+    {
+      "file": "copper_text_benchmark.py",
+      "sha256": "5cd732918e79d6e51cf56d861db9ebf3cbe59ede27b777bba53a991db143fbf0"
+    },
+    {
+      "file": "dsn.py",
+      "sha256": "a2635ebf9bd6482edb139e0bcf9aaeea2b7f43a11cb7bac8e6dfd0edbcf069ea"
+    },
+    {
+      "file": "electrical_rules.py",
+      "sha256": "c5237f98f6151b34b55841340cb8f5007be464714d1dbe38d33312206a9319e8"
+    },
+    {
+      "file": "endpoint_delay.py",
+      "sha256": "23c904d3a91af7b48333b05939c55a7540b9344c22c497f111e7b6e6bc1c9c79"
+    },
+    {
+      "file": "errors.py",
+      "sha256": "eaa8075bdb028f1b6b5e3afc4ac06ae0ea277c9347ae12603b7dbd27ca8865a6"
+    },
+    {
+      "file": "external_copper.py",
+      "sha256": "de686e1671cae359df85213383cf4ecc1ace10d4fdf96e45b9fd935c7366d160"
+    },
+    {
+      "file": "findings.py",
+      "sha256": "a3a5dc355e11701dd60d70992a3fb6e6e5b83de44c3c6d754cd71ab588b36d8a"
+    },
+    {
+      "file": "flags.py",
+      "sha256": "a1423b201940d14d1684fedf582ba98e59fde2efc2123e0c229a38829a798253"
+    },
+    {
+      "file": "freerouting.py",
+      "sha256": "bd7fb06c10c6e47e835e64682b4e0fac9de8d5a5ae0a47c2cf0a2c4c9ce4c405"
+    },
+    {
+      "file": "ipc.py",
+      "sha256": "4cd8b763ad3d33cda9ad8e1b190602162937e37244ac4aa966939ee2200144a0"
+    },
+    {
+      "file": "kicad_cli.py",
+      "sha256": "d82085aff8d10a8018a7ba9d419f51a41c6a20d26f09f9ac4dbc8ce8bdca7eb3"
+    },
+    {
+      "file": "krt_benchmark.py",
+      "sha256": "be77a43ae2c25bdc49fa5ab78753c024bd817a3e3b174092b170d7d37d3fcd57"
+    },
+    {
+      "file": "models.py",
+      "sha256": "fb4e495eb8ba246fbb3e83dc2bf709ea0e85f0324dd6760d75a71307e158ac22"
+    },
+    {
+      "file": "netlist.py",
+      "sha256": "937e2c9ecfea4b3db9de0905aafe04f6261bd08df6d542942785c44a4a5713b8"
+    },
+    {
+      "file": "network.py",
+      "sha256": "baf4f2e0df7b38e35da89f378148d03ed5366561eee2b85bfd7707f8c01f2029"
+    },
+    {
+      "file": "parts_db.py",
+      "sha256": "487db6c556fb38cea8928bebc2ce8bfb8b10e49cf4035795533a11e91b7fceda"
+    },
+    {
+      "file": "portfolio.py",
+      "sha256": "9fc3bd89d018ad85fd8b4cafe0b38d349e7a098505eb10d55a55b4132b62ba39"
+    },
+    {
+      "file": "preflight.py",
+      "sha256": "47d93172fa070cde1bdeaa942e4093840d7b4ed288989be3482398ef99671852"
+    },
+    {
+      "file": "pricing.py",
+      "sha256": "75939d26b95b6e74499216dde6db52acfc055d1c8f4198ec68e217f0c74465ef"
+    },
+    {
+      "file": "privacy.py",
+      "sha256": "d35137dbaab960ddcabe7cd5cb000954d538e46ad49415298439d75990daa3d3"
+    },
+    {
+      "file": "provider.py",
+      "sha256": "807d4e696244c2e16270288f0d290cc6287de9ce5d245fead4e00147ca6febf6"
+    },
+    {
+      "file": "reference_benchmark.py",
+      "sha256": "5c1d7282f1625828914d1a28268caf913e0b02e5c08d119455502908e3d7653d"
+    },
+    {
+      "file": "reference_planes.py",
+      "sha256": "6a1b8848d3787da82d908dcddd63e7da2fa2b25accbfc046ab17ca3a17aa9776"
+    },
+    {
+      "file": "reference_routing.py",
+      "sha256": "cb5873c86b17e5b7662fb7289ff1755b69e7ce85c00b22fa17c72e1b30eacbbf"
+    },
+    {
+      "file": "refilled_candidate.py",
+      "sha256": "885ed1685e5c191994b53a965320b37eb16c9608a001a922ccc28effd486782b"
+    },
+    {
+      "file": "report.py",
+      "sha256": "465cab03facbaadc68941fe03f33cfcfacc225e45581a58e4231b95fb1dc1103"
+    },
+    {
+      "file": "route_repair.py",
+      "sha256": "d14667fb9cb8e5950d3d7a4e53bcd0efd2ea6fe3ddbf062edc904621d14e9275"
+    },
+    {
+      "file": "routing.py",
+      "sha256": "ff385f58f6949989d6a10a7f327b3cf98c9b9402c4009971bd7d65c3946c5e64"
+    },
+    {
+      "file": "ses.py",
+      "sha256": "1836efc1b0ffacdb145f354c450b9a067b3d13be885450c891e27ae2e8c89925"
+    },
+    {
+      "file": "sexpr.py",
+      "sha256": "baddc8ffd35df43c9b0bfe2a390c621612f533f219b1c130d7f58f6f3a1860e3"
+    },
+    {
+      "file": "stackup.py",
+      "sha256": "daed080cfebe5b46944a1cbbad235a5e5e225c218d1fe14c7f47add633a1f3a0"
+    },
+    {
+      "file": "theme.py",
+      "sha256": "bf2edf1a91333d367af57c58c1ef4ec5bd57f56cc2ed900bed62df3c933ef047"
+    },
+    {
+      "file": "tokens.py",
+      "sha256": "1493128b777d448d063c484bb9cba4797bb90deb9b335ffea246fd2f579f576c"
+    },
+    {
+      "file": "ui.py",
+      "sha256": "da9cf8c6ca7a21794d6ff1e56d5feba82415a7407e5e2d90e1588e3d949859d5"
+    },
+    {
+      "file": "write_safety.py",
+      "sha256": "0a165d442f0dd5fc96b5de72cfc3793e01281a05e837e1cf1bef19598d73b801"
+    }
+  ]
+}

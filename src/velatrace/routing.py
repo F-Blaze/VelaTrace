@@ -232,7 +232,10 @@ class RoutingSession:
                 if self._warmup is not None:
                     wait([self._warmup])
                 started = perf_counter()
-                plan = self.repair(plan, self.input, self.constraints.items, self.validator)
+                repaired = self.repair(plan, self.input, self.constraints.items, self.validator)
+                # Research/benchmark repair callers may return diagnostics with
+                # the proposed plan; the live session consumes only that plan.
+                plan = repaired.plan if hasattr(repaired, "plan") else repaired
                 self.timings["repair"] = perf_counter() - started
                 self._check_confirmation()
             self.plan = plan
