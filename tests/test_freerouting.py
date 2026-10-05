@@ -125,6 +125,24 @@ class FreeroutingTests(unittest.TestCase):
             self.assertTrue(launches[0][1].name.startswith("route-"))
             self.assertFalse(list(router.work_directory.iterdir()))
 
+        # VT-04: the JAR is swapped after its hash check, while the Java checks run
+        # (synthetic stand-in files). The swap fails, or the verified bytes still run.
+        ran = []
+        def racing(args, directory, timeout, cancel=None, on_data=None):
+            if "OfflineProbe" in args:
+                try:
+                    jar.write_bytes(b"swapped after the hash check")
+                except OSError:
+                    pass  # Windows: the verified file is locked against writers.
+            if "-jar" in args:
+                ran.append(Path(args[args.index("-jar") + 1]).read_bytes())
+                (directory / "result.ses").write_text("fixture result")
+            return ProcessResult(0, 'version "21.0.1" VELATRACE_OFFLINE_POLICY_OK')
+        with patch("velatrace.freerouting.JAR_SHA256", hashlib.sha256(jar.read_bytes()).hexdigest()), \
+                patch("velatrace.freerouting.run_bounded", side_effect=racing):
+            router.route(dsn, ())
+        self.assertEqual(ran, [b"fixture jar"])
+
         # Installation identity is checked on every route, before any JVM runs.
         jar.write_bytes(b"modified")
         with patch("velatrace.freerouting.run_bounded") as run:

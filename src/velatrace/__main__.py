@@ -1,10 +1,27 @@
 """External companion window and explicit read-only connectivity inspector."""
 import argparse
 import json
+import os
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
 from .netlist import read_xml_netlist
+
+
+def leave_working_directory() -> None:
+    """Never run inside, or import from, the folder VelaTrace was started in: with
+    `python -m velatrace` in a downloaded project that folder is first on the module
+    path, and Windows looks there first for programs."""
+    here = Path(__file__).resolve().parent
+    cwd = Path.cwd().resolve()
+    def untrusted(entry):
+        try:
+            return Path(entry or ".").resolve() == cwd != here.parent
+        except OSError:
+            return True
+    sys.path[:] = [entry for entry in sys.path if not untrusted(entry)]
+    os.chdir(here)
 
 
 def main() -> None:
@@ -28,6 +45,13 @@ def main() -> None:
     parser.add_argument("--benchmark-solvers", nargs='+', choices=('baseline', 'portfolio', 'krt', 'hybrid', 'hybrid-fast'),
                         help="Run only selected solvers; default is every configured solver")
     args = parser.parse_args()
+    # Paths are relative to where the user typed them. Bare program names stay bare:
+    # they are looked up on PATH, never in the folder VelaTrace was started in.
+    programs = {"java", "kicad_cli", "benchmark_krt_python"}
+    for name, value in vars(args).items():
+        if isinstance(value, Path) and not (name in programs and len(value.parts) == 1):
+            setattr(args, name, value.resolve())
+    leave_working_directory()
     if args.reference_repeats != 1 and not args.reference_benchmark:
         parser.error('--reference-repeats requires --reference-benchmark')
     if args.reference_benchmark:

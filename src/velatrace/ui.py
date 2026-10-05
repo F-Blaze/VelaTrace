@@ -36,7 +36,7 @@ from .findings import Finding, Severity
 from .flags import Bucket, Function, Verdict
 from .freerouting import CANCELLED, Freerouting
 from .ipc import KiCadReader
-from .kicad_cli import KiCadCli
+from .kicad_cli import KiCadCli, sweep_stale_settings
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
 from .report import render_report, save_report
@@ -947,7 +947,8 @@ class MainWindow(QMainWindow):
 
     def export_report(self):
         name = Path(self.audit_snapshot.path or "design").stem or "design"
-        path, _ = QFileDialog.getSaveFileName(self, "Save report", f"{name}-velatrace.html", "HTML (*.html)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save report", str(self._start_folder() / f"{name}-velatrace.html"),
+                                              "HTML (*.html)")
         if not path:
             return
         try:
@@ -1056,8 +1057,10 @@ class MainWindow(QMainWindow):
             if self.safety:
                 self.safety.clear_preview()
             try:
-                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work", warm=settings.warm_router)
+                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work",
+                                     warm=settings.warm_router, forbidden=self._project_folders())
                 router.check_startup()
+                self._remember_tool("java", router.java)
             except Exception as exc:
                 self._setup_error = str(exc) or type(exc).__name__
                 raise
@@ -1111,7 +1114,7 @@ class MainWindow(QMainWindow):
         choice = self.source.currentIndex()
         path = None
         if choice:
-            selected, _ = QFileDialog.getOpenFileName(self, "Select saved connectivity source", "",
+            selected, _ = QFileDialog.getOpenFileName(self, "Select saved connectivity source", str(self._start_folder()),
                 "KiCad schematic (*.kicad_sch)" if choice == 1 else "KiCad XML netlist (*.xml *.net)")
             if not selected:
                 return
@@ -1124,10 +1127,10 @@ class MainWindow(QMainWindow):
                 reader = KiCadReader.connect()
                 snapshot = reader.read_board()
                 if snapshot.path:
-                    safety = BoardSafety(reader.client.get_board(), snapshot.path)
+                    safety = BoardSafety(reader.client.get_board(), snapshot.path, journal_dir=self.config_dir / "journals")
             elif choice == 1:
                 # Picking the saved file is the confirmation; the step line says so.
-                snapshot = KiCadCli(self.settings.cli).schematic_snapshot(path, saved_confirmed=True)
+                snapshot = KiCadCli(self.settings.cli, forbidden=(path.parent,)).schematic_snapshot(path, saved_confirmed=True)
             else:
                 snapshot = read_xml_netlist(path)
             # Logos, fiducials and unconnected holes (often REF** or duplicate refs)
@@ -1397,6 +1400,27 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.show_error(str(exc))
 
+    def _start_folder(self) -> Path:
+        """Where file dialogs open: the design's folder, else the home folder. Never the
+        working directory, which is VelaTrace's own program folder (see __main__)."""
+        for snapshot in (self.snapshot, getattr(self, "audit_snapshot", None)):
+            if snapshot is not None and snapshot.path:
+                return Path(snapshot.path).parent
+        return Path.home()
+
+    def _project_folders(self):
+        return (self.snapshot.path.parent,) if self.snapshot is not None and self.snapshot.path else ()
+
+    def _remember_tool(self, name, path):
+        """Keep the verified absolute path, so later launches never search PATH again."""
+        if self.demo or path is None or getattr(self.settings, name) == str(path):
+            return
+        setattr(self.settings, name, str(path))
+        try:
+            self.settings.save(self.config_dir / "settings.json")
+        except OSError:
+            pass  # A convenience; the next launch resolves and verifies the tool again.
+
     def prepare_board(self, cancel):
         """Worker thread: read the open board, pre-flight it and export its DSN with
         KiCad's own exporter. Nothing is saved. Returns (canonical snapshot of the
@@ -1407,10 +1431,11 @@ class MainWindow(QMainWindow):
             raise ValidationError("Save the board once in KiCad so VelaTrace knows its project folder.")
         board = reader.client.get_board()
         if self.routing is None or self.snapshot is None or self.snapshot.path != snapshot.path:
-            cli = KiCadCli(self.settings.cli)
+            cli = KiCadCli(self.settings.cli, forbidden=(snapshot.path.parent,))
             cli.require_editor_version(reader.version)
+            self._remember_tool("cli", cli.executable)
             if self.safety is None or self.safety.path != snapshot.path.resolve():
-                self.safety = BoardSafety(board, snapshot.path)
+                self.safety = BoardSafety(board, snapshot.path, journal_dir=self.config_dir / "journals")
             self.validator = SafeCandidateValidator(self.safety, cli)
             self.routing = RoutingSession(self.constraints, self.router, self.validator, repair_dangling)
             self.routing.command("/autoroute")
@@ -1446,7 +1471,8 @@ class MainWindow(QMainWindow):
 
     def load_dsn(self):
         """Manual fallback: a DSN the user exported from KiCad after the failed attempt."""
-        selected, _ = QFileDialog.getOpenFileName(self, "Specctra DSN exported from KiCad", "", "Specctra DSN (*.dsn)")
+        selected, _ = QFileDialog.getOpenFileName(self, "Specctra DSN exported from KiCad", str(self._start_folder()),
+                                                  "Specctra DSN (*.dsn)")
         if not selected:
             return
         if not ask(self, "Confirm fresh export", "This DSN was exported from KiCad after VelaTrace asked for it, "
@@ -1726,6 +1752,8 @@ def launch(*, demo=False, screenshot: Path | None = None):
         QFontDatabase.addApplicationFont(str(font_path))
     app.setApplicationName("VelaTrace")
     app.setOrganizationName("F-Blaze")
+    if not demo:
+        sweep_stale_settings()  # Left in the temp folder by a session that was killed.
     window = MainWindow(demo=demo)
     window.show()
     window.raise_()

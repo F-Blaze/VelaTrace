@@ -61,7 +61,32 @@ The candidate is local temporary data under the project `.velatrace/backups`
 directory. It copies the corresponding project, rules and non-hierarchical
 schematic context. The validator binds both contents and absence of optional
 files, refuses DRC exclusions, runs checks the project sets to Ignore as warnings (in its temporary copy only), and invokes official `kicad-cli`
-DRC. The routing UI requires an exact editor/CLI version match before creating the
+DRC.
+
+Project files cannot switch the gate off. In the temporary copy only:
+- a `(severity ignore)` rule in the `.kicad_dru` runs as a warning, like Board Setup's Ignore;
+- when the `.kicad_dru` contains any rule, the unrouted board and the candidate are
+  checked a second time **without that file**. Any issue the route adds in that pass
+  blocks approval, listed as "hidden by this project's custom rules (.kicad_dru)"
+  (an issue the pass under the project's rules also reports is counted once, there).
+  Issues that pass already shows on the unrouted board are not the route's and do
+  not block. This costs two more DRC runs, in parallel with the others, and is the
+  actual proof: it does not depend on reading the untrusted rule file correctly.
+  "Approve anyway" remains for a rule set that legitimately relaxes a check;
+- a net class whose clearance is 0 or negative (and not raised by Board Setup's
+  minimum clearance) is refused before routing: KiCad then skips the clearance and
+  short checks for that class (measured with kicad-cli 10.0.6).
+
+What this does not cover: issues already on the unrouted board that the project's
+rules hide (KiCad's own DRC shows the same), and local clearance overrides stored
+in the board file itself.
+
+The DSN export adds a no-track/no-via keepout over every copper graphic and copper
+text, including those inside footprints that have pads and a footprint's visible
+reference/value on copper. Only a graphic that touches one of its own footprint's
+pads (a net tie or antenna) gets none; candidate DRC rejects a route across it.
+If the keepouts cannot be added, the export stops with the reason instead of
+producing a DSN without them. The routing UI requires an exact editor/CLI version match before creating the
 routing session. Matching saved schematic context must export successfully before
 DRC explicitly enables schematic parity; malformed context refuses validation.
 That export proof depends only on the exact schematic and project bytes, so it
@@ -138,10 +163,38 @@ User.9 to violet in KiCad if desired. The separate panel can always draw violet.
 Before temporary segment creation, a collision check compares the layer and
 undirected endpoints with nonowned existing graphics, and rejects duplicate
 requested segments. `prepare_preview()` runs before routing: it verifies User.9,
-adopts User.9 items whose UUIDs appear in committed `completion.json` journals
-beside the board (earlier runs, saved or Undo-restored previews) and removes them
-with the usual backup, then refuses before routing if unjournaled dashed 0.1 mm
-User.9 lines remain. This prevents a verified KiCad behavior that replaces an
+adopts its own earlier graphics on that layer (earlier runs, saved or
+Undo-restored previews) and removes them with the usual backup, then refuses
+before routing if unrecorded dashed 0.1 mm User.9 lines remain.
+
+An item is adopted only when both hold:
+1. its UUID is recorded as drawn by VelaTrace. The record that counts is the
+   journal in the user's VelaTrace settings folder (`journals/<hash of the board
+   path>.json`, written before each temporary-graphics commit; the newest 50,000
+   ids per board are kept). Records in the project's `.velatrace/backups/*/completion.json`
+   travel with the project and can be written by anyone, so they are only believed
+   for items that pass the stricter test below. They are still read so that
+   previews drawn by releases before this journal existed are not stranded;
+2. it looks like what VelaTrace draws on the preview layer: a dashed 0.1 mm
+   segment, or text. For a project-folder record, text must also read exactly like
+   an audit annotation (`REF: critical|important|nice-to-have|redundant`).
+
+So a project that ships a forged record cannot make VelaTrace remove the author's
+own drawings or notes; the most it can name are exact look-alikes of VelaTrace's
+temporary graphics. `.velatrace` gets a `.gitignore` containing `*` when it is
+created, so backups and records are not committed by accident.
+
+**Retention.** Each safety check writes a backup folder (`<board>-<uuid>`: saved
+board, live board, saved project). Only the newest **20** per board keep those
+copies (`BoardSafety.keep_backups`; one route attempt makes about eight); older
+copies are deleted when a new backup is written. The small `intent.json` and
+`completion.json` of older transactions are kept as the audit trail (for example
+of an "Approve anyway"). Bare-uuid folders from earlier releases are pruned by
+the same rule. Private KiCad settings copies in the temp folder
+(`velatrace-kicad-settings-*`, `velatrace-kicad-export-*`) are removed on normal
+exit; ones a killed session left behind are removed at the next start once they
+are a day old. A running session refreshes its folder on every use and rebuilds
+it if it is gone. This prevents a verified KiCad behavior that replaces an
 existing coincident User.9 line with the new UUID. The board-change check must not
 ignore that disappearance. Approved copper is read back by UUID and exact geometry
 after the commit; missing/mismatched copper blocks retries as an uncertain write.
@@ -165,6 +218,6 @@ checked offline. On 2026-09-27, the installed KiCad 10.0.4 editor and matching C
 passed a disposable two-pad routing test with real Freerouting 2.1.0: zero DRC
 violations/unconnected items, User.9 preview, approval without saving, live reads
 inside the commit, preview removal, one-step Undo restoring the preview, and guarded
-cleanup. Saved board bytes were unchanged. See [current review](REVIEW_2026_09_27.md)
+cleanup. Saved board bytes were unchanged. See [current review](internal/REVIEW_2026_09_27.md)
 and [testing.md](testing.md). This is one supported geometry case, not blanket
 KiCad-version or operating-system certification.
