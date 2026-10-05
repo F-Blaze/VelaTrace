@@ -10,6 +10,7 @@
 
 # External subprocess calls and external-runtime policy.
 /src/velatrace/freerouting.py @F-Blaze
+/src/velatrace/krt_benchmark.py @F-Blaze
 /src/velatrace/kicad_cli.py @F-Blaze
 /src/velatrace/router_resources/ @F-Blaze
 
@@ -20,6 +21,20 @@
 /src/velatrace/routing.py @F-Blaze
 /src/velatrace/dsn.py @F-Blaze
 /src/velatrace/ses.py @F-Blaze
+/src/velatrace/electrical_rules.py @F-Blaze
+/src/velatrace/portfolio.py @F-Blaze
+/src/velatrace/stackup.py @F-Blaze
+/src/velatrace/benchmark.py @F-Blaze
+/src/velatrace/route_repair.py @F-Blaze
+/src/velatrace/external_copper.py @F-Blaze
+/src/velatrace/reference_planes.py @F-Blaze
+/src/velatrace/reference_routing.py @F-Blaze
+/src/velatrace/reference_benchmark.py @F-Blaze
+/src/velatrace/refilled_candidate.py @F-Blaze
+/src/velatrace/copper_obstacles.py @F-Blaze
+/src/velatrace/copper_text.py @F-Blaze
+/src/velatrace/copper_text_benchmark.py @F-Blaze
+/src/velatrace/endpoint_delay.py @F-Blaze
 
 # Writes outside the project: application config, consent, temp reports, demo export.
 /src/velatrace/privacy.py @F-Blaze

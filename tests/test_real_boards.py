@@ -127,9 +127,10 @@ class DrcTests(unittest.TestCase):
     def test_candidate_drc_refills_zones_without_saving(self):
         cli = object.__new__(KiCadCli)
         cli._exportable, cli._export_lock = set(), threading.Lock()
+        cli.version = (10, 0, 4)
         with tempfile.TemporaryDirectory() as directory:
             board = Path(directory) / "board.kicad_pcb"
-            board.write_text("fixture")
+            board.write_text("(kicad_pcb (zone (net 1)))")
             calls = []
             def run(args, cwd, allowed_exit_codes, config_home):
                 calls.append(args)
@@ -183,7 +184,7 @@ class RepairTests(unittest.TestCase):
         def judge(ids):  # KiCad reports the end of a stub first: the via, then the segment behind it.
             return dangling("v0") if "v0" in ids else dangling("s0.2") if "s0.2" in ids else dangling()
         validator = FakeValidator(judge)
-        plan = repair_dangling(self.PLAN, None, (), validator)
+        plan = repair_dangling(self.PLAN, None, (), validator).plan
         self.assertEqual(plan, RoutePlan("board", (Track("N", "F.Cu", .25, ((0, 0), (1, 0), (2, 0))),
                                                    self.PLAN.tracks[1]), ()))
         self.assertEqual(validator.reused.plan_digest, repr(plan))
@@ -191,7 +192,7 @@ class RepairTests(unittest.TestCase):
 
     def test_clean_route_costs_one_inspection_and_is_returned_unchanged(self):
         validator = FakeValidator(lambda ids: dangling())
-        self.assertIs(repair_dangling(self.PLAN, None, (), validator), self.PLAN)
+        self.assertIs(repair_dangling(self.PLAN, None, (), validator).plan, self.PLAN)
         self.assertEqual((validator.trials, validator.reused.plan_digest), (1, repr(self.PLAN)))
 
     def test_removal_that_loses_a_connection_or_adds_an_issue_is_not_kept(self):
@@ -201,17 +202,17 @@ class RepairTests(unittest.TestCase):
                 return dangling("s0.2", "v0") if "s0.2" in ids else after
             validator = FakeValidator(judge)
             with self.subTest(after=after):
-                self.assertIs(repair_dangling(self.PLAN, None, (), validator), self.PLAN)
+                self.assertIs(repair_dangling(self.PLAN, None, (), validator).plan, self.PLAN)
                 self.assertEqual(validator.reused.plan_digest, repr(self.PLAN))
 
     def test_no_trial_starts_after_the_time_budget(self):
         validator = FakeValidator(lambda ids: dangling("s0.2", "v0"))
-        self.assertIs(repair_dangling(self.PLAN, None, (), validator, budget_seconds=-1), self.PLAN)
+        self.assertIs(repair_dangling(self.PLAN, None, (), validator, budget_seconds=-1).plan, self.PLAN)
         self.assertEqual((validator.trials, validator.reused.plan_digest), (1, repr(self.PLAN)))
 
     def test_unknown_issue_identities_leave_the_plan_alone(self):
         validator = FakeValidator(lambda ids: DrcResult(1, 0, 0))
-        self.assertIs(repair_dangling(self.PLAN, None, (), validator), self.PLAN)
+        self.assertIs(repair_dangling(self.PLAN, None, (), validator).plan, self.PLAN)
 
 
 if __name__ == "__main__":
