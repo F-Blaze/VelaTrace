@@ -24,14 +24,15 @@ BOM_HEADER = ("Comment", "Designator", "Footprint", "LCSC Part #")
 CPL_HEADER = ("Designator", "Mid X", "Mid Y", "Layer", "Rotation")
 ROTATIONS_FILE = "jlc-rotations.csv"
 # Degrees added to KiCad's rotation because JLCPCB's reel orientation differs from KiCad's
-# footprint zero for these packages. A starting point for common parts only: always check
-# the placement preview JLCPCB shows before paying. Extend it with jlc-rotations.csv.
-# Values match the defaults long used by the MIT-licensed kicad-jlcpcb-tools.
+# footprint zero for these package families. Deliberately short: only families whose angle
+# was cross-checked on 2026-10-04 against the community corrections list (which is GPL-3.0
+# and therefore not bundled; these are the plain angles, i.e. facts). A starting point only:
+# always check the placement preview JLCPCB shows before paying. Extend or override it with
+# jlc-rotations.csv.
 DEFAULT_ROTATIONS: tuple[tuple[str, int], ...] = (
-    (r"^SOT-223", 180), (r"^SOT-23", 180), (r"^SOT-353", 180), (r"^SOT-363", 180),
-    (r"^SOT-89", 180), (r"^SOIC-", 270), (r"^SOP-", 270), (r"^SSOP-", 270), (r"^TSSOP-", 270),
-    (r"^MSOP-", 270), (r"^VSSOP-", 270), (r"^LQFP-", 270), (r"^TQFP-", 270),
-    (r"^QFN-", 270), (r"^DFN-", 270), (r"^CP_EIA-", 180), (r"^CP_Elec_", 180),
+    (r"^SOT-223", 180), (r"^SOT-23", 270), (r"^SOT-89", 180), (r"^SOT-353", 180),
+    (r"^SOT-363", 180), (r"^SOIC-", 270), (r"^SSOP-", 270), (r"^TSSOP-", 270),
+    (r"^LQFP-", 270), (r"^TQFP-", 270), (r"^DFN-", 270), (r"^CP_EIA-", 180),
     (r"^R_Array_Convex_", 90), (r"^R_Array_Concave_", 90),
 )
 _SILK = {"F.SilkS", "B.SilkS", "F.Silkscreen", "B.Silkscreen"}

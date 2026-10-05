@@ -27,8 +27,9 @@ and Basic suggestions only; no search, stock or prices).
 KiCad 10's plugin (IPC) API can edit footprints on the board but not the schematic: the
 `kicad-python` 0.8.0 client marks its whole schematic module as "KiCad 11", and on KiCad 10.0.6
 only footprint field updates were verified to work. So VelaTrace writes the PCB side and then
-tells you to run **Tools > Update Schematic from PCB** with **Other fields** ticked, which
-copies the `LCSC` field back to the symbols. If you prefer to edit the schematic yourself, use
+tells you to run **Tools > Update Schematic from PCB** with **Other fields** ticked, KiCad's
+own way to copy footprint fields back to the symbols. Check the `LCSC` field in the schematic
+afterwards. If you prefer to edit the schematic yourself, use
 the assignment CSV as the list. Until you do one of the two, a later *Update PCB from
 Schematic* with "update fields" can overwrite the board-side numbers.
 
@@ -48,10 +49,12 @@ entry in Edit > Undo.
   marked *Do not populate* or *Exclude from position files* are left out. Rotation follows the
   convention JLCPCB expects and kicad-jlcpcb-tools uses: bottom-side parts are mirrored
   (`180° − rotation`), then a per-package correction is added.
-- **Rotation corrections**: a short built-in table for common packages (SOT-23/223/89/353/363
-  +180°, SOIC/SOP/SSOP/TSSOP/MSOP/VSSOP/LQFP/TQFP/QFN/DFN +270°, polarised capacitors +180°,
-  resistor arrays +90°). It is a starting point, not a guarantee: **always check JLCPCB's
-  placement preview**. Add your own rules in `jlc-rotations.csv` next to the board or in the
+- **Rotation corrections**: a deliberately short built-in table for common package families
+  (SOT-223/89/353/363 +180°, SOT-23 +270°, SOIC/SSOP/TSSOP/LQFP/TQFP/DFN +270°, `CP_EIA`
+  tantalum capacitors +180°, resistor arrays +90°), cross-checked on 2026-10-04 against the
+  community corrections list. QFN, SOP, MSOP, VSSOP and electrolytic capacitors are **not**
+  covered because their correction depends on the exact variant. It is a starting point, not
+  a guarantee: **always check JLCPCB's placement preview**. Add your own rules in `jlc-rotations.csv` next to the board or in the
   VelaTrace config folder, one `pattern,degrees` row each; the pattern is an LCSC number
   (`C123456`) or a regular expression matched at the start of the footprint name. Your rows win
   over the built-in ones. The community `cpl_rotations_db.csv` has the same two columns and can

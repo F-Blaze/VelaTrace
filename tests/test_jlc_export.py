@@ -201,11 +201,11 @@ class ExportTests(unittest.TestCase):
         rows, rotated = jlc_export.cpl_rows(POSITIONS, parts, jlc_export.load_rotations())
         self.assertEqual(rows, [
             ("FID1", "2.0000mm", "-2.0000mm", "Top", "0"),
-            ("Q1", "30.0000mm", "-40.0000mm", "Bottom", "270"),   # (180-90) mirrored, +180 for SOT-23
+            ("Q1", "30.0000mm", "-40.0000mm", "Bottom", "0"),     # (180-90) mirrored, +270 for SOT-23
             ("R1", "10.0000mm", "-20.0000mm", "Top", "90"),
             ("R2", "12.0000mm", "-20.0000mm", "Top", "0"),
             ("U1", "50.0000mm", "-60.0000mm", "Top", "270")])     # SOIC +270; DNP R3 is left out
-        self.assertEqual(rotated, ["Q1 +180° (^SOT-23)", "U1 +270° (^SOIC-)"])
+        self.assertEqual(rotated, ["Q1 +270° (^SOT-23)", "U1 +270° (^SOIC-)"])
 
     def test_user_rotation_file_wins_and_bad_rows_are_ignored(self):
         with tempfile.TemporaryDirectory() as directory:
