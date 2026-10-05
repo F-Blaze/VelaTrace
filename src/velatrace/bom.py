@@ -784,6 +784,18 @@ def _cheaper_alternative(ctx: _Context, line: tuple, members: list[Passive]):
     return None
 
 
+def suggested_parts(snapshot: DesignSnapshot, parts_db: "PartsDB | None") -> dict[str, "Part"]:
+    """Reference -> best Basic/Preferred part for passives that carry no LCSC code yet, using
+    the same rating rules as the bom.jlc_assign finding. Suggestions only."""
+    ctx = _Context(snapshot, parts_db, DEFAULT_BOARDS_PER_ORDER)
+    result = {}
+    for line, members in ctx.by_line.items():
+        if not any(lcsc_code(m.component) for m in members) and (
+                found := ctx.equivalents(*line, members)):
+            result.update({m.ref: found[0] for m in members})
+    return result
+
+
 def bom_findings(snapshot: DesignSnapshot, parts_db: "PartsDB | None" = None, *,
                  boards_per_order: int = DEFAULT_BOARDS_PER_ORDER) -> list[Finding]:
     """Money/time-saving BOM suggestions. Suggestions only; nothing is changed.
