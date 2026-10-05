@@ -40,7 +40,7 @@ Pin names come from schematic netlists; the IPC board reader has none, so board-
 - JLCPCB Economic PCBA: Basic parts have no loading fee; **Preferred Extended** parts are exempt from the feeder-loading fee on Economic assembly; every other (**Extended**) unique part costs **$3 per order**. Source: [JLCPCB PCB Assembly FAQs](https://jlcpcb.com/help/article/pcb-assembly-faqs). Standard PCBA and other assemblers price setup differently. The constants live in `bom.py` (`JLC_EXTENDED_FEE_USD`, `JLC_FEE_CHECKED`); update both together.
 - `Finding.cost_delta` is per board: the per-order fee divided by `boards_per_order` (default 5, JLCPCB's minimum PCB quantity). $3 at 5 boards is −$0.60/board. The evidence text also shows the per-order amount.
 - Without a parts list, consolidation findings report the saved BOM lines/reels and leave `cost_delta` empty rather than guess whether a removed line was Extended.
-- Part prices are not compared; passives cost fractions of a cent, so line count and setup fees dominate at prototype quantities.
+- With the small parts list, part prices are not compared; passives cost fractions of a cent, so line count and setup fees dominate at prototype quantities. With the full catalogue ([jlcpcb.md](jlcpcb.md)), Basic-equivalent suggestions include the unit-price difference from the catalogue's price breaks.
 
 ## Parts list (`parts_db.py`)
 

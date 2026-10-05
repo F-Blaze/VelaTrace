@@ -42,7 +42,8 @@ from .netlist import read_xml_netlist
 from .report import render_report, save_report
 from . import __version__
 from .preflight import preflight
-from .parts_db import cache_paths, download_catalogue, load_catalogue
+from .jlc_parts import design_findings
+from .parts_db import cache_paths, download_catalogue
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
@@ -737,6 +738,14 @@ class MainWindow(QMainWindow):
         self.parts_button.setObjectName("textButton")
         self.parts_button.clicked.connect(self.download_parts)
         extras.addWidget(self.parts_button)
+        # --- JLCPCB hook (jlc_ui.py): parts table, live stock, assignment, fabrication files ---
+        extras.addSpacing(16)
+        self.jlc_button = tip(QPushButton("JLCPCB…"), "Parts table with tier, stock and price; "
+                              "assign LCSC numbers; export BOM/CPL/Gerbers. Opens offline.")
+        self.jlc_button.setObjectName("textButton")
+        self.jlc_button.clicked.connect(self.open_jlcpcb)
+        extras.addWidget(self.jlc_button)
+        # --- end JLCPCB hook ---
         extras.addSpacing(16)
         self.report_button = tip(QPushButton("Save report"), "Single offline HTML file you can share")
         self.report_button.setObjectName("textButton")
@@ -942,7 +951,7 @@ class MainWindow(QMainWindow):
     def check_design(self, snapshot):
         """Built-in rules plus BOM savings; the cached parts list is used only if downloaded."""
         def bom(snap):
-            return bom_findings(snap, load_catalogue(self.config_dir))
+            return design_findings(snap, self.config_dir)  # JLCPCB hook: catalogue + cached live data
         return run_rules(snapshot, providers=[bom])
 
     def export_report(self):
@@ -957,6 +966,19 @@ class MainWindow(QMainWindow):
             self.show_error(f"Could not save report: {exc}")
             return
         self.status.setText("Report saved.")
+
+    def open_jlcpcb(self):
+        """JLCPCB hook: everything lives in jlc_ui.JlcDialog; re-check when its data changed."""
+        if getattr(self, "audit_snapshot", None) is None:
+            self.status.setText("Check a design first.")
+            return
+        from .jlc_ui import JlcDialog
+        dialog = JlcDialog(self)
+        dialog.exec()
+        if dialog.changed:
+            self.audit_snapshot = dialog.base
+            self.findings = self.check_design(self.audit_snapshot)
+            self.render_cards()
 
     def download_parts(self):
         def operation(_):

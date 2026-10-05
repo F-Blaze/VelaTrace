@@ -96,6 +96,7 @@ _E24 = frozenset(Decimal(x) for x in (
 _E12 = frozenset(Decimal(x) for x in ("1", "1.2", "1.5", "1.8", "2.2", "2.7", "3.3", "3.9",
                                       "4.7", "5.6", "6.8", "8.2"))
 _PULL_ROLES = frozenset({"pullup", "pulldown"})
+_ECONOMIC = ("basic", "preferred")  # no JLCPCB loading fee; anything else is Extended
 _MOVABLE_ROLES = _PULL_ROLES | {"decoupling"}
 
 
@@ -448,7 +449,7 @@ class _Context:
             return None
         codes = {lcsc_code(m.component) for m in members} - {None}
         if codes:
-            return any(self.db.tier(code) is None for code in codes)
+            return any(self.db.tier(code) not in _ECONOMIC for code in codes)
         return not self.equivalents(*line, members)
 
 
@@ -661,7 +662,8 @@ def _jlc_findings(ctx: _Context) -> list[Finding]:
                                   f"{wrong[0].package}; LCSC {_part_text(part)}."),
                         fix="Correct the LCSC field or the value before ordering; the assembler "
                             "places the part number, not the value text."))
-            continue
+            if part.tier in _ECONOMIC:
+                continue
         fee_lines += 1
         extended_lines.append(f"{_ref_list(refs, 4)} ({code})")
         extended_refs.update(refs)
@@ -669,16 +671,19 @@ def _jlc_findings(ctx: _Context) -> list[Finding]:
             equivalents = ctx.equivalents(*members[0].line, members)
             if equivalents:
                 best = equivalents[0]
+                parts_delta, price_note = _price_change(part, best, len(refs), ctx.boards)
                 findings.append(Finding(
                     "bom.jlc_basic_equivalent", Severity.SAVING,
                     f"{_ref_list(refs, 4)}: Extended {code} → {best.tier.capitalize()} {best.lcsc}"
                     f" available, saves ~${JLC_EXTENDED_FEE_USD} setup fee",
                     refs=refs,
-                    evidence=(f"{code} is not in the downloaded JLCPCB Basic/Preferred list "
-                              f"({db.label}); {_part_text(best)} matches "
-                              f"{members[0].component.value.strip()} {members[0].package}."),
+                    evidence=((f"{code} is Extended in the JLCPCB catalogue" if part is not None else
+                               f"{code} is not in the downloaded JLCPCB Basic/Preferred list")
+                              + f" ({db.label}); {_part_text(best)} matches "
+                              f"{members[0].component.value.strip()} {members[0].package}."
+                              + price_note),
                     fix=f"Set the LCSC field of {_ref_list(refs)} to {best.lcsc}.",
-                    cost_delta=-_fee(1, ctx.boards)))
+                    cost_delta=-_fee(1, ctx.boards) + parts_delta))
     for line, members in sorted(ctx.by_line.items(), key=lambda item: _refs(item[1])):
         free = [m for m in members if not lcsc_code(m.component)]
         if not free or len(free) != len(members):
@@ -725,6 +730,18 @@ def _jlc_findings(ctx: _Context) -> list[Finding]:
     return findings
 
 
+def _price_change(old, new, per_board: int, boards: int) -> tuple[Decimal, str]:
+    """Per-board parts-cost change from the two parts' own price breaks at the order quantity.
+    Zero and no text when either price is unknown (the small list carries no prices)."""
+    quantity = per_board * boards
+    before = old.unit_price(quantity) if hasattr(old, "unit_price") else None
+    after = new.unit_price(quantity) if hasattr(new, "unit_price") else None
+    if before is None or after is None:
+        return Decimal(0), ""
+    return ((after - before) * per_board,
+            f" Catalogue unit price at {quantity} pcs: ${before} → ${after}.")
+
+
 def _cheaper_alternative(ctx: _Context, line: tuple, members: list[Passive]):
     kind, value, package = line
     roles = {ctx.role(m).role for m in members}
@@ -765,6 +782,18 @@ def _cheaper_alternative(ctx: _Context, line: tuple, members: list[Passive]):
                         f"Change the footprint of {_ref_list(_refs(members))} to {other}, update "
                         f"the layout and set LCSC {parts[0].lcsc}.")
     return None
+
+
+def suggested_parts(snapshot: DesignSnapshot, parts_db: "PartsDB | None") -> dict[str, "Part"]:
+    """Reference -> best Basic/Preferred part for passives that carry no LCSC code yet, using
+    the same rating rules as the bom.jlc_assign finding. Suggestions only."""
+    ctx = _Context(snapshot, parts_db, DEFAULT_BOARDS_PER_ORDER)
+    result = {}
+    for line, members in ctx.by_line.items():
+        if not any(lcsc_code(m.component) for m in members) and (
+                found := ctx.equivalents(*line, members)):
+            result.update({m.ref: found[0] for m in members})
+    return result
 
 
 def bom_findings(snapshot: DesignSnapshot, parts_db: "PartsDB | None" = None, *,
