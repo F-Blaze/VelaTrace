@@ -218,6 +218,6 @@ checked offline. On 2026-09-27, the installed KiCad 10.0.4 editor and matching C
 passed a disposable two-pad routing test with real Freerouting 2.1.0: zero DRC
 violations/unconnected items, User.9 preview, approval without saving, live reads
 inside the commit, preview removal, one-step Undo restoring the preview, and guarded
-cleanup. Saved board bytes were unchanged. See [current review](REVIEW_2026_09_27.md)
+cleanup. Saved board bytes were unchanged. See [current review](internal/REVIEW_2026_09_27.md)
 and [testing.md](testing.md). This is one supported geometry case, not blanket
 KiCad-version or operating-system certification.
