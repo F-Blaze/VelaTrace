@@ -42,7 +42,8 @@ from .netlist import read_xml_netlist
 from .report import render_report, save_report
 from . import __version__
 from .preflight import preflight
-from .parts_db import cache_paths, download_catalogue, load_catalogue
+from .jlc_catalog import best_parts_db
+from .parts_db import cache_paths, download_catalogue
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
@@ -942,7 +943,7 @@ class MainWindow(QMainWindow):
     def check_design(self, snapshot):
         """Built-in rules plus BOM savings; the cached parts list is used only if downloaded."""
         def bom(snap):
-            return bom_findings(snap, load_catalogue(self.config_dir))
+            return bom_findings(snap, best_parts_db(self.config_dir))  # JLCPCB hook: full catalogue if installed
         return run_rules(snapshot, providers=[bom])
 
     def export_report(self):
