@@ -180,11 +180,25 @@ def cpl_rows(position_csv: str, parts: list[BoardPart], rotations) -> tuple[list
     return sorted(rows, key=lambda row: _ref_key(row[0])), rotated
 
 
+_PLAIN_SIGNED = re.compile(r"[+-]\d[\w.,%µΩ ]*")  # "-5V", "+3.3V": a value, not a formula
+
+
+def csv_cell(text) -> str:
+    """Board text goes into files people open in a spreadsheet: a cell that would be read
+    as a formula ("=...", "@...", "+cmd|...") gets a leading apostrophe so it stays text."""
+    text = str(text)
+    # chr(9) and chr(13): a leading tab or carriage return also starts a formula in some apps
+    if text[:1] in ("=", "@", chr(9), chr(13)) or (text[:1] in ("+", "-")
+                                                     and not _PLAIN_SIGNED.fullmatch(text)):
+        return "'" + text
+    return text
+
+
 def _write_csv(path: Path, header, rows) -> None:
     with path.open("w", encoding="utf-8", newline="") as output:
         writer = csv.writer(output)
         writer.writerow(header)
-        writer.writerows(rows)
+        writer.writerows([csv_cell(cell) for cell in row] for row in rows)
 
 
 def export_fabrication(cli, board_path: Path, out_dir: Path, *, board_text: str | None = None,

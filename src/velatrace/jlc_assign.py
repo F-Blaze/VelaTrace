@@ -14,6 +14,7 @@ import re
 
 from .bom import _LCSC_FIELDS, _field_key, _ref_key
 from .candidate import canonical
+from .jlc_export import csv_cell
 from .errors import ValidationError
 from .sexpr import parse
 from .write_safety import BoardSafety, UncertainWriteError, _durable_json
@@ -175,4 +176,5 @@ def export_assignments(path: Path, rows: list[tuple[str, str, str, str]]) -> Non
     with Path(path).open("w", encoding="utf-8", newline="") as output:
         writer = csv.writer(output)
         writer.writerow(("Reference", "Value", "Footprint", FIELD))
-        writer.writerows(sorted(rows, key=lambda row: _ref_key(row[0])))
+        writer.writerows([csv_cell(cell) for cell in row]
+                         for row in sorted(rows, key=lambda row: _ref_key(row[0])))

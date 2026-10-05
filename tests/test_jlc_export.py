@@ -243,5 +243,25 @@ class ExportTests(unittest.TestCase):
             self.assertIn("saved board file", result.summary)
 
 
+class CsvFormulaTests(unittest.TestCase):
+    """Board text must not become a spreadsheet formula in exported CSV files."""
+
+    def test_formula_like_cells_are_neutralised_and_plain_values_kept(self):
+        hostile = ["=HYPERLINK(1)", "@SUM(1)", "+cmd|x!A0", "-2+3+cmd|x!A0", chr(9) + "=1", chr(13) + "=1"]
+        for cell in hostile:
+            self.assertEqual(jlc_export.csv_cell(cell), "'" + cell)
+        for cell in ["10k", "100nF", "-5V", "+3.3V", "-12", "C25804", "R1, R2", "", 90]:
+            self.assertEqual(jlc_export.csv_cell(cell), str(cell))
+
+    def test_both_csv_writers_use_the_guard(self):
+        with tempfile.TemporaryDirectory() as folder:
+            bom, sheet = Path(folder) / "bom.csv", Path(folder) / "assign.csv"
+            jlc_export._write_csv(bom, ("Comment", "Designator"), [("=1+1", "R1")])
+            jlc_assign.export_assignments(sheet, [("R1", "=1+1", "R_0603", "C25804")])
+            for path in (bom, sheet):
+                rows = list(csv.reader(path.read_text(encoding="utf-8").splitlines()))
+                self.assertIn("'=1+1", rows[1])
+
+
 if __name__ == "__main__":
     unittest.main()
