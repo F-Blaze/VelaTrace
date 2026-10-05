@@ -4,6 +4,7 @@ Java 21's process-local security policy denies Java networking. This is not an
 OS sandbox for hostile native code: the immutable official JAR is a trust anchor.
 """
 import atexit
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import os
@@ -315,6 +316,30 @@ def _locked_jar(path: Path):
     except BaseException:
         locked.close()
         raise
+
+
+@contextmanager
+def _pinned_jar(path: Path, directory: Path):
+    """The JAR to run for one JVM launch: the exact bytes whose hash was checked.
+
+    Windows: the JAR itself, hashed through a handle that stays open (see
+    _locked_jar), so it cannot be replaced before or while Java reads it.
+    Elsewhere: a copy in the private per-run folder, hashed after copying."""
+    try:
+        lock, digest = _locked_jar(path)
+    except OSError:
+        raise CapabilityError("The Freerouting JAR is missing or being changed by another program; "
+                              "routing refused.") from None
+    try:
+        if lock is None:
+            path = Path(shutil.copyfile(path, directory / "freerouting.jar"))
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != JAR_SHA256:
+            raise CapabilityError(f"Freerouting version/hash mismatch. Install exactly {VERSION} from {RELEASE_URL}; other JARs are refused.")
+        yield path
+    finally:
+        if lock is not None:
+            lock.close()
 
 
 class _WarmFailure(Exception):
@@ -658,7 +683,10 @@ class Freerouting:
         if cancel.is_set():
             raise RoutingCancelled(CANCELLED)
         self._check_installation()
-        with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
+        with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name, \
+                _pinned_jar(self.jar, Path(name)) as jar:
+            # From here to the end of the run the JAR is the verified one: the JVM
+            # launches below would otherwise leave time to swap the file.
             directory = Path(name)
             self._check_java(directory)
             # Verify the policy in the exact directory used by this run. A second
@@ -667,7 +695,7 @@ class Freerouting:
             copied = directory / dsn.path.name
             copied.write_text(text, encoding="utf-8")
             output = directory / "result.ses"
-            args = self._args(directory) + ["-jar", str(self.jar)] + self._router_args(directory, copied, output)
+            args = self._args(directory) + ["-jar", str(jar)] + self._router_args(directory, copied, output)
             result = run_bounded(args, directory, self.timeout, cancel, pass_reporter(self.progress))
             self.last_log = result.output  # Local only; never transmitted or included in provider prompts.
             if result.returncode:

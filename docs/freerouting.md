@@ -142,6 +142,11 @@ pads, have no length and are dropped as KiCad's own SES import does.
 The one-shot path re-hashes the JAR on every route (about 0.2 s for 67 MB); a
 size/mtime cache was rejected because it would let an equal-size replacement skip
 the pin.
+The bytes that run are the bytes that were hashed: on Windows the JAR is hashed
+through a read-sharing handle that stays open until the router exits (nothing can
+write, rename or delete the file meanwhile); elsewhere a copy in the private
+per-run folder is hashed and that copy is run. The earlier check-then-run-by-path
+order left the Java version and policy checks as a window to swap the file.
 
 ## Warm router
 
