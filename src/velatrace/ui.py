@@ -947,7 +947,8 @@ class MainWindow(QMainWindow):
 
     def export_report(self):
         name = Path(self.audit_snapshot.path or "design").stem or "design"
-        path, _ = QFileDialog.getSaveFileName(self, "Save report", f"{name}-velatrace.html", "HTML (*.html)")
+        path, _ = QFileDialog.getSaveFileName(self, "Save report", str(self._start_folder() / f"{name}-velatrace.html"),
+                                              "HTML (*.html)")
         if not path:
             return
         try:
@@ -1113,7 +1114,7 @@ class MainWindow(QMainWindow):
         choice = self.source.currentIndex()
         path = None
         if choice:
-            selected, _ = QFileDialog.getOpenFileName(self, "Select saved connectivity source", "",
+            selected, _ = QFileDialog.getOpenFileName(self, "Select saved connectivity source", str(self._start_folder()),
                 "KiCad schematic (*.kicad_sch)" if choice == 1 else "KiCad XML netlist (*.xml *.net)")
             if not selected:
                 return
@@ -1399,6 +1400,14 @@ class MainWindow(QMainWindow):
         except Exception as exc:
             self.show_error(str(exc))
 
+    def _start_folder(self) -> Path:
+        """Where file dialogs open: the design's folder, else the home folder. Never the
+        working directory, which is VelaTrace's own program folder (see __main__)."""
+        for snapshot in (self.snapshot, getattr(self, "audit_snapshot", None)):
+            if snapshot is not None and snapshot.path:
+                return Path(snapshot.path).parent
+        return Path.home()
+
     def _project_folders(self):
         return (self.snapshot.path.parent,) if self.snapshot is not None and self.snapshot.path else ()
 
@@ -1462,7 +1471,8 @@ class MainWindow(QMainWindow):
 
     def load_dsn(self):
         """Manual fallback: a DSN the user exported from KiCad after the failed attempt."""
-        selected, _ = QFileDialog.getOpenFileName(self, "Specctra DSN exported from KiCad", "", "Specctra DSN (*.dsn)")
+        selected, _ = QFileDialog.getOpenFileName(self, "Specctra DSN exported from KiCad", str(self._start_folder()),
+                                                  "Specctra DSN (*.dsn)")
         if not selected:
             return
         if not ask(self, "Confirm fresh export", "This DSN was exported from KiCad after VelaTrace asked for it, "
