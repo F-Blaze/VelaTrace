@@ -5,13 +5,15 @@ answers are already on disk. Fee assumptions are the ones documented in docs/jlc
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from pathlib import Path
+import re
 from typing import Iterable
 
-from .bom import (DEFAULT_BOARDS_PER_ORDER, JLC_EXTENDED_FEE_USD, JLC_FEE_CHECKED, _ref_key,
-                  _ref_list, bom_findings, lcsc_code, mpn_of, package_of, suggested_parts)
+from .bom import (DEFAULT_BOARDS_PER_ORDER, JLC_EXTENDED_FEE_USD, JLC_FEE_CHECKED, _LCSC_FIELDS,
+                  _field_key, _ref_key, _ref_list, bom_findings, lcsc_code, mpn_of, package_of,
+                  suggested_parts)
 from .findings import Finding, Severity
 from .jlc_catalog import best_parts_db
 from .jlc_live import LivePart, load_live
@@ -93,6 +95,25 @@ class CostRow:
     @property
     def per_board(self) -> Decimal:
         return (self.parts_per_board + self.fees_per_order / self.boards).quantize(Decimal("0.01"))
+
+
+def with_assignments(snapshot: DesignSnapshot, assignments: dict[str, str]) -> DesignSnapshot:
+    """The snapshot as it reads once these part numbers are on the footprints: every field
+    that holds a part number today is overwritten, else an LCSC field is added."""
+    if not assignments:
+        return snapshot
+    components = []
+    for comp in snapshot.components:
+        code = assignments.get(comp.reference)
+        if code:
+            fields = dict(comp.fields)
+            holding = [name for name, value in fields.items()
+                       if isinstance(name, str) and _field_key(name) in _LCSC_FIELDS
+                       and isinstance(value, str) and re.fullmatch(r"C\d{1,9}", value.strip().upper())]
+            fields.update(dict.fromkeys(holding or ["LCSC"], code))
+            comp = replace(comp, fields=fields)
+        components.append(comp)
+    return replace(snapshot, components=tuple(components))
 
 
 def bom_table(snapshot: DesignSnapshot, db=None, live: dict[str, LivePart] | None = None, *,
