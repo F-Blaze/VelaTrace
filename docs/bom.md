@@ -2,6 +2,8 @@
 
 `velatrace.bom.bom_findings(snapshot, parts_db=None, *, boards_per_order=5)` returns `Finding`s (see `findings.py`) that save money or time on the bill of materials. It is deterministic, local and read-only: it never edits the design and never touches the network. Every finding is a suggestion with its evidence and a concrete fix.
 
+Status: BOM tidy-ups (value and package spelling, merges) are the part with real-board evidence. JLCPCB Basic-part suggestions are untested on real data. Dollar figures are estimates, not quotes. The default parts-list source has no licence file (see below).
+
 Without a parts list only the offline consolidation checks run. With a parts list (`velatrace.parts_db`, below) the JLCPCB Basic/Extended checks run too. Nothing needs an API key or a paid service.
 
 ## Checks

@@ -17,7 +17,7 @@ The [feasibility report](feasibility.md), [UI guide](ui.md) and [routing boundar
 
 Deterministic, local and conservative: when the data cannot show a problem clearly, a check stays silent. Findings are grouped as **error** (likely defect), **warning** (risky or non-standard), **saving** (cost or time can be saved) and **info**. Each has evidence, a concrete fix and, where a small passive is added or removed, an illustrative per-board cost ($0.01 per passive, not a quote). Nothing is changed automatically.
 
-**Beta rules.** `decoupling.missing`, `i2c.pullup.missing` and `pin.input_floating` measured below 50% precision on held-out boards in the 2026-10 benchmark, so the audit shows them as Info notes regardless of the severity listed below (`BETA_RULES` in `audit_rules.py`). They return to their listed severity once a benchmark round proves them.
+**Beta rules.** `decoupling.missing`, `i2c.pullup.missing`, `net.single_pin` and `pin.input_floating` measured below 50% precision on held-out boards in the 2026-10 benchmark, so the audit shows them as Info notes regardless of the severity listed below (`BETA_RULES` in `audit_rules.py`). They return to their listed severity once a benchmark round proves them.
 
 | Rule | Severity | Fires when | Known false-positive risk |
 |---|---|---|---|
@@ -28,7 +28,7 @@ Deterministic, local and conservative: when the data cannot show a problem clear
 | `i2c.pullup.combined` | warning | Board pull-ups in parallel with a known module's built-in pull-ups need more than 3 mA (V/R) to pull low. Table: Raspberry Pi CM4/CM5 and 40-pin Pi header GPIO2/GPIO3, 1.8 kΩ to 3.3 V | Only modules in the table are known; others are not assumed |
 | `i2c.pullup.mixed_rails`, `i2c.pullup.zero_ohm`, `i2c.pullup.value` | warning/error | Pull-ups to different rails; a 0 Ω pull-up; a pull-up below 1 kΩ or above 100 kΩ | Very low; unparseable values are ignored |
 | `led.no_resistor` | error/warning | A 2-pin LED (or series LED/diode chain, through 0 Ω links) sits across two rails with no current limiter in series: a resistor (> 0 Ω), inductor or transistor only counts on the LED's own non-rail nets, not elsewhere on a shared rail or ground. Warning when it hangs off an IC pin named like a GPIO | LEDs with a built-in resistor, or a constant-current driver whose pin is named like a GPIO (driver pins named OUTn/LEDn are not GPIOs, so they stay silent) |
-| `net.single_pin` | warning (info on connectors/test points) | A designer-named net reaches only one pin, unless that pin has a no-connect flag or is an output/`power_out` pin. Six or more on one part are grouped into one info finding (pin-out/escape-label sheet) | Labels reserved for later use |
+| `net.single_pin` | warning (info on connectors/test points; always info while beta) | A designer-named net reaches only one pin, unless that pin has a no-connect flag or is an output/`power_out` pin. Six or more on one part are grouped into one info finding (pin-out/escape-label sheet) | Labels reserved for later use |
 | `net.label_scope` | warning | A single-pin label has the same name as another, connected net in a different scope (e.g. global `NMI` vs local `/Power/NMI`) | Two signals deliberately given the same name on different sheets |
 | `pin.input_floating` | warning | Schematic only: an IC pin typed `input` has no connection and no no-connect flag. Skips offset/trim/compensation pins (VOS, NULL, BAL, TRIM, OFFSET, COMP), TVS/ESD arrays and LED displays | Inputs with internal pull-ups that the datasheet allows to float |
 | `duplicate.parallel_ic` | saving (warning on I2C) | Two ICs with the same value, footprint and every pin on the same nets | Intentional parallel parts (load sharing, redundancy) |
@@ -63,9 +63,9 @@ python -m venv .venv
 
 On macOS/Linux use `.venv/bin/python`. Demo data is synthetic, with no provider or IPC calls. Read-only inspection: `python -m velatrace --netlist tests/fixtures/audit/necessity.xml`.
 
-The [2026-09-27 review](REVIEW_2026_09_27.md) records the current regression suite, complete tracked-file review and live preview-to-approval test. A disposable two-pad board passed real Freerouting, matching KiCad 10.0.4 candidate DRC, approval without saving and one-step Undo. Native tests require the paths in [testing instructions](testing.md); otherwise those two tests skip. Earlier synthetic provider calls did not establish exact token parity or complete live provider acceptance.
+Live testing so far: a disposable two-pad board and a few small practice boards passed real Freerouting, matching KiCad 10.0.4 candidate DRC, approval without saving and one-step Undo, on Windows only. Native tests require the paths in [testing instructions](testing.md); otherwise those two tests skip. Earlier synthetic provider calls did not establish exact token parity or complete live provider acceptance. Linux and macOS are untested.
 
-**F-Blaze: enable two-factor authentication on the maintainer account.** Before publishing, enforce PR-only `main` with no maintainer bypass, independent review, required CODEOWNERS/CI/CodeQL checks, secret scanning and push protection, and signed tagged releases. A solo maintainer cannot approve their own PR: `T-boy-review` has write access as the independent reviewer; add them to `.github/CODEOWNERS` so later PRs can be approved. Local policy files do not enable GitHub settings. Main protection, secret scanning and push protection are enabled. Independent PR approval is in place; release signing remains pending. See [remote setup status](REMOTE_SETUP.md) for verified settings and workflow results. See [CONTRIBUTING](../CONTRIBUTING.md) and [repository security setup](repository-security.md).
+Repository settings (protected `main`, secret scanning, private vulnerability reporting) are described in [SECURITY.md](../SECURITY.md) and [CONTRIBUTING](../CONTRIBUTING.md). No signed release exists yet.
 
 ## Provider search and pricing notes
 

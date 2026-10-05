@@ -581,8 +581,8 @@ class UiTests(unittest.TestCase):
         from PySide6.QtWidgets import QLabel
         headers = [item.text() for item in self.window.card_container.findChildren(QLabel)
                    if " · " in item.text() and item.text().split(" · ")[0] in {"Errors", "Warnings", "Savings", "Info"}]
-        self.assertEqual(headers, ["Warnings · 3", "Savings · 1", "Info · 1"])
-        self.assertIn("3 warnings · 1 saving", self.window.totals.text())
+        self.assertEqual(headers, ["Warnings · 2", "Savings · 1", "Info · 2"])
+        self.assertIn("2 warnings · 1 saving", self.window.totals.text())
         self.assertIn("never removed automatically", self.window.totals.toolTip())
         card = self.window.finding_cards[0]
         self.assertEqual(card.finding.severity.value, "warning")
