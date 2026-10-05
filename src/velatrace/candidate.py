@@ -88,6 +88,7 @@ def project_context(board_path: Path):
             raise ValueError()
         if settings.get("drc_exclusions"):
             raise CapabilityError("Remove DRC exclusions before routing; excluded checks cannot prove safety.")
+        _require_clearance(data, settings)
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ValidationError("Project design rules are missing or malformed.") from exc
     paths = [project]
@@ -102,11 +103,51 @@ def project_context(board_path: Path):
     return data, {path: file_digest(path) if path.exists() else None for path in paths}
 
 
+def _require_clearance(data, settings):
+    """KiCad skips the clearance and short checks of a net class whose clearance is
+    zero (measured with kicad-cli 10), so such a project cannot prove a route safe."""
+    def nm(value):
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError()
+        return round(value * 1_000_000)
+    rules = settings.get("rules", {})
+    floor = nm(rules.get("min_clearance", 0))
+    for row in data.get("net_settings", {}).get("classes", []):
+        if "clearance" in row and max(nm(row["clearance"]), floor) <= 0:
+            raise CapabilityError(f"Net class {str(row.get('name', '?'))[:40]!r} has no clearance (0 mm), so KiCad DRC "
+                                  "cannot detect shorts. Set a positive clearance in Board Setup > Net Classes, "
+                                  "save, then retry.")
+
+
+_IGNORED_RULE = re.compile(rb"\(\s*severity\s+ignore\s*\)")
+
+
+def checked_rules(data: bytes) -> bytes:
+    """Custom rules as candidate DRC uses them: `(severity ignore)` runs as a warning,
+    like checked_project() does for Board Setup. A text rewrite cannot be the proof
+    (the file is untrusted), so the route is also checked without the rule file: see
+    SafeCandidateValidator.STOCK."""
+    return _IGNORED_RULE.sub(b"(severity warning)", data)
+
+
+def has_rules(data: bytes) -> bool:
+    return b"".join(data.split()) not in (b"", b"(version1)")
+
+
+def hidden_issues(baseline, candidate) -> Counter:
+    """Issues the route adds once the project's custom rule file is set aside."""
+    total = candidate.violations + candidate.schematic_parity
+    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
+        return Counter({("DRC issue identities unavailable", "error", ()): total}) if total else Counter()
+    return Counter(candidate.issues) - _carried(baseline, candidate)
+
+
 def checked_project(data: bytes) -> bytes:
     """The project as candidate DRC uses it: every check set to "ignore" runs as a
     warning instead. A new KiCad project ignores several checks by default; rather
-    than refuse it, the temporary DRC copy (never the user's file) checks them, so a
-    route still cannot add an issue of any kind unnoticed."""
+    than refuse it, the temporary DRC copy (never the user's file) checks them, so
+    Board Setup severities cannot hide an issue a route adds. Custom rule files and
+    zero clearances are handled by checked_rules(), STOCK and _require_clearance()."""
     project = json.loads(data)
     severities = project["board"]["design_settings"].get("rule_severities", {})
     ignored = [name for name, value in severities.items() if value == "ignore"]
@@ -282,7 +323,9 @@ def _parallel(function, values):
 
 
 # One inspect() result: candidate DRC of `items` for a plan, bound to the inputs checked.
-Inspection = namedtuple("Inspection", "dsn_digest plan_digest constraints items context snapshot passes")
+# `stock`: the last pass ran without the project's custom rule file (see STOCK).
+Inspection = namedtuple("Inspection", "dsn_digest plan_digest constraints items context snapshot passes stock",
+                        defaults=(False,))
 
 
 class SafeCandidateValidator:
@@ -298,11 +341,18 @@ class SafeCandidateValidator:
     def supports(self, constraints):
         return all(item.kind in {"clearance", "trace-width"} and item.target == "all nets" for item in constraints)
 
-    @staticmethod
-    def _rule_sets(constraints):
+    # Rule set without the project's .kicad_dru. Custom rules can switch checks off or
+    # allow zero clearance in ways a text filter cannot rule out, so a route must also
+    # add no issue under Board Setup rules alone.
+    STOCK = "stock"
+
+    @classmethod
+    def _rule_sets(cls, constraints, files=None):
         clearance = max((c.minimum_mm for c in constraints if c.kind == "clearance"), default=0)
         # The confirmed-clearance pass supplements, never replaces, proof under the original rules.
-        return (0, clearance) if clearance else (0,)
+        sets = (0, clearance) if clearance else (0,)
+        custom = any(name.endswith(".kicad_dru") and has_rules(data) for name, data in (files or {}).items())
+        return sets + ((cls.STOCK,) if custom else ())
 
     @staticmethod
     def _context_files(context):
@@ -313,13 +363,16 @@ class SafeCandidateValidator:
                 data = path.read_bytes()
                 if hashlib.sha256(data).hexdigest() != digest:
                     raise ValidationError("Project/rules changed during DRC; route again.")
-                files[path.name] = checked_project(data) if path.suffix == ".kicad_pro" else data
+                check = {".kicad_pro": checked_project, ".kicad_dru": checked_rules}.get(path.suffix)
+                files[path.name] = check(data) if check else data
         return files
 
-    @staticmethod
-    def _with_rule(files, board_name, clearance):
+    @classmethod
+    def _with_rule(cls, files, board_name, clearance):
         if not clearance:
             return files
+        if clearance == cls.STOCK:
+            return {name: data for name, data in files.items() if not name.endswith(".kicad_dru")}
         rules = Path(board_name).with_suffix(".kicad_dru").name
         extra = f'\n(rule "VelaTrace confirmed clearance" (constraint clearance (min {clearance:.6f})))\n'
         return {**files, rules: files.get(rules, b"(version 1)\n") + extra.encode("utf-8")}
@@ -353,7 +406,7 @@ class SafeCandidateValidator:
         _, context = project_context(dsn.ticket.board_path)
         files, name = self._context_files(context), dsn.ticket.board_path.name
         _parallel(lambda clearance: self._drc(name, source, self._with_rule(files, name, clearance), True),
-                  self._rule_sets(constraints))
+                  self._rule_sets(constraints, files))
 
     def inspect(self, dsn, plan, constraints, items=None):
         """Candidate DRC without approval evidence: an Inspection whose passes are
@@ -386,7 +439,8 @@ class SafeCandidateValidator:
         files, name = self._context_files(context), dsn.ticket.board_path.name
         # (unrouted baseline, candidate) under identical rules, per rule set; independent, so concurrent.
         jobs = []
-        for clearance in self._rule_sets(constraints):
+        rule_sets = self._rule_sets(constraints, files)
+        for clearance in rule_sets:
             rules = self._with_rule(files, name, clearance)
             jobs += [(source, rules, True), (content, rules, False)]
         results = _parallel(lambda job: self._drc(name, *job), jobs)
@@ -396,7 +450,7 @@ class SafeCandidateValidator:
             raise ValidationError("Project/rules changed during DRC; route again.")
         self.safety.assert_matches(dsn, expected_board=snapshot)
         self._inspected = Inspection(dsn.digest, plan_digest(plan), tuple(constraints), tuple(items), context,
-                                     snapshot, passes)
+                                     snapshot, passes, rule_sets[-1] == self.STOCK)
         return self._inspected
 
     def reuse(self, inspection: Inspection):
@@ -408,19 +462,30 @@ class SafeCandidateValidator:
         cached = self._inspected
         if cached is not None and cached[:3] == (dsn.digest, plan_digest(plan), tuple(constraints)):
             # Same plan, constraints and DSN: the DRC results stand if nothing else moved.
-            items, context, snapshot, passes = cached[3:]
+            items, context, snapshot, passes, stock = cached[3:]
             dsn.assert_unchanged()
             if not context_matches(context):
                 raise ValidationError("Project/rules changed during DRC; route again.")
             self.safety.assert_matches(dsn, expected_board=snapshot)
         else:
-            items, context, snapshot, passes = self.inspect(dsn, plan, constraints)[3:]
+            items, context, snapshot, passes, stock = self.inspect(dsn, plan, constraints)[3:]
         self._inspected = None
+        # Connectivity is judged over every pass; the stock pass only adds hidden issues.
+        every, hidden = passes, Counter()
+        if stock:
+            passes, hidden = passes[:-1], hidden_issues(*passes[-1])
         judged = [route_issues(baseline, candidate) for baseline, candidate in passes]
-        unconnected = max(candidate.unconnected for _, candidate in passes)
+        reasons = [reason for baseline, candidate in passes for reason in blocking_reasons(baseline, candidate)]
+        counts = Counter()
+        for (kind, severity, _), count in hidden.items():
+            counts[(kind, severity)] += count
+        reasons += [f"{kind.replace('_', ' ')} ({severity}): {count} hidden by this project's custom rules (.kicad_dru)"
+                    for (kind, severity), count in sorted(counts.items())]
+        unconnected = max(candidate.unconnected for _, candidate in every)
         # Connections open on the unrouted board (pours filled) are the routing job.
-        total = max(max(baseline.unconnected for baseline, _ in passes), unconnected)
-        report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged), unconnected,
+        total = max(max(baseline.unconnected for baseline, _ in every), unconnected)
+        report = ValidationReport(plan_digest(plan), max(sum(hidden.values()), *(blocking for blocking, _ in judged)),
+                                  unconnected,
                                   routed_connections=total - unconnected, total_connections=total,
                                   enforced_constraint_ids=frozenset(c.id for c in constraints),
                                   details="Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
@@ -428,7 +493,6 @@ class SafeCandidateValidator:
                                   preexisting_warnings=max(carried for _, carried in judged),
                                   preexisting_errors=min(preexisting_errors(baseline, candidate)
                                                          for baseline, candidate in passes),
-                                  blocking_reasons=tuple(dict.fromkeys(reason for baseline, candidate in passes
-                                                                      for reason in blocking_reasons(baseline, candidate))))
+                                  blocking_reasons=tuple(dict.fromkeys(reasons)))
         self.evidence = (dsn.digest, plan_digest(plan), report, items, context, snapshot)
         return report

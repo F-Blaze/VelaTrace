@@ -353,6 +353,10 @@ class KiCadCli:
                     raise ExportUnavailable(f"DSN export exceeded {self.timeout:g} seconds and was stopped.") from None
         if process.returncode or not output.is_file():
             tail = error[-2000:].decode("utf-8", errors="replace")
+            if process.returncode == 4:
+                detail = tail[tail.rfind("keepout: "):][9:200].strip() if "keepout: " in tail else "unknown error"
+                raise ExportUnavailable("KiCad could not add keepouts for the board's copper graphics, so no DSN "
+                                        f"was exported ({detail}).")
             reason = ("this KiCad's Python has no pcbnew module" if "pcbnew" in tail and "Error" in tail
                       else f"exit {process.returncode}")
             raise ExportUnavailable(f"KiCad could not export the DSN ({reason}).")
@@ -364,7 +368,12 @@ class KiCadCli:
 # routes straight through them (real boards: tracks shorting a name written on
 # B.Cu). Each one gets a no-tracks/no-vias rule area on the in-memory board, which
 # the exporter writes as a keepout. The temporary board is never saved.
-# Copper graphics of pad-less footprints (logos) are covered too.
+# Footprint copper is covered too: graphics, text and the visible reference/value.
+# Only a graphic that touches one of its footprint's own pads is left out: that is a
+# net tie or an antenna, and a keepout over it would wall the pad off. Candidate DRC
+# is what rejects a route across those.
+# A failure here stops the export (exit 4): a DSN without the keepouts must not look
+# like a complete one.
 # ponytail: bounding boxes, so a long diagonal copper line blocks its whole
 # rectangle; use the item's outline if that ever costs a routable board.
 EXPORT_SCRIPT = """import sys, pcbnew
@@ -372,8 +381,10 @@ board = pcbnew.LoadBoard(sys.argv[1])
 try:
     items = list(board.GetDrawings())
     for footprint in board.GetFootprints():
-        if not list(footprint.Pads()):  # A copper logo; with pads it may be a net tie or antenna.
-            items += list(footprint.GraphicalItems())
+        pads = [pad.GetBoundingBox() for pad in footprint.Pads()]
+        items += [item for item in footprint.GraphicalItems()
+                  if not any(item.GetBoundingBox().Intersects(pad) for pad in pads)]
+        items += [field for field in (footprint.Reference(), footprint.Value()) if field.IsVisible()]
     for item in items:
         if pcbnew.IsCopperLayer(item.GetLayer()):
             box = item.GetBoundingBox()
@@ -388,6 +399,7 @@ try:
                          (box.GetRight(), box.GetBottom()), (box.GetLeft(), box.GetBottom())):
                 outline.Append(x, y)
             board.Add(area)
-except Exception:
-    pass  # Candidate DRC still rejects a route that touches copper graphics.
+except Exception as error:
+    sys.stderr.write("keepout: %s: %s" % (type(error).__name__, error))
+    sys.exit(4)
 sys.exit(0 if pcbnew.ExportSpecctraDSN(board, sys.argv[2]) else 3)"""

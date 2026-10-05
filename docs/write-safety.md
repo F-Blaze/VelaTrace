@@ -61,7 +61,31 @@ The candidate is local temporary data under the project `.velatrace/backups`
 directory. It copies the corresponding project, rules and non-hierarchical
 schematic context. The validator binds both contents and absence of optional
 files, refuses DRC exclusions, runs checks the project sets to Ignore as warnings (in its temporary copy only), and invokes official `kicad-cli`
-DRC. The routing UI requires an exact editor/CLI version match before creating the
+DRC.
+
+Project files cannot switch the gate off. In the temporary copy only:
+- a `(severity ignore)` rule in the `.kicad_dru` runs as a warning, like Board Setup's Ignore;
+- when the `.kicad_dru` contains any rule, the unrouted board and the candidate are
+  checked a second time **without that file**. Any issue the route adds in that pass
+  blocks approval, listed as "hidden by this project's custom rules (.kicad_dru)".
+  Issues that pass already shows on the unrouted board are not the route's and do
+  not block. This costs two more DRC runs, in parallel with the others, and is the
+  actual proof: it does not depend on reading the untrusted rule file correctly.
+  "Approve anyway" remains for a rule set that legitimately relaxes a check;
+- a net class whose clearance is 0 or negative (and not raised by Board Setup's
+  minimum clearance) is refused before routing: KiCad then skips the clearance and
+  short checks for that class (measured with kicad-cli 10.0.6).
+
+What this does not cover: issues already on the unrouted board that the project's
+rules hide (KiCad's own DRC shows the same), and local clearance overrides stored
+in the board file itself.
+
+The DSN export adds a no-track/no-via keepout over every copper graphic and copper
+text, including those inside footprints that have pads and a footprint's visible
+reference/value on copper. Only a graphic that touches one of its own footprint's
+pads (a net tie or antenna) gets none; candidate DRC rejects a route across it.
+If the keepouts cannot be added, the export stops with the reason instead of
+producing a DSN without them. The routing UI requires an exact editor/CLI version match before creating the
 routing session. Matching saved schematic context must export successfully before
 DRC explicitly enables schematic parity; malformed context refuses validation.
 That export proof depends only on the exact schematic and project bytes, so it

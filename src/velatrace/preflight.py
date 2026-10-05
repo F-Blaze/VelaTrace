@@ -86,7 +86,8 @@ def _rule_notes(project: dict, board_path: Path | None) -> list[str]:
                          "is not passed to Freerouting; DRC still checks it. Raise the net class value to match.")
     rules_file = board_path.with_suffix(".kicad_dru") if board_path else None
     if rules_file and rules_file.is_file() and "(rule" in rules_file.read_text(encoding="utf-8", errors="replace"):
-        notes.append(f"Custom rules in {rules_file.name} are not passed to Freerouting; DRC still checks them.")
+        notes.append(f"Custom rules in {rules_file.name} are not passed to Freerouting; DRC still checks them. "
+                     "The route is also checked without that file, so a custom rule cannot hide a new issue.")
     return notes
 
 

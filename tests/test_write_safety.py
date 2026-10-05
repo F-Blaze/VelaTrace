@@ -484,12 +484,16 @@ class SafetyTests(unittest.TestCase):
         rules.write_text('(version 1)\n(rule "stronger" (constraint clearance (min 1.0)))')
         calls = []
         def drc(path):
-            calls.append(path.with_suffix(".kicad_dru").read_text())
+            custom = path.with_suffix(".kicad_dru")
+            calls.append(custom.read_text() if custom.exists() else None)
             return DrcResult(0, 0, 0)
         validator = SafeCandidateValidator(self.safety, SimpleNamespace(drc=drc))
         constraint = Constraint("clear", Scope.SESSION, "clearance", "all nets", .3)
         validator.validate(self.dsn, self.plan, (constraint,))
-        self.assertEqual(len(calls), 4)  # (baseline, candidate) under project rules, then with the extra rule
+        # (baseline, candidate) under project rules, with the extra rule, and without the rule file.
+        self.assertEqual(len(calls), 6)
+        self.assertEqual(calls.count(None), 2)
+        calls = [text for text in calls if text is not None]
         self.assertEqual(sum("VelaTrace confirmed clearance" in rules_text for rules_text in calls), 2)
         self.assertTrue(all("stronger" in rules_text for rules_text in calls))
         self.assertNotIn("VelaTrace", rules.read_text())
@@ -511,8 +515,77 @@ class SafetyTests(unittest.TestCase):
         validator.validate(self.dsn, self.plan, ())
         self.board.source = BOARD.replace("20 20", "21 20")
         validator.validate(self.dsn, self.plan, ())
-        self.assertEqual(sum("(segment" not in board for board, _ in calls), 3)
-        self.assertIn('"new"', calls[-1][1])
+        # One more baseline for the new rules (the pass without the rule file reuses the
+        # first one), then two for the edited board.
+        self.assertEqual(sum("(segment" not in board for board, _ in calls), 4)
+        self.assertTrue(any('"new"' in rules for _, rules in calls[-4:]))
+
+    def _rules_validator(self, rules_text, drc):
+        self.path.with_suffix(".kicad_dru").write_text(rules_text, encoding="utf-8")
+        seen = []
+        def run(path):
+            custom = path.with_suffix(".kicad_dru")
+            seen.append(custom.read_text(encoding="utf-8") if custom.exists() else None)
+            return drc("(segment" in path.read_text(encoding="utf-8"), custom.exists())
+        return SafeCandidateValidator(self.safety, SimpleNamespace(drc=run)), seen
+
+    def test_custom_rules_cannot_hide_a_new_issue(self):
+        # VT-01: the project's rule file silences the short; KiCad then reports nothing.
+        short = DrcResult(1, 0, 0, (("shorting_items", "error", ("a", "b")),))
+        hostile = '(version 1)\n(rule "house" (severity ignore) (constraint clearance (min 0.2mm)))\n'
+        validator, seen = self._rules_validator(
+            hostile, lambda routed, custom: short if routed and not custom else DrcResult(0, 0, 0))
+        report = validator.validate(self.dsn, self.plan, ())
+        self.assertEqual(report.drc_violations, 1)
+        self.assertEqual(report.blocking_reasons,
+                         ("shorting items (error): 1 hidden by this project's custom rules (.kicad_dru)",))
+        self.assertEqual(seen.count(None), 2)  # Unrouted baseline and candidate without the rule file.
+        # The copy KiCad checks runs the ignored rule as a warning; the user's file is untouched.
+        self.assertTrue(all("(severity warning)" in text and "ignore" not in text for text in seen if text))
+        self.assertIn("(severity ignore)", self.path.with_suffix(".kicad_dru").read_text(encoding="utf-8"))
+        with self.assertRaises(ValidationError):
+            SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
+        self.assertNotIn("begin", self.board.events)
+
+    def test_custom_rules_that_hide_nothing_still_route(self):
+        # An error the rule file waives on the unrouted board is not the route's doing.
+        old = DrcResult(1, 0, 0, (("clearance", "error", ("p1", "p2")),))
+        validator, seen = self._rules_validator(
+            '(version 1)\n(rule "fine pitch" (constraint clearance (min 0.1mm)) (condition "A.Type == \'pad\'"))\n',
+            lambda routed, custom: DrcResult(0, 0, 0) if custom else old)
+        report = validator.validate(self.dsn, self.plan, ())
+        self.assertEqual((report.drc_violations, report.blocking_reasons), (0, ()))
+        self.assertEqual(len(seen), 4)
+        # A rule file without rules needs no second pass.
+        validator, seen = self._rules_validator("(version 1)\n", lambda routed, custom: DrcResult(0, 0, 0))
+        validator.validate(self.dsn, self.plan, ())
+        self.assertEqual(len(seen), 2)
+
+    def test_hidden_issues_without_identities_block(self):
+        validator, _ = self._rules_validator(
+            '(version 1)\n(rule "x" (constraint clearance (min 0mm)))\n',
+            lambda routed, custom: DrcResult(2, 0, 0) if routed and not custom else DrcResult(0, 0, 0))
+        self.assertEqual(validator.validate(self.dsn, self.plan, ()).drc_violations, 2)
+
+    def test_zero_clearance_net_class_is_refused(self):
+        project = {"board": {"design_settings": {"rules": {"min_clearance": 0.0}}},
+                   "net_settings": {"classes": [{"name": "Default", "clearance": 0.0}]}}
+        pro = self.path.with_suffix(".kicad_pro")
+        for clearance, floor, refused in ((0.0, 0.0, True), (-1, 0.0, True), (1e-9, 0.0, True), (0.0, 0.2, False),
+                                          (0.2, 0.0, False)):
+            project["net_settings"]["classes"][0]["clearance"] = clearance
+            project["board"]["design_settings"]["rules"]["min_clearance"] = floor
+            pro.write_text(json.dumps(project))
+            with self.subTest(clearance=clearance, floor=floor):
+                if refused:
+                    with self.assertRaisesRegex(CapabilityError, "no clearance"):
+                        project_context(self.path)
+                else:
+                    project_context(self.path)
+        project["net_settings"]["classes"][0]["clearance"] = "0.2"
+        pro.write_text(json.dumps(project))
+        with self.assertRaises(ValidationError):
+            project_context(self.path)
 
     def test_rules_change_during_commit_rolls_back(self):
         _, context = project_context(self.path)
