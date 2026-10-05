@@ -107,6 +107,15 @@ def _uri(path: Path) -> str:
     return f"file:{quote(Path(path).as_posix(), safe='/:')}?mode=ro&immutable=1"
 
 
+def _open(path: Path, **options) -> sqlite3.Connection:
+    """Read-only, immutable, and the downloaded file's schema is not trusted: views or
+    triggers in it cannot reach virtual tables or unsafe functions."""
+    db = sqlite3.connect(_uri(path), uri=True, **options)
+    db.execute("PRAGMA trusted_schema=OFF")
+    db.execute("PRAGMA query_only=ON")
+    return db
+
+
 def _phrase(text: str) -> str:
     return '"' + text.replace('"', '""') + '"'
 
@@ -135,8 +144,7 @@ class JlcCatalog(PartsDB):
         self._lines: dict[tuple, list[Part]] = defaultdict(list)
         self._missing: set[str] = set()
         try:
-            self._db = sqlite3.connect(_uri(self.path), uri=True, check_same_thread=False)
-            self._db.execute("PRAGMA query_only=1")
+            self._db = _open(self.path, check_same_thread=False)
             for part in self._rows(_column("Library Type", "Basic") + " OR "
                                    + _column("Library Type", "Preferred"), 50_000):
                 if part.tier == "extended":
@@ -295,7 +303,7 @@ def validate(path: Path, *, min_basic_resistors: int = MIN_BASIC_RESISTORS,
         with path.open("rb") as stream:
             if stream.read(16) != b"SQLite format 3\x00":
                 raise PartsDBError("The downloaded catalogue is not a SQLite database.")
-        db = sqlite3.connect(_uri(path), uri=True)
+        db = _open(path)
         try:
             if db.execute("PRAGMA quick_check(1)").fetchone()[0] != "ok":
                 raise PartsDBError("The downloaded catalogue failed SQLite's integrity check.")
