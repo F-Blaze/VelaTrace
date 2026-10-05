@@ -22,6 +22,16 @@ VelaTrace is a companion window for KiCad's PCB Editor. It is free (MIT), offlin
 
 **What it does not do.** Routing uses one track width and one clearance for all nets, including power. There is no differential-pair or length tuning and no BGA fanout. Dense boards usually end as a partial route you can reject. **Approve anyway** applies a route that failed KiCad DRC. DRC-clean does not mean electrically correct. For those things, look at [KiCadRoutingTools](https://github.com/drandyhaas/KiCadRoutingTools) (its own router, differential pairs, length matching, BGA/QFN fanout), [kicad-happy](https://github.com/aklofas/kicad-happy) (datasheet-aware design review) and [kicad-jlcpcb-tools](https://github.com/Bouni/kicad-jlcpcb-tools) (a mature JLCPCB workflow: part assignment saved into the schematic, parametric search, placement corrections). VelaTrace does not do what the first two do, and its JLCPCB window (below) is newer and narrower than the third.
 
+**Vela-routing**, VelaTrace's experimental electrically aware multilayer router, includes strict
+stackup/geometry APIs and a local 4/6/8-layer candidate benchmark. These are
+experimental and are not yet an electrical-routing option in the companion
+window. See [scope, benchmark instructions and remaining gates](docs/ELECTRICAL_ROUTING.md).
+The new [reference-plane experiment](docs/REFERENCE_ROUTING.md) adds fresh-fill
+coverage checks and routing around ground-plane gaps on authored 4/6/8-layer boards.
+Its development targets are faster accepted routing and broader electrical
+automation, measured against the current Freerouting workflow. See the
+[Vela-routing milestones and comparison criteria](docs/VELA_ROUTING.md).
+
 ## Features
 
 - **Guarded Freerouting front-end.** **Route board** runs pre-flight checks, exports the DSN, runs the unmodified [Freerouting](https://github.com/freerouting/freerouting) 2.1.0 JAR (SHA-256 checked, Java no-network policy), draws a `User.9` preview, then validates it with KiCad DRC in the background. **Approve** (or **Approve anyway**, after a confirmation that lists the DRC findings) writes the copper as a single undoable commit, after a backup. **Cancel routing** stops a run. It routes only placed, initially unrouted boards and refuses anything else (existing routing, per-net rules, header keepouts, hierarchical context). It is meant for small boards; see the limits above. [Freerouting setup](docs/freerouting.md)
