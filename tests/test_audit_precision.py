@@ -127,7 +127,7 @@ def test_addressable_leds_are_checked_like_ics():
 def test_single_pin_skips_no_connect_and_dangling_outputs():
     def one(kind):
         return rules(design(ic("U1", ("3", "/GPIO23", "GPIO23", kind)), cap()), "net")
-    assert [f.severity for f in one("bidirectional")] == [Severity.WARNING]
+    assert [f.severity for f in one("bidirectional")] == [Severity.INFO]
     assert one("bidirectional+no_connect") == []
     assert one("output") == [] and one("power_out") == []
 
@@ -149,7 +149,7 @@ def test_many_dangling_labels_on_one_part_are_grouped():
     found = rules(design(ic("U1", *pins), cap()), "net")
     assert [(f.rule, f.severity, len(f.nets)) for f in found] == [("net.single_pin", Severity.INFO, 7)]
     few = rules(design(ic("U1", *pins[:4]), cap()), "net")
-    assert [f.severity for f in few] == [Severity.WARNING] * 4
+    assert [f.severity for f in few] == [Severity.INFO] * 4
 
 
 # --- pin.input_floating -----------------------------------------------------------------

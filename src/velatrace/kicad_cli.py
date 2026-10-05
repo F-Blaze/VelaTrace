@@ -29,6 +29,68 @@ def local_tool_environment() -> dict[str, str]:
                 r"KICAD\d+_(?:FOOTPRINT|SYMBOL|3DMODEL|3RD_PARTY|TEMPLATE)_DIR", key)}
 
 
+def find_tool(tool: str | Path, *, forbidden=()) -> Path | None:
+    """Absolute path of an external program, or None when it is not installed.
+
+    A bare name is searched in the absolute PATH folders only: never in the working
+    directory (where shutil.which and Windows itself look first) and never in a
+    `forbidden` folder (the project being opened), so a downloaded project cannot
+    supply the program. For the same reason a configured path must be absolute.
+    On Windows a bare name means the native .exe; callers refuse scripts."""
+    text = os.fspath(tool)
+    if os.path.dirname(text):
+        candidates, banned = ([Path(text)] if Path(text).is_absolute() else []), set()
+    else:
+        if os.name == "nt" and not text.lower().endswith(".exe"):
+            text += ".exe"
+        banned = {Path(folder).resolve() for folder in (Path.cwd(), *forbidden)}
+        candidates = [Path(folder) / text for folder in os.environ.get("PATH", "").split(os.pathsep)
+                      if folder and Path(folder).is_absolute()]
+    for candidate in candidates:
+        try:
+            found = candidate.resolve(strict=True)
+        except OSError:
+            continue
+        if (found.is_file() and (os.name == "nt" or os.access(found, os.X_OK))
+                and not banned & {candidate.parent.resolve(), found.parent}):
+            return found
+    return None
+
+
+SETTINGS_PREFIXES = ("velatrace-kicad-settings-", "velatrace-kicad-export-")
+
+
+def sweep_stale_settings(max_age_seconds: float = 86_400) -> int:
+    """Remove private KiCad settings copies a killed VelaTrace left in the temp
+    folder (a normal exit removes its own). Returns how many were removed. A running
+    session refreshes its folder's time stamp on every use and rebuilds the folder
+    if it is gone, so only an idle day-old folder is ever taken."""
+    removed = 0
+    try:
+        folders = [folder for prefix in SETTINGS_PREFIXES
+                   for folder in Path(tempfile.gettempdir()).glob(prefix + "*")]
+    except OSError:
+        return 0
+    for folder in folders:
+        try:
+            # rmtree itself refuses a link or junction in place of the folder.
+            if folder.is_dir() and time.time() - folder.stat().st_mtime > max_age_seconds:
+                shutil.rmtree(folder)
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+def _live(home: Path | None) -> bool:
+    """Is this private settings folder still there? Marks it as in use."""
+    try:
+        os.utime(home)
+        return True
+    except (OSError, TypeError):
+        return False
+
+
 def user_config_dir(version: tuple[int, int, int]) -> Path:
     """The settings folder kicad-cli reads when VelaTrace does not override it."""
     root = os.environ.get("KICAD_CONFIG_HOME")
@@ -136,11 +198,11 @@ def parse_drc_report(path: Path) -> DrcResult:
 
 
 class KiCadCli:
-    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 300):  # DRC refills pours: over a minute on big boards
-        found = shutil.which(str(executable))
+    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 300, *, forbidden=()):  # DRC refills pours: over a minute on big boards
+        found = find_tool(executable, forbidden=forbidden)
         if not found:
-            raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its executable path.")
-        self.executable = Path(found).resolve(strict=True)
+            raise CapabilityError("kicad-cli is missing. Install KiCad 9+ and configure its full executable path.")
+        self.executable = found
         if os.name == "nt" and self.executable.suffix.lower() != ".exe":
             raise CapabilityError("Select the native kicad-cli.exe, not a shell script.")
         if not isinstance(timeout, (float, int)) or not 0 < timeout <= 600:
@@ -231,11 +293,11 @@ class KiCadCli:
         settings folder is only read."""
         with self._config_lock:
             home = self._config_homes.get(libraries)
-            if home is not None:
+            if _live(home):
                 return home
             if self.version is None:
                 self.check_startup()
-            home = Path(tempfile.mkdtemp(prefix="velatrace-kicad-settings-"))
+            home = Path(tempfile.mkdtemp(prefix=SETTINGS_PREFIXES[0]))
             weakref.finalize(self, shutil.rmtree, home, True)
             source, target = user_config_dir(self.version), home / f"{self.version[0]}.{self.version[1]}"
             target.mkdir()
@@ -291,17 +353,16 @@ class KiCadCli:
             if path.is_file():
                 return path
         # Linux packages install pcbnew into the system Python.
-        found = shutil.which("python3") if os.name != "nt" and sys.platform != "darwin" else None
-        return Path(found) if found else None
+        return find_tool("python3") if os.name != "nt" and sys.platform != "darwin" else None
 
     def _export_config_home(self) -> Path:
         """Private settings for the export process: only path variables are copied, so
         KiCad never writes (or reads unrelated state from) the user's own settings."""
         with self._config_lock:
-            if self._export_home is None:
+            if not _live(self._export_home):
                 if self.version is None:
                     self.check_startup()
-                home = Path(tempfile.mkdtemp(prefix="velatrace-kicad-export-"))
+                home = Path(tempfile.mkdtemp(prefix=SETTINGS_PREFIXES[1]))
                 weakref.finalize(self, shutil.rmtree, home, True)
                 target = home / f"{self.version[0]}.{self.version[1]}"
                 target.mkdir()
@@ -353,6 +414,10 @@ class KiCadCli:
                     raise ExportUnavailable(f"DSN export exceeded {self.timeout:g} seconds and was stopped.") from None
         if process.returncode or not output.is_file():
             tail = error[-2000:].decode("utf-8", errors="replace")
+            if process.returncode == 4:
+                detail = tail[tail.rfind("keepout: "):][9:200].strip() if "keepout: " in tail else "unknown error"
+                raise ExportUnavailable("KiCad could not add keepouts for the board's copper graphics, so no DSN "
+                                        f"was exported ({detail}).")
             reason = ("this KiCad's Python has no pcbnew module" if "pcbnew" in tail and "Error" in tail
                       else f"exit {process.returncode}")
             raise ExportUnavailable(f"KiCad could not export the DSN ({reason}).")
@@ -364,7 +429,12 @@ class KiCadCli:
 # routes straight through them (real boards: tracks shorting a name written on
 # B.Cu). Each one gets a no-tracks/no-vias rule area on the in-memory board, which
 # the exporter writes as a keepout. The temporary board is never saved.
-# Copper graphics of pad-less footprints (logos) are covered too.
+# Footprint copper is covered too: graphics, text and the visible reference/value.
+# Only a graphic that touches one of its footprint's own pads is left out: that is a
+# net tie or an antenna, and a keepout over it would wall the pad off. Candidate DRC
+# is what rejects a route across those.
+# A failure here stops the export (exit 4): a DSN without the keepouts must not look
+# like a complete one.
 # ponytail: bounding boxes, so a long diagonal copper line blocks its whole
 # rectangle; use the item's outline if that ever costs a routable board.
 EXPORT_SCRIPT = """import sys, pcbnew
@@ -372,8 +442,10 @@ board = pcbnew.LoadBoard(sys.argv[1])
 try:
     items = list(board.GetDrawings())
     for footprint in board.GetFootprints():
-        if not list(footprint.Pads()):  # A copper logo; with pads it may be a net tie or antenna.
-            items += list(footprint.GraphicalItems())
+        pads = [pad.GetBoundingBox() for pad in footprint.Pads()]
+        items += [item for item in footprint.GraphicalItems()
+                  if not any(item.GetBoundingBox().Intersects(pad) for pad in pads)]
+        items += [field for field in (footprint.Reference(), footprint.Value()) if field.IsVisible()]
     for item in items:
         if pcbnew.IsCopperLayer(item.GetLayer()):
             box = item.GetBoundingBox()
@@ -388,6 +460,7 @@ try:
                          (box.GetRight(), box.GetBottom()), (box.GetLeft(), box.GetBottom())):
                 outline.Append(x, y)
             board.Add(area)
-except Exception:
-    pass  # Candidate DRC still rejects a route that touches copper graphics.
+except Exception as error:
+    sys.stderr.write("keepout: %s: %s" % (type(error).__name__, error))
+    sys.exit(4)
 sys.exit(0 if pcbnew.ExportSpecctraDSN(board, sys.argv[2]) else 3)"""

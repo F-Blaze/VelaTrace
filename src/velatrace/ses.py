@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_FLOOR
 import math
 from pathlib import PureWindowsPath
+import re
 from typing import Mapping
 
 from .errors import ValidationError
@@ -70,11 +71,15 @@ class RoutePlan:
                             {layer for via in self.vias for layer in via.spec.layers}))
 
 
+# Plain ASCII decimals only. float() also reads "1_0", "inf" and non-ASCII digits,
+# which neither Freerouting writes nor KiCad's own reader accepts.
+_NUMBER = re.compile(r"[-+]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?")
+
+
 def number(value: str) -> float:
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        raise ValidationError("SES contains a non-numeric coordinate.") from None
+    if not isinstance(value, str) or not _NUMBER.fullmatch(value):
+        raise ValidationError("SES contains a non-numeric coordinate.")
+    result = float(value)
     if not math.isfinite(result) or abs(result) > 1e12:
         raise ValidationError("SES contains an invalid or excessive coordinate.")
     return result
@@ -104,7 +109,17 @@ def _sections(node: list, allowed: set[str], offset: int = 1):
         raise ValidationError(f"Unsupported SES content in {node[0]}; the whole result was refused.")
 
 
-def parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[str],
+def parse_ses(text: str, **expected) -> RoutePlan:
+    """The route plan of a Freerouting session file, or a ValidationError: router
+    output is untrusted, so an unexpected shape (a list where a name belongs, a
+    missing field) is refused like any other malformed result, never a traceback."""
+    try:
+        return _parse_ses(text, **expected)
+    except (TypeError, IndexError, KeyError, AttributeError, ValueError) as exc:
+        raise ValidationError("Malformed SES content; the whole result was refused.") from exc
+
+
+def _parse_ses(text: str, *, expected_design: str, nets: set[str], layers: set[str],
               via_catalog: Mapping[str, ViaSpec] | None = None,
               expected_placements: Mapping[str, tuple[float, float, str, float]] | None = None,
               expected_placement_resolution_mm: float | None = None,

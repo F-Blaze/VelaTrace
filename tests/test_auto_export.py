@@ -28,6 +28,9 @@ class FakeProcess:
             Path(self.args[-1]).write_text(DSN, encoding="utf-8")
             self.returncode = 0
             return None, b""
+        if self.behaviour == "keepout":
+            self.returncode = 4
+            return None, b"Traceback noise\nkeepout: AttributeError: no Intersects"
         self.returncode = 1 if self.behaviour == "no-pcbnew" else -9
         return None, b"ModuleNotFoundError: No module named 'pcbnew'"
 
@@ -103,6 +106,23 @@ class AutoExportTests(unittest.TestCase):
         self.cli.python = self.python
         with self.assertRaisesRegex(ExportUnavailable, "no pcbnew module"):
             self.export("no-pcbnew")
+
+    def test_private_settings_folder_is_rebuilt_if_it_was_swept(self):
+        import shutil
+        self.export("ok")
+        first = Path(FakeProcess.calls[-1][2]["KICAD_CONFIG_HOME"])
+        shutil.rmtree(first)  # Another VelaTrace start swept it while this session sat idle.
+        self.addCleanup(shutil.rmtree, self.cli._export_home, True)
+        self.export("ok")
+        home = Path(FakeProcess.calls[-1][2]["KICAD_CONFIG_HOME"])
+        self.assertTrue((home / "10.0" / "kicad_common.json").is_file())
+
+    def test_failed_keepouts_stop_the_export_with_a_reason(self):
+        # VT-01: a DSN without the copper-graphic keepouts must never pass as complete.
+        self.assertNotIn("except Exception:\n    pass", EXPORT_SCRIPT)
+        with self.assertRaisesRegex(ExportUnavailable, r"keepouts .* \(AttributeError: no Intersects\)"):
+            self.export("keepout")
+        self.assertFalse((self.out / "board.dsn").exists())
 
     def test_cancel_kills_the_export_process(self):
         cancel = threading.Event()

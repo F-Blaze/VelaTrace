@@ -4,6 +4,7 @@ Java 21's process-local security policy denies Java networking. This is not an
 OS sandbox for hostile native code: the immutable official JAR is a trust anchor.
 """
 import atexit
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import os
@@ -19,6 +20,7 @@ import time
 from .constraints import Constraint
 from .dsn import DsnInput, dsn_scale
 from .errors import CapabilityError, RoutingCancelled, ValidationError
+from .kicad_cli import find_tool
 from .ses import number
 from .sexpr import JoinedAtom, QuotedAtom, one, parse
 
@@ -316,6 +318,30 @@ def _locked_jar(path: Path):
         raise
 
 
+@contextmanager
+def _pinned_jar(path: Path, directory: Path):
+    """The JAR to run for one JVM launch: the exact bytes whose hash was checked.
+
+    Windows: the JAR itself, hashed through a handle that stays open (see
+    _locked_jar), so it cannot be replaced before or while Java reads it.
+    Elsewhere: a copy in the private per-run folder, hashed after copying."""
+    try:
+        lock, digest = _locked_jar(path)
+    except OSError:
+        raise CapabilityError("The Freerouting JAR is missing or being changed by another program; "
+                              "routing refused.") from None
+    try:
+        if lock is None:
+            path = Path(shutil.copyfile(path, directory / "freerouting.jar"))
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != JAR_SHA256:
+            raise CapabilityError(f"Freerouting version/hash mismatch. Install exactly {VERSION} from {RELEASE_URL}; other JARs are refused.")
+        yield path
+    finally:
+        if lock is not None:
+            lock.close()
+
+
 class _WarmFailure(Exception):
     """The reusable JVM failed; the caller falls back to a one-shot run."""
 
@@ -447,15 +473,20 @@ class _WarmRouter:
 
 class Freerouting:
     def __init__(self, jar: Path, java: str | Path = "java", *, work_directory: Path,
-                 timeout_seconds: float = 300, warm: bool = False):
+                 timeout_seconds: float = 300, warm: bool = False, forbidden=()):
         """Routes run through VelaTrace's launcher (WarmRouter), which can stop a
         stalled router and keep its partial route; warm=True keeps that verified JVM
         for the session (started by check_startup, restarted if it dies). Any launcher
         failure falls back to the plain one-shot CLI, which can only be killed."""
         self.jar = local_path(jar)
         self.work_directory = local_path(work_directory)
-        located = shutil.which(str(java))
-        self.java = local_path(Path(located or java))
+        # None when Java is not installed: a bare name is never run, because Windows
+        # would look for it in the working directory first.
+        located = find_tool(java, forbidden=forbidden)
+        self.java = local_path(located) if located else None
+        if located and os.name == "nt" and located.suffix.lower() != ".exe":
+            # cmd.exe would re-parse a batch file's command line, board file name included.
+            raise CapabilityError("Select the native java.exe, not a script (.cmd/.bat).")
         if not 1 <= timeout_seconds <= 3600:
             raise ValidationError("Router timeout must be between 1 and 3600 seconds.")
         self.timeout = timeout_seconds
@@ -497,7 +528,7 @@ class Freerouting:
             raise CapabilityError(f"Freerouting is missing. Download unmodified freerouting-{VERSION}.jar from {RELEASE_URL} and configure its path.")
         if self.jar.stat().st_size > 100_000_000 or hashlib.sha256(self.jar.read_bytes()).hexdigest() != JAR_SHA256:
             raise CapabilityError(f"Freerouting version/hash mismatch. Install exactly {VERSION} from {RELEASE_URL}; other JARs are refused.")
-        if not self.java.is_file():
+        if self.java is None or not self.java.is_file():
             raise CapabilityError("Java is missing. Install Eclipse Temurin Java 21 (JRE or JDK) and configure its bin/java executable.")
         self.work_directory.mkdir(parents=True, exist_ok=True)
 
@@ -652,7 +683,10 @@ class Freerouting:
         if cancel.is_set():
             raise RoutingCancelled(CANCELLED)
         self._check_installation()
-        with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name:
+        with tempfile.TemporaryDirectory(prefix="route-", dir=self.work_directory, ignore_cleanup_errors=True) as name, \
+                _pinned_jar(self.jar, Path(name)) as jar:
+            # From here to the end of the run the JAR is the verified one: the JVM
+            # launches below would otherwise leave time to swap the file.
             directory = Path(name)
             self._check_java(directory)
             # Verify the policy in the exact directory used by this run. A second
@@ -661,7 +695,7 @@ class Freerouting:
             copied = directory / dsn.path.name
             copied.write_text(text, encoding="utf-8")
             output = directory / "result.ses"
-            args = self._args(directory) + ["-jar", str(self.jar)] + self._router_args(directory, copied, output)
+            args = self._args(directory) + ["-jar", str(jar)] + self._router_args(directory, copied, output)
             result = run_bounded(args, directory, self.timeout, cancel, pass_reporter(self.progress))
             self.last_log = result.output  # Local only; never transmitted or included in provider prompts.
             if result.returncode:

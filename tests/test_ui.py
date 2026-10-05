@@ -1,5 +1,6 @@
 """Offscreen UI gates and worker-boundary tests; no provider or KiCad writes."""
 import gc
+import json
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import tempfile
@@ -580,8 +581,8 @@ class UiTests(unittest.TestCase):
         from PySide6.QtWidgets import QLabel
         headers = [item.text() for item in self.window.card_container.findChildren(QLabel)
                    if " · " in item.text() and item.text().split(" · ")[0] in {"Errors", "Warnings", "Savings", "Info"}]
-        self.assertEqual(headers, ["Warnings · 3", "Savings · 1", "Info · 1"])
-        self.assertIn("3 warnings · 1 saving", self.window.totals.text())
+        self.assertEqual(headers, ["Warnings · 2", "Savings · 1", "Info · 2"])
+        self.assertIn("2 warnings · 1 saving", self.window.totals.text())
         self.assertIn("never removed automatically", self.window.totals.toolTip())
         card = self.window.finding_cards[0]
         self.assertEqual(card.finding.severity.value, "warning")
@@ -683,6 +684,21 @@ class SetupUsabilityTests(unittest.TestCase):
         self.assertEqual(self.dialogs, [])
         self.assertEqual(len(checked), 1)
         self.assertTrue(window.ready)
+
+    def test_verified_java_is_remembered_as_an_absolute_path(self):
+        # VT-02: later launches use the verified path instead of searching PATH again.
+        from velatrace.ui import Settings
+        tools = self.config / "tools"
+        tools.mkdir()
+        java = tools / ("java.exe" if os.name == "nt" else "java")
+        java.write_bytes(b"")
+        java.chmod(0o755)
+        Settings(jar="C:/tools/freerouting.jar").save(self.config / "settings.json")
+        with patch.dict(os.environ, {"PATH": str(tools)}):
+            window = self.launch()
+        self.assertTrue(window.ready)
+        self.assertEqual(json.loads((self.config / "settings.json").read_text(encoding="utf-8"))["java"],
+                         str(java.resolve()))
 
     def test_audit_is_usable_and_routing_lock_is_explained_before_setup(self):
         window = self.launch(accept=False)

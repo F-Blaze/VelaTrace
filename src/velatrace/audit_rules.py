@@ -835,7 +835,7 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 
 # Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
-BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "pin.input_floating"})
+BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating"})
 
 
 def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
