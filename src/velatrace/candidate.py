@@ -496,6 +496,16 @@ class SafeCandidateValidator:
         every, hidden = passes, Counter()
         if stock:
             passes, hidden = passes[:-1], hidden_issues(*passes[-1])
+            # Only what the project's rules really hide: an issue the passes above
+            # also report (whatever its severity there) is judged by them.
+            shown = Counter()
+            for _, candidate in passes:
+                shown |= Counter((kind, items) for kind, _, items in candidate.issues)
+            for issue in sorted(hidden):
+                also = min(hidden[issue], shown[issue[0], issue[2]])
+                shown[issue[0], issue[2]] -= also
+                hidden[issue] -= also
+            hidden = +hidden
         judged = [route_issues(baseline, candidate) for baseline, candidate in passes]
         reasons = [reason for baseline, candidate in passes for reason in blocking_reasons(baseline, candidate)]
         counts = Counter()
@@ -506,7 +516,7 @@ class SafeCandidateValidator:
         unconnected = max(candidate.unconnected for _, candidate in every)
         # Connections open on the unrouted board (pours filled) are the routing job.
         total = max(max(baseline.unconnected for baseline, _ in every), unconnected)
-        report = ValidationReport(plan_digest(plan), max(sum(hidden.values()), *(blocking for blocking, _ in judged)),
+        report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged) + sum(hidden.values()),
                                   unconnected,
                                   routed_connections=total - unconnected, total_connections=total,
                                   enforced_constraint_ids=frozenset(c.id for c in constraints),

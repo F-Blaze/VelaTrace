@@ -67,7 +67,8 @@ Project files cannot switch the gate off. In the temporary copy only:
 - a `(severity ignore)` rule in the `.kicad_dru` runs as a warning, like Board Setup's Ignore;
 - when the `.kicad_dru` contains any rule, the unrouted board and the candidate are
   checked a second time **without that file**. Any issue the route adds in that pass
-  blocks approval, listed as "hidden by this project's custom rules (.kicad_dru)".
+  blocks approval, listed as "hidden by this project's custom rules (.kicad_dru)"
+  (an issue the pass under the project's rules also reports is counted once, there).
   Issues that pass already shows on the unrouted board are not the route's and do
   not block. This costs two more DRC runs, in parallel with the others, and is the
   actual proof: it does not depend on reading the untrusted rule file correctly.

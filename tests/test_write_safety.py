@@ -669,6 +669,22 @@ class SafetyTests(unittest.TestCase):
             SafeBoardWriter(self.safety, validator).apply(self.dsn, self.plan, report)
         self.assertNotIn("begin", self.board.events)
 
+    def test_issues_the_project_rules_also_report_are_counted_once(self):
+        stub = ("track_dangling", "warning", ("t1",))
+        sliver = ("copper_sliver", "warning", ())  # KiCad names no items: counted, never matched by identity.
+        short = ("shorting_items", "error", ("t1", "pad"))
+        def drc(routed, custom):
+            if not routed:
+                return DrcResult(0, 0, 0)
+            return DrcResult(2, 0, 0, (sliver, stub)) if custom else DrcResult(4, 0, 0, (sliver, sliver, short, stub))
+        validator, _ = self._rules_validator('(version 1)\n(rule "x" (constraint clearance (min 0mm)))\n', drc)
+        report = validator.validate(self.dsn, self.plan, ())
+        self.assertEqual(report.drc_violations, 4)
+        self.assertEqual(report.blocking_reasons,
+                         ("copper sliver (warning): 1", "track dangling (warning): 1",
+                          "copper sliver (warning): 1 hidden by this project's custom rules (.kicad_dru)",
+                          "shorting items (error): 1 hidden by this project's custom rules (.kicad_dru)"))
+
     def test_custom_rules_that_hide_nothing_still_route(self):
         # An error the rule file waives on the unrouted board is not the route's doing.
         old = DrcResult(1, 0, 0, (("clearance", "error", ("p1", "p2")),))

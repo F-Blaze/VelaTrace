@@ -305,7 +305,8 @@ class BoardSafety:
                                   "that name is taken by a file or cannot be created. Rename or remove it, "
                                   "then retry.") from None
         try:  # Backups and journals are local working data, never something to commit.
-            (self.directory.parent / ".gitignore").open("x", encoding="utf-8").write("*\n")
+            with (self.directory.parent / ".gitignore").open("x", encoding="utf-8") as stream:
+                stream.write("*\n")
         except OSError:
             pass  # Already there, or read-only: only a convenience.
         name = hashlib.sha256(os.path.normcase(str(self.path)).encode("utf-8")).hexdigest()[:32]
@@ -366,9 +367,11 @@ class BoardSafety:
         "Approve anyway", and name earlier temporary graphics."""
         def mine(folder):
             name = folder.name  # "<board>-<uuid>", or a bare uuid from earlier releases.
+            # ponytail: one stat per folder per backup; journal-only folders are never
+            # removed, so move the journals into one file if a project collects thousands.
             return ((name[:-37] == self.path.stem and len(name) > 37 or (len(name) == 36 and name.count("-") == 4))
-                    and folder.resolve() == base / name  # Not a link or junction to elsewhere.
-                    and (folder / "saved.kicad_pcb").is_file())
+                    and (folder / "saved.kicad_pcb").is_file()
+                    and folder.resolve() == base / name)  # Not a link or junction to elsewhere.
         try:
             base = self.directory.resolve()
             folders = sorted((folder for folder in self.directory.iterdir() if mine(folder)),
