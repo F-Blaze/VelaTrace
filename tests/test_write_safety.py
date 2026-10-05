@@ -431,6 +431,35 @@ class SafetyTests(unittest.TestCase):
         other.write_text(BOARD, encoding="utf-8")
         self.assertNotEqual(BoardSafety(self.board, other, journal_dir=journals).journal, self.safety.journal)
 
+    def test_old_board_copies_are_pruned_and_journals_kept(self):
+        # VT-07: every safety check used to leave a full board copy behind for ever.
+        import os
+        self.assertEqual(self.safety.keep_backups, 20)  # Documented in docs/write-safety.md.
+        legacy = self.safety.directory / "0e0a7b4e-3f0b-4c0e-9d0a-111111111111"  # Name used by earlier releases.
+        other = self.safety.directory / "other-board-0e0a7b4e-3f0b-4c0e-9d0a-222222222222"
+        for age, folder in ((500, legacy), (400, other)):
+            folder.mkdir()
+            (folder / "saved.kicad_pcb").write_text("old copy")
+            os.utime(folder, (1_000_000_000 + age, 1_000_000_000 + age))
+        self.mutate([Item("a")], temporary=True)  # Journaled: intent.json and completion.json.
+        journaled = self.safety.last_backup.directory
+        folders = [journaled]
+        for _ in range(5):
+            folders.append(self.safety.backup().directory)
+        for index, folder in enumerate(folders):  # Unambiguous order, oldest first.
+            os.utime(folder, (1_500_000_000 + index, 1_500_000_000 + index))
+        self.safety.keep_backups = 3
+        newest = self.safety.backup().directory
+        kept = [folder for folder in (*folders, newest) if (folder / "saved.kicad_pcb").exists()]
+        self.assertEqual(kept, [*folders[-2:], newest])
+        self.assertTrue(all((folder / "live.kicad_pcb").exists() for folder in kept))
+        # The audit trail of the pruned transaction is still there; its board copies are not.
+        self.assertEqual(sorted(path.name for path in journaled.iterdir()), ["completion.json", "intent.json"])
+        self.assertIn("a", self.safety._journaled_ids())
+        self.assertFalse(folders[1].exists())  # Nothing but copies: the folder goes too.
+        self.assertFalse(legacy.exists())
+        self.assertTrue((other / "saved.kicad_pcb").exists())  # Another board's backups are its own.
+
     def test_working_folder_is_git_ignored(self):
         ignore = self.path.parent / ".velatrace" / ".gitignore"
         self.assertEqual(ignore.read_text(encoding="utf-8"), "*\n")

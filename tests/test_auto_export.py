@@ -107,6 +107,16 @@ class AutoExportTests(unittest.TestCase):
         with self.assertRaisesRegex(ExportUnavailable, "no pcbnew module"):
             self.export("no-pcbnew")
 
+    def test_private_settings_folder_is_rebuilt_if_it_was_swept(self):
+        import shutil
+        self.export("ok")
+        first = Path(FakeProcess.calls[-1][2]["KICAD_CONFIG_HOME"])
+        shutil.rmtree(first)  # Another VelaTrace start swept it while this session sat idle.
+        self.addCleanup(shutil.rmtree, self.cli._export_home, True)
+        self.export("ok")
+        home = Path(FakeProcess.calls[-1][2]["KICAD_CONFIG_HOME"])
+        self.assertTrue((home / "10.0" / "kicad_common.json").is_file())
+
     def test_failed_keepouts_stop_the_export_with_a_reason(self):
         # VT-01: a DSN without the copper-graphic keepouts must never pass as complete.
         self.assertNotIn("except Exception:\n    pass", EXPORT_SCRIPT)

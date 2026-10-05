@@ -36,7 +36,7 @@ from .findings import Finding, Severity
 from .flags import Bucket, Function, Verdict
 from .freerouting import CANCELLED, Freerouting
 from .ipc import KiCadReader
-from .kicad_cli import KiCadCli
+from .kicad_cli import KiCadCli, sweep_stale_settings
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
 from .report import render_report, save_report
@@ -1742,6 +1742,8 @@ def launch(*, demo=False, screenshot: Path | None = None):
         QFontDatabase.addApplicationFont(str(font_path))
     app.setApplicationName("VelaTrace")
     app.setOrganizationName("F-Blaze")
+    if not demo:
+        sweep_stale_settings()  # Left in the temp folder by a session that was killed.
     window = MainWindow(demo=demo)
     window.show()
     window.raise_()

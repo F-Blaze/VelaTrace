@@ -57,6 +57,40 @@ def find_tool(tool: str | Path, *, forbidden=()) -> Path | None:
     return None
 
 
+SETTINGS_PREFIXES = ("velatrace-kicad-settings-", "velatrace-kicad-export-")
+
+
+def sweep_stale_settings(max_age_seconds: float = 86_400) -> int:
+    """Remove private KiCad settings copies a killed VelaTrace left in the temp
+    folder (a normal exit removes its own). Returns how many were removed. A running
+    session refreshes its folder's time stamp on every use and rebuilds the folder
+    if it is gone, so only an idle day-old folder is ever taken."""
+    removed = 0
+    try:
+        folders = [folder for prefix in SETTINGS_PREFIXES
+                   for folder in Path(tempfile.gettempdir()).glob(prefix + "*")]
+    except OSError:
+        return 0
+    for folder in folders:
+        try:
+            # rmtree itself refuses a link or junction in place of the folder.
+            if folder.is_dir() and time.time() - folder.stat().st_mtime > max_age_seconds:
+                shutil.rmtree(folder)
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+def _live(home: Path | None) -> bool:
+    """Is this private settings folder still there? Marks it as in use."""
+    try:
+        os.utime(home)
+        return True
+    except (OSError, TypeError):
+        return False
+
+
 def user_config_dir(version: tuple[int, int, int]) -> Path:
     """The settings folder kicad-cli reads when VelaTrace does not override it."""
     root = os.environ.get("KICAD_CONFIG_HOME")
@@ -259,11 +293,11 @@ class KiCadCli:
         settings folder is only read."""
         with self._config_lock:
             home = self._config_homes.get(libraries)
-            if home is not None:
+            if _live(home):
                 return home
             if self.version is None:
                 self.check_startup()
-            home = Path(tempfile.mkdtemp(prefix="velatrace-kicad-settings-"))
+            home = Path(tempfile.mkdtemp(prefix=SETTINGS_PREFIXES[0]))
             weakref.finalize(self, shutil.rmtree, home, True)
             source, target = user_config_dir(self.version), home / f"{self.version[0]}.{self.version[1]}"
             target.mkdir()
@@ -325,10 +359,10 @@ class KiCadCli:
         """Private settings for the export process: only path variables are copied, so
         KiCad never writes (or reads unrelated state from) the user's own settings."""
         with self._config_lock:
-            if self._export_home is None:
+            if not _live(self._export_home):
                 if self.version is None:
                     self.check_startup()
-                home = Path(tempfile.mkdtemp(prefix="velatrace-kicad-export-"))
+                home = Path(tempfile.mkdtemp(prefix=SETTINGS_PREFIXES[1]))
                 weakref.finalize(self, shutil.rmtree, home, True)
                 target = home / f"{self.version[0]}.{self.version[1]}"
                 target.mkdir()

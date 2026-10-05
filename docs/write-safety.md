@@ -181,7 +181,19 @@ An item is adopted only when both hold:
 So a project that ships a forged record cannot make VelaTrace remove the author's
 own drawings or notes; the most it can name are exact look-alikes of VelaTrace's
 temporary graphics. `.velatrace` gets a `.gitignore` containing `*` when it is
-created, so backups and records are not committed by accident. This prevents a verified KiCad behavior that replaces an
+created, so backups and records are not committed by accident.
+
+**Retention.** Each safety check writes a backup folder (`<board>-<uuid>`: saved
+board, live board, saved project). Only the newest **20** per board keep those
+copies (`BoardSafety.keep_backups`; one route attempt makes about eight); older
+copies are deleted when a new backup is written. The small `intent.json` and
+`completion.json` of older transactions are kept as the audit trail (for example
+of an "Approve anyway"). Bare-uuid folders from earlier releases are pruned by
+the same rule. Private KiCad settings copies in the temp folder
+(`velatrace-kicad-settings-*`, `velatrace-kicad-export-*`) are removed on normal
+exit; ones a killed session left behind are removed at the next start once they
+are a day old. A running session refreshes its folder on every use and rebuilds
+it if it is gone. This prevents a verified KiCad behavior that replaces an
 existing coincident User.9 line with the new UUID. The board-change check must not
 ignore that disappearance. Approved copper is read back by UUID and exact geometry
 after the commit; missing/mismatched copper blocks retries as an uncertain write.

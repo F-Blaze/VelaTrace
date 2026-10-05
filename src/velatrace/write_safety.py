@@ -283,6 +283,9 @@ PREVIEW_LAYERS = ("User.9", "User.8", "User.7", "User.6", "User.5", "User.4", "U
 
 class BoardSafety:
     preview_layer_name = "User.9"
+    # Board copies kept per board. A route attempt makes about eight, so this is the
+    # last two or three attempts; older copies are deleted, their small journals stay.
+    keep_backups = 20
 
     def __init__(self, board, board_path: Path, *, factory=None, journal_dir: Path | None = None):
         """journal_dir: a folder outside the project (the user's VelaTrace settings
@@ -328,7 +331,7 @@ class BoardSafety:
     def backup(self) -> Backup:
         """Create new immutable copies before any board mutation, never overwrite."""
         self._identity()
-        folder = self.directory / str(uuid.uuid4())
+        folder = self.directory / f"{self.path.stem}-{uuid.uuid4()}"
         folder.mkdir()
         saved = folder / "saved.kicad_pcb"
         shutil.copyfile(self.path, saved)
@@ -353,7 +356,30 @@ class BoardSafety:
             raise ValidationError("Saved board changed during backup; operation refused.")
         result = Backup(folder, saved, live)
         self.last_backup = result
+        self._prune_backups()
         return result
+
+    def _prune_backups(self):
+        """Delete the board and project copies of all but the newest keep_backups
+        backups of this board (they grew without bound, a full board per click).
+        intent.json/completion.json stay: they are the audit trail, e.g. of an
+        "Approve anyway", and name earlier temporary graphics."""
+        def mine(folder):
+            name = folder.name  # "<board>-<uuid>", or a bare uuid from earlier releases.
+            return ((name[:-37] == self.path.stem and len(name) > 37 or (len(name) == 36 and name.count("-") == 4))
+                    and folder.resolve() == base / name  # Not a link or junction to elsewhere.
+                    and (folder / "saved.kicad_pcb").is_file())
+        try:
+            base = self.directory.resolve()
+            folders = sorted((folder for folder in self.directory.iterdir() if mine(folder)),
+                             key=lambda folder: folder.stat().st_mtime, reverse=True)
+            for folder in folders[self.keep_backups:]:
+                for name in ("saved.kicad_pcb", "live.kicad_pcb", "saved.kicad_pro"):
+                    (folder / name).unlink(missing_ok=True)
+                if not any(folder.iterdir()):
+                    folder.rmdir()
+        except OSError:
+            pass  # Housekeeping only: the backup this call was made for already exists.
 
     def _check_snapshot(self, backup, expected_digest=None, expected_board=None):
         if expected_digest and file_digest(self.path) != expected_digest:
