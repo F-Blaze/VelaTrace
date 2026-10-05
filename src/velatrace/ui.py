@@ -46,6 +46,7 @@ from .parts_db import cache_paths, download_catalogue, load_catalogue
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
+from .route_repair import repair_dangling
 from .routing import Mode, RoutingSession, RoutingStage
 from .sexpr import parse
 from .tokens import LocalChatTokenizer
@@ -285,8 +286,10 @@ class SettingsDialog(QDialog):
         text(tools, "java", "Java 21", browse="All files (*)")
         text(tools, "cli", "kicad-cli", "Must match the running KiCad version exactly.", browse="All files (*)")
         self.warm_router = QCheckBox("Keep Freerouting running (faster)")
-        self.warm_router.setToolTip("Runs VelaTrace's MIT launcher and the GPLv3 Freerouting JAR in one Java "
-                                    "process. Off starts a fresh Freerouting per route.")
+        self.warm_router.setToolTip("Keeps one Freerouting Java process between routes. Every route runs "
+                                    "VelaTrace's MIT launcher and the GPLv3 Freerouting JAR in one Java process "
+                                    "(needed to stop a stalled router and keep its partial route); "
+                                    "off starts a fresh process per route.")
         self.warm_router.setChecked(settings.warm_router)
         tools.addRow(self.warm_router)
 
@@ -1409,7 +1412,7 @@ class MainWindow(QMainWindow):
             if self.safety is None or self.safety.path != snapshot.path.resolve():
                 self.safety = BoardSafety(board, snapshot.path)
             self.validator = SafeCandidateValidator(self.safety, cli)
-            self.routing = RoutingSession(self.constraints, self.router, self.validator)
+            self.routing = RoutingSession(self.constraints, self.router, self.validator, repair_dangling)
             self.routing.command("/autoroute")
             self.writer = SafeBoardWriter(self.safety, self.validator)
         self.safety.board = board  # A fresh IPC handle; owned preview items carry over.
@@ -1496,7 +1499,7 @@ class MainWindow(QMainWindow):
                                       f"preview {preview_seconds:.1f}s")
                 self.note(
                     f"{plan.trace_count} traces · {len(plan.vias)} vias · {', '.join(plan.layers_used)}. "
-                    f"{self._route_timing}. Preview only (User.9). Checking DRC…" + "".join(" " + note for note in notes))
+                    f"{self._route_timing}. Preview only ({self.safety.preview_layer_name}). Checking DRC…" + "".join(" " + note for note in notes))
                 self.canvas.plan = plan
                 self.canvas.update()
                 self.check_drc(self.routing, self.validator, plan, generation, snapshot)
@@ -1558,12 +1561,12 @@ class MainWindow(QMainWindow):
         else:
             timing = f"{self._route_timing}; DRC {session.timings['validation']:.1f}s."
             if session.stage == RoutingStage.PREVIEW and report.drc_violations == 0:
-                self.note(f"{session.summary} {timing} Preview only (User.9). "
+                self.note(f"{session.summary} {timing} Preview only ({self.safety.preview_layer_name}). "
                           "Approve and apply copper, or reject.")
             else:  # approval blocked: the reason stays visible
                 self.blocking(session.summary + (" Reject and reroute, or Approve anyway."
                                                  if session.stage == RoutingStage.PREVIEW else " Reject and reroute."),
-                              timing + " Preview only: User.9 graphics do not change copper.")
+                              timing + f" Preview only: {self.safety.preview_layer_name} graphics do not change copper.")
             if self.worker is None:
                 self.status.setText("DRC finished.")
                 self.status.setToolTip("")
@@ -1621,7 +1624,7 @@ class MainWindow(QMainWindow):
             self.note(f"Applied {plan.trace_count} copper track segments and {len(plan.vias)} vias "
                 f"on {', '.join(plan.layers_used)} in {elapsed:.1f}s, as one KiCad commit.{override} "
                 "Refresh before further routing, including after Undo.")
-            self.status.setText("Copper applied. Review, then save in KiCad (Undo reverts it).")
+            self.status.setText("Copper applied. Press B to refill any copper pours, review, then save in KiCad (Undo reverts it).")
         def failed(message):
             self.blocking("Copper application was not confirmed; check KiCad before retrying. " + message,
                           "The panel keeps the previous preview; the live outcome may be uncertain.")

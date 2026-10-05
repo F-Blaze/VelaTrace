@@ -376,14 +376,34 @@ class SafetyTests(unittest.TestCase):
                             frozenset({"N"}), frozenset({"F.Cu", "In1.Cu", "B.Cu"}))
         self.assertEqual(len(prepare_copper(self.plan, self.dsn)), 1)
 
-    def test_context_creation_and_ignored_rules_invalidate(self):
+    def test_context_creation_and_changed_rules_invalidate(self):
         _, context = project_context(self.path)
         self.assertTrue(context_matches(context))
         self.path.with_suffix(".kicad_dru").write_text("(version 1)")
         self.assertFalse(context_matches(context))
-        self.path.with_suffix(".kicad_pro").write_text(json.dumps({"board": {"design_settings": {"rule_severities": {"clearance": "ignore"}}}}))
+        # A new KiCad project ignores some checks: not refused; candidate DRC runs them as warnings.
+        project = {"board": {"design_settings": {"rule_severities": {"clearance": "ignore", "shorting_items": "error"}}}}
+        self.path.with_suffix(".kicad_pro").write_text(json.dumps(project))
+        _, context = project_context(self.path)
+        used = json.loads(SafeCandidateValidator._context_files(context)[self.path.with_suffix(".kicad_pro").name])
+        self.assertEqual(used["board"]["design_settings"]["rule_severities"],
+                         {"clearance": "warning", "shorting_items": "error"})
+        self.assertEqual(json.loads(self.path.with_suffix(".kicad_pro").read_text()), project)  # User's file untouched.
+        project["board"]["design_settings"]["drc_exclusions"] = ["x"]
+        self.path.with_suffix(".kicad_pro").write_text(json.dumps(project))
         with self.assertRaises(CapabilityError):
             project_context(self.path)
+
+    def test_preview_layer_falls_back_to_an_enabled_spare_layer(self):
+        from kipy.proto.board.board_types_pb2 import BL_User_9, BL_User_4, BL_Cmts_User
+        self.assertEqual((self.safety._preview_layer(), self.safety.preview_layer_name), (BL_User_9, "User.9"))
+        for layers, expected, name in (('(39 "User.1" user) (45 "User.4" user)', BL_User_4, "User.4"),
+                                       ('(19 "Cmts.User" user "User.Comments")', BL_Cmts_User, "Cmts.User")):
+            self.path.write_text(BOARD.replace('(58 "User.9" user)', layers))
+            self.assertEqual((self.safety._preview_layer(), self.safety.preview_layer_name), (expected, name))
+        self.path.write_text(BOARD.replace('(58 "User.9" user)', ""))
+        with self.assertRaisesRegex(CapabilityError, "user drawing layer"):
+            self.safety._preview_layer()
 
     def test_real_validator_requires_cli_evidence_and_writer_binds_it(self):
         calls = []

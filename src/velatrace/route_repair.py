@@ -91,6 +91,111 @@ def _known_issues(result):
     return (len(result.issues) == result.violations + result.schematic_parity)
 
 
+def _without_parts(plan, removed):
+    tracks = []
+    for ti, track in enumerate(plan.tracks):
+        run = [track.points_mm[0]]
+        for ei, end in enumerate(track.points_mm[1:]):
+            if ("edge", ti, ei) in removed:
+                if len(run) > 1:
+                    tracks.append(Track(track.net, track.layer, track.width_mm, tuple(run)))
+                run = [end]
+            else:
+                run.append(end)
+        if len(run) > 1:
+            tracks.append(Track(track.net, track.layer, track.width_mm, tuple(run)))
+    vias = tuple(via for vi, via in enumerate(plan.vias) if ("via", vi) not in removed)
+    return RoutePlan(plan.base_design, tuple(tracks), vias)
+
+
+def _repair_inspected(plan, dsn, constraints, validator, deadline, max_passes):
+    """Use the validator's public inspect/reuse contract for live routing."""
+    original = plan
+    try:
+        inspection = validator.inspect(dsn, plan, tuple(constraints))
+        items = tuple(inspection.items)
+        keys = [("edge", ti, ei) for ti, track in enumerate(plan.tracks)
+                for ei in range(len(track.points_mm) - 1)]
+        keys += [("via", vi) for vi in range(len(plan.vias))]
+        if (len(items) != len(keys) or len({item.id for item in items}) != len(items)
+                or not all(_known_issues(candidate) for _, candidate in inspection.passes)):
+            validator.reuse(inspection)
+            return RepairResult(original, 0, 0, ("Cleanup skipped: DRC identities or copper mapping were incomplete.",))
+        sources = {item.id: key for item, key in zip(items, keys)}
+
+        def targets(check):
+            reports = [candidate for _, candidate in check.passes]
+            if any(report.unconnected for report in reports):
+                return set()
+            found = [{uuids[0] for kind, _severity, uuids in report.issues
+                      if kind in {"track_dangling", "via_dangling"}
+                      and len(uuids) == 1 and uuids[0] in sources} for report in reports]
+            return set.intersection(*found) if found else set()
+
+        if time.monotonic() >= deadline or any(candidate.unconnected
+                                                for _, candidate in inspection.passes):
+            validator.reuse(inspection)
+            return RepairResult(original, 0, 0, ("Cleanup skipped: route is incomplete or cleanup budget expired.",))
+
+        current = inspection
+        removed_ids, removed_parts = set(), set()
+        passes = 0
+        for _ in range(max_passes):
+            selected = targets(current) - removed_ids
+            if not selected or time.monotonic() >= deadline:
+                break
+            trial_removed = removed_ids | selected
+            trial_items = tuple(item for item in items if item.id not in trial_removed)
+            trial_plan = _without_parts(plan, {sources[item_id] for item_id in trial_removed})
+            trial = validator.inspect(dsn, trial_plan, tuple(constraints), trial_items)
+            before = [candidate for _, candidate in current.passes]
+            after = [candidate for _, candidate in trial.passes]
+            safe = bool(after) and all(_known_issues(candidate) and candidate.unconnected == 0
+                                      for candidate in after)
+            progressed = False
+            if safe:
+                for old, new in zip(before, after):
+                    old_targets = {uuids[0] for kind, _, uuids in old.issues
+                                   if kind in {"track_dangling", "via_dangling"} and len(uuids) == 1}
+                    new_targets = {uuids[0] for kind, _, uuids in new.issues
+                                   if kind in {"track_dangling", "via_dangling"} and len(uuids) == 1}
+                    additions = Counter(new.issues) - Counter(old.issues)
+                    if any(kind not in {"track_dangling", "via_dangling"} or len(uuids) != 1
+                           or uuids[0] not in sources for kind, _severity, uuids in additions):
+                        safe = False
+                        break
+                    if new_targets & selected or not old_targets - new_targets:
+                        safe = False
+                        break
+                    # A dangling via can expose the dead-end segment behind it,
+                    # so progress is removal of any old issue ID, even if another
+                    # dangling ID replaces it in this trial.
+                    progressed = progressed or bool(old_targets - new_targets)
+            if not safe or not progressed:
+                break
+            removed_ids = trial_removed
+            removed_parts = {sources[item_id] for item_id in removed_ids}
+            current = trial
+            passes += 1
+
+        if time.monotonic() >= deadline:
+            validator.reuse(inspection)
+            return RepairResult(original, 0, passes, ("Cleanup rolled back: cleanup budget expired.",))
+        if not removed_ids:
+            validator.reuse(current)
+            return RepairResult(original, 0, passes, ("No safe dangling-copper cleanup was found.",))
+        validator.reuse(current)
+        repaired = _without_parts(plan, removed_parts)
+        removed_segments = sum(key[0] == "edge" for key in removed_parts)
+        return RepairResult(repaired, removed_segments, passes,
+                            (f"Removed {len(removed_ids)} DRC-identified dangling copper item(s); final inspection reused.",))
+    except ValidationError:
+        raise
+    except Exception as exc:
+        return RepairResult(original, 0, 0,
+                            (f"Cleanup unavailable: {type(exc).__name__}: {exc}",))
+
+
 def _evaluate(validator, dsn, source, files, name, items, clearances, snapshot, context, deadline):
     """Run official candidate DRCs with stable temporary item UUIDs."""
     results = []
@@ -118,17 +223,24 @@ def _evaluate(validator, dsn, source, files, name, items, clearances, snapshot, 
 
 
 def repair_dangling(plan: RoutePlan, dsn, constraints, validator: SafeCandidateValidator, *,
-                    max_passes: int = 4, timeout_seconds: float = 30) -> RepairResult:
+                    max_passes: int = 4, timeout_seconds: float = 30,
+                    budget_seconds: float | None = None) -> RepairResult:
     """Remove only DRC-identified dead-end segments from disposable candidates.
 
     The original plan is returned on any inconclusive trial. Stale board/project
     state propagates as a validation error. This function never writes a board.
     Callers must run the normal validator on the returned plan before use.
     """
+    if budget_seconds is not None:
+        timeout_seconds = budget_seconds
     if (type(max_passes) is not int or not 1 <= max_passes <= 16
             or type(timeout_seconds) not in {int, float}
-            or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 120):
+            or not math.isfinite(timeout_seconds) or timeout_seconds > 120
+            or (budget_seconds is None and timeout_seconds <= 0)):
         raise ValidationError("Invalid DRC cleanup budget.")
+    if callable(getattr(validator, "inspect", None)) and callable(getattr(validator, "reuse", None)):
+        return _repair_inspected(plan, dsn, constraints, validator,
+                                 time.monotonic() + max(0, timeout_seconds), max_passes)
     original = plan
     removed = set()
     source_map = {}

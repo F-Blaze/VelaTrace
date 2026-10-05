@@ -2,14 +2,16 @@
 
 `velatrace.bom.bom_findings(snapshot, parts_db=None, *, boards_per_order=5)` returns `Finding`s (see `findings.py`) that save money or time on the bill of materials. It is deterministic, local and read-only: it never edits the design and never touches the network. Every finding is a suggestion with its evidence and a concrete fix.
 
+Status: BOM tidy-ups (value and package spelling, merges) are the part with real-board evidence. JLCPCB Basic-part suggestions are untested on real data. Dollar figures are estimates, not quotes. The default parts-list source has no licence file (see below).
+
 Without a parts list only the offline consolidation checks run. With a parts list (`velatrace.parts_db`, below) the JLCPCB Basic/Extended checks run too. Nothing needs an API key or a paid service.
 
 ## Checks
 
 | Rule | Severity | Fires when | Guards against false positives |
 |---|---|---|---|
-| `bom.value_normalise` | saving | Same kind, value and package spelled differently (`100n`, `0.1uF`, `100nF`) | Refused when explicit ratings differ (`10u 6V3` vs `10u 25V`), extra unexplained text differs, or members carry different LCSC/MPN numbers |
-| `bom.value_merge` | saving | Pull-up/pull-down resistors in one package whose values are within 20% (`4.7k`, `4.99k`, `5.1k`) | Pull roles only (see below); a value line is only removed when *every* resistor of that value is a simple pull; precision (<1%) parts excluded |
+| `bom.value_normalise` | saving | Same kind, value and package spelled differently (`100n`, `0.1uF`, `100nF`) | Refused when explicit ratings differ (`10u 6V3` vs `10u 25V`), a tolerance is stated on only some members (`10k` vs `10k 0.1%`), extra unexplained text differs, or members do not all carry the same LCSC/MPN (a generic part and a specific MPN, or two different MPNs, are different parts). Members sharing one MPN may disagree on voltage text (`1uF, 25V` / `1uF, 50V` on the same MPN): the finding says the MPN's datasheet rating is the real one. The suggested spelling never drops or lowers a stated voltage |
+| `bom.value_merge` | saving | Pull-up/pull-down resistors in one package whose values are within 20% (`4.7k`, `5.1k`, `5.6k`); the target may also be any other resistor line already on the BOM (a 5.6k tach pull-up can use the board's 5.1k USB-C Rd line) | Pull roles only (see below); a value line is only removed when *every* resistor of that value is a simple pull; parts on the target line never change; the target must be an E24 value with compatible ratings; precision (<1%) parts excluded |
 | `bom.package_merge` | saving | Same value in several packages (`100n` in 0402 and 0603) | Only pull and decoupling roles move; capacitors ≥1 µF (DC-bias derating), resistors <1 Ω, inductors and parts with a power rating in the value never move; voltage rating reminder for capacitors |
 | `bom.jlc_basic_equivalent` | saving | An LCSC field names an Extended part and a Basic/Preferred part has the same value, package and equal-or-better ratings | Resistors and MLCCs only; dielectric never downgraded (C0G stays C0G; X7R may become X7R/X7S/X8R/C0G); voltage ≥ stated rating and ≥ rail voltage from the net name; tolerance ≤ stated tolerance |
 | `bom.jlc_basic_alternative` | saving | A passive without an LCSC field has no Basic/Preferred match, but a pull resistor has a Basic value within 20% (values already on the board preferred), or a pull/decoupling part has a Basic match in another common package | Same role and rating guards; large capacitors only move to the same or a larger package |
@@ -19,14 +21,17 @@ Without a parts list only the offline consolidation checks run. With a parts lis
 
 Passives are recognised from the reference (`R`, `C`, `L` + number) and an imperial chip size in the footprint name (`R_0402_1005Metric` → 0402). Through-hole, electrolytic, tantalum, arrays/networks and trimmers are skipped, as are values that cannot be parsed unambiguously (a bare `100` on a capacitor, `1M` on a capacitor) and anything marked `DNP`/`DNF`/`NC`.
 
-Value parsing accepts `4k7`, `4.7k`, `4K7`, `4700`, `4.7kΩ`, `4.7kohm`, `0R`, `0R1`, `R10`, `10u`, `100nF`, `0.1µF`, `1n5`, `2M2`, plus rating tokens `50V`, `6V3`, `1%`, `±5%`, `X7R`, `NP0`/`C0G`, `1/4W`. SI prefixes are case sensitive where it matters (`1m` = milli, `1M` = mega).
+Value parsing accepts `4k7`, `4.7k`, `4K7`, `4700`, `4.7kΩ`, `4k7Ω`, `10 kΩ`, `4.7kohm`, `0R`, `0R1`, `2R2`, `R10`, `10u`, `100nF`, `100 nF`, `0.1µF`, `1n5`, `2M2`, European decimal commas (`4,7uF`, `2,2k`), plus rating tokens `50V`, `6V3`, `1%`, `±5%`, `X7R`, `NP0`/`C0G`, `1/4W`. Package sizes and kind words in the value (`0402 10uF`, `1k 0402 Resistor`) are ignored; the package always comes from the footprint. SI prefixes are case sensitive where it matters (`1m` = milli, `1M` = mega).
+
+LCSC numbers are read from fields named `LCSC`, `LCSC Part #`, `LCSC#`, `JLCPCB Part #`, `JLC`, `SPN`/`SPN1`, `Supplier Part Number` and similar (case, spaces and `_-.#:/` ignored), and only when the value looks like `C<digits>`; a DigiKey number in `Supplier Part Number` is skipped. MPNs come from `MPN`, `Manufacturer Part Number`, `Manufacturer PartNo`, `Mfr. Part #`, `PartNo`, `Part Number`, `P/N` and similar.
 
 ### Roles
 
 Roles come from connectivity only; anything not proven simple is `other` and never has its value changed.
 
 - **Decoupling**: a two-pin capacitor between a ground net (`GND*`, `AGND`, `VSS*`, …) and a power net (`+3V3`, `3V3`, `+5V`, `VCC*`, `VDD*`, `VBUS`, `VBAT*`, `VIN`, `VSYS`, …).
-- **Pull-up / pull-down**: a two-pin 1 kΩ–1 MΩ resistor with exactly one end on a power or ground net, where every other pin on the pulled net belongs to an IC, connector, switch, test point or module (`U`, `IC`, `J`, `P`, `CN`, `SW`, `S`, `TP`, `MOD`, `A`…). Another resistor or capacitor on the net (divider, RC reset/timing, filter), a diode/LED (current setting), a transistor or crystal makes it `other`. So do net or pin names that indicate a value-setting node: `FB`, `ADJ`, `RT`, `CT`, `ISET`, `PROG`, `RSET`, `SS`, `COMP`, `ILIM`, `SENSE`, `CC1`/`CC2` (USB-C Rd is spec-mandated 5.1 kΩ), `ID`, `VREF`, `ADC`/`AIN`, `CFG`/`MODE`/`SEL`/`ADDR` (analog straps), op-amp inputs and similar.
+- **Pull-up / pull-down**: a two-pin 1 kΩ–1 MΩ resistor with exactly one end on a power or ground net, where every other pin on the pulled net belongs to an IC, connector, switch, test point or module (`U`, `IC`, `J`, `P`, `CN`, `SW`, `S`, `TP`, `MOD`, `A`…). Another resistor or capacitor on the net (divider, RC reset/timing, filter), a diode/LED (current setting), a transistor or crystal makes it `other`. So do net or pin names that indicate a value-setting node: `FB`, `ADJ`, `RT`, `CT`, `ISET`, `PROG`, `RSET`, `SS`, `COMP`, `ILIM`, `SENSE`, `CC1`/`CC2` (USB-C Rd is spec-mandated 5.1 kΩ), `ID`, `VREF`, `ADC`/`AIN`, `CFG`/`MODE`/`SEL`/`ADDR` (analog straps), PHY/transceiver bias and reference pins (`RTX`, `RTXT`, `EXTRES`, `RREF`, `RBIAS`, `IREF`, `ISET`, e.g. a 6k04 on `EPHY_RTX`), op-amp inputs and similar.
+- **Precision values**: a resistor whose value is not in the E24 series (`4.99k`, `6.04k`, `215k`: E48/E96/E192) was usually chosen for precision, so it only counts as a pull when the pulled net is named like a digital pull (`SDA`, `SCL`, `RESET`/`NRST`, `EN`, `CS`, `INT`, `IRQ`, `ALERT`, `BOOT`, `TACH`, `PGOOD`, `GPIOx`, …). An E96 value on an unnamed net is `other`.
 
 Pin names come from schematic netlists; the IPC board reader has none, so board-only snapshots rely on topology and net names alone.
 

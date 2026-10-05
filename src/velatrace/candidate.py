@@ -1,5 +1,5 @@
 """Non-destructive candidate construction and independent official CLI validation."""
-from collections import Counter
+from collections import Counter, namedtuple
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -88,8 +88,6 @@ def project_context(board_path: Path):
             raise ValueError()
         if settings.get("drc_exclusions"):
             raise CapabilityError("Remove DRC exclusions before routing; excluded checks cannot prove safety.")
-        if any(value == "ignore" for value in settings.get("rule_severities", {}).values()):
-            raise CapabilityError("Enable all DRC checks before routing; the project contains ignored checks.")
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ValidationError("Project design rules are missing or malformed.") from exc
     paths = [project]
@@ -102,6 +100,20 @@ def project_context(board_path: Path):
                 raise CapabilityError("Hierarchical schematic context is not supported by candidate validation yet.")
         paths.append(path)
     return data, {path: file_digest(path) if path.exists() else None for path in paths}
+
+
+def checked_project(data: bytes) -> bytes:
+    """The project as candidate DRC uses it: every check set to "ignore" runs as a
+    warning instead. A new KiCad project ignores several checks by default; rather
+    than refuse it, the temporary DRC copy (never the user's file) checks them, so a
+    route still cannot add an issue of any kind unnoticed."""
+    project = json.loads(data)
+    severities = project["board"]["design_settings"].get("rule_severities", {})
+    ignored = [name for name, value in severities.items() if value == "ignore"]
+    if not ignored:
+        return data
+    severities.update(dict.fromkeys(ignored, "warning"))
+    return json.dumps(project, indent=2).encode("utf-8")
 
 
 def context_matches(context):
@@ -136,7 +148,7 @@ def trusted_via_catalog(dsn: DsnInput) -> dict[str, ViaSpec]:
                     abs(float(circle[2])*scale - diameter) > 1e-6):
                 raise ValidationError("Only matching circular through-via padstacks are supported.")
             layers.add(circle[1])
-        if layers != set(dsn.layers) or not {"F.Cu", "B.Cu"} <= layers:
+        if layers != set(dsn.layers) or not {"F.Cu", "B.Cu"} <= dsn.board_layers:
             raise ValidationError("Via padstack must span every existing copper layer.")
         result[name] = ViaSpec(diameter, drill, ("F.Cu", "B.Cu"))
     return result
@@ -175,7 +187,7 @@ def prepare_copper(plan: RoutePlan, dsn: DsnInput, *, source: str | None = None)
     # Inner planes are commonly typed power/mixed; they are still copper layers in the DSN.
     actual_layers = {row[1] for row in one(root, "layers")[1:] if isinstance(row, list) and len(row) > 2
                      and row[2] in {"signal", "power", "mixed", "jumper"}}
-    if actual_layers != set(dsn.layers):
+    if actual_layers != dsn.board_layers:
         raise ValidationError("Saved board copper layers differ from DSN.")
     nets = board_nets(root)
     catalog = set(trusted_via_catalog(dsn).values()) if plan.vias else set()
@@ -218,34 +230,47 @@ def candidate_text(source: str, items: tuple[CopperItem, ...]) -> str:
     return source[:boundary] + "\n" + "\n".join(lines) + "\n" + source[boundary:]
 
 
+def _carried(baseline, candidate) -> Counter:
+    """Candidate issues already on the unrouted board: same type, severity and items.
+    An issue without items cannot be matched to anything, so it always counts as new."""
+    both = Counter(candidate.issues) & Counter(baseline.issues)
+    return Counter({issue: count for issue, count in both.items() if issue[2]})
+
+
 def route_issues(baseline, candidate) -> tuple[int, int]:
     """(blocking, pre-existing warnings) for one DRC pass.
 
     A route may not add any DRC issue, and pre-existing errors still block. Warnings
-    already on the unrouted board are reported only. Without issue identities every
-    candidate issue blocks."""
+    with matching identities already on the unrouted board are reported only.
+    Unidentified candidate issues remain blocking, while identifiable carried
+    warnings can still be recognized."""
     total = candidate.violations + candidate.schematic_parity
-    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
-        return total, 0
-    before, after = Counter(baseline.issues), Counter(candidate.issues)
-    carried = after & before  # Same type, severity and items: already on the unrouted board.
-    errors = sum(count for issue, count in carried.items() if issue[1] != "warning")
-    return (after - before).total() + errors, carried.total() - errors
+    warnings = sum(count for issue, count in _carried(baseline, candidate).items() if issue[1] == "warning")
+    return total - warnings, warnings
 
 
 def blocking_reasons(baseline, candidate) -> tuple[str, ...]:
     total = candidate.violations + candidate.schematic_parity
     if not total:
         return ()
-    if len(candidate.issues) != total or len(baseline.issues) != baseline.violations + baseline.schematic_parity:
-        return ("DRC issue identities unavailable; review the full KiCad DRC report",)
-    before, after = Counter(baseline.issues), Counter(candidate.issues)
-    blocked = after - before
-    blocked.update({issue: count for issue, count in (after & before).items() if issue[1] != "warning"})
-    counts = Counter()
-    for (kind, severity, _), count in blocked.items():
-        counts[(kind, severity)] += count
-    return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}" for (kind, severity), count in sorted(counts.items()))
+    carried = _carried(baseline, candidate)
+    def summary(issues, note=""):
+        counts = Counter()
+        for (kind, severity, _), count in issues.items():
+            counts[(kind, severity)] += count
+        return tuple(f"{kind.replace('_', ' ')} ({severity}): {count}{note}" for (kind, severity), count in sorted(counts.items()))
+    errors = Counter({issue: count for issue, count in carried.items() if issue[1] != "warning"})
+    reasons = list(summary(Counter(candidate.issues) - carried))
+    unknown = total - len(candidate.issues)
+    if unknown > 0:
+        reasons.append(f"DRC issue identities unavailable: {unknown}")
+    return tuple(reasons) + summary(errors, " already on the unrouted board")
+
+
+def preexisting_errors(baseline, candidate) -> int:
+    """Blocking issues of route_issues() that were already on the unrouted board."""
+    total = candidate.violations + candidate.schematic_parity
+    return sum(count for issue, count in _carried(baseline, candidate).items() if issue[1] != "warning")
 
 
 def _parallel(function, values):
@@ -253,6 +278,10 @@ def _parallel(function, values):
     values = list(values)
     with ThreadPoolExecutor(max(1, len(values))) as pool:
         return list(pool.map(function, values))
+
+
+# One inspect() result: candidate DRC of `items` for a plan, bound to the inputs checked.
+Inspection = namedtuple("Inspection", "dsn_digest plan_digest constraints items context snapshot passes")
 
 
 class SafeCandidateValidator:
@@ -263,6 +292,7 @@ class SafeCandidateValidator:
         # ponytail: unbounded per-session cache, one small entry per board/rules revision.
         self._baselines = {}
         self._lock = threading.Lock()
+        self._inspected = None  # Last inspect(): reused by validate() for the same plan.
 
     def supports(self, constraints):
         return all(item.kind in {"clearance", "trace-width"} and item.target == "all nets" for item in constraints)
@@ -282,7 +312,7 @@ class SafeCandidateValidator:
                 data = path.read_bytes()
                 if hashlib.sha256(data).hexdigest() != digest:
                     raise ValidationError("Project/rules changed during DRC; route again.")
-                files[path.name] = data
+                files[path.name] = checked_project(data) if path.suffix == ".kicad_pro" else data
         return files
 
     @staticmethod
@@ -324,15 +354,30 @@ class SafeCandidateValidator:
         _parallel(lambda clearance: self._drc(name, source, self._with_rule(files, name, clearance), True),
                   self._rule_sets(constraints))
 
-    def validate(self, dsn, plan, constraints):
-        self.evidence = None
+    def inspect(self, dsn, plan, constraints, items=None):
+        """Candidate DRC without approval evidence: an Inspection whose passes are
+        (baseline, candidate) DRC results per rule set. The public hook for route repair.
+
+        `items` defaults to the plan's copper. A repair passes a subset of an earlier
+        call's items for the plan it derived from them: ids are kept, so DRC issues
+        compare across calls, and the subset must be exactly that plan's copper.
+        validate() reuses the latest result (or one handed back through reuse()) for
+        the same plan, after re-checking that board, project and DSN are unchanged."""
+        self.evidence = self._inspected = None
         if not self.supports(constraints):
             raise CapabilityError("Only all-nets width and clearance constraints are validated.")
         dsn.assert_unchanged()
         source = self.safety.assert_matches(dsn)
         snapshot = canonical(parse(source, kicad=True))
         _, context = project_context(dsn.ticket.board_path)
-        items = prepare_copper(plan, dsn, source=source)
+        expected = prepare_copper(plan, dsn, source=source)
+        def shape(item):
+            ends = (item.start, item.end) if item.end is None else tuple(sorted((item.start, item.end)))
+            return item.kind, item.net, item.layer, ends, item.width, item.drill
+        if items is None:
+            items = expected
+        elif Counter(map(shape, items)) != Counter(map(shape, expected)):
+            raise ValidationError("Candidate copper differs from the route plan.")
         for constraint in constraints:
             if constraint.kind == "trace-width" and any(item.width + 1e-9 < constraint.minimum_mm for item in items if item.kind == "segment"):
                 raise ValidationError("Router violated the confirmed minimum trace width.")
@@ -349,13 +394,39 @@ class SafeCandidateValidator:
         if not context_matches(context):
             raise ValidationError("Project/rules changed during DRC; route again.")
         self.safety.assert_matches(dsn, expected_board=snapshot)
+        self._inspected = Inspection(dsn.digest, plan_digest(plan), tuple(constraints), tuple(items), context,
+                                     snapshot, passes)
+        return self._inspected
+
+    def reuse(self, inspection: Inspection):
+        """Make an earlier inspect() result the one validate() may reuse."""
+        self._inspected = inspection
+
+    def validate(self, dsn, plan, constraints):
+        self.evidence = None
+        cached = self._inspected
+        if cached is not None and cached[:3] == (dsn.digest, plan_digest(plan), tuple(constraints)):
+            # Same plan, constraints and DSN: the DRC results stand if nothing else moved.
+            items, context, snapshot, passes = cached[3:]
+            dsn.assert_unchanged()
+            if not context_matches(context):
+                raise ValidationError("Project/rules changed during DRC; route again.")
+            self.safety.assert_matches(dsn, expected_board=snapshot)
+        else:
+            items, context, snapshot, passes = self.inspect(dsn, plan, constraints)[3:]
+        self._inspected = None
         judged = [route_issues(baseline, candidate) for baseline, candidate in passes]
-        report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged),
-                                  max(candidate.unconnected for _, candidate in passes),
+        unconnected = max(candidate.unconnected for _, candidate in passes)
+        # Connections open on the unrouted board (pours filled) are the routing job.
+        total = max(max(baseline.unconnected for baseline, _ in passes), unconnected)
+        report = ValidationReport(plan_digest(plan), max(blocking for blocking, _ in judged), unconnected,
+                                  routed_connections=total - unconnected, total_connections=total,
                                   enforced_constraint_ids=frozenset(c.id for c in constraints),
                                   details="Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
                                   board_digest=dsn.ticket.board_digest,
                                   preexisting_warnings=max(carried for _, carried in judged),
+                                  preexisting_errors=min(preexisting_errors(baseline, candidate)
+                                                         for baseline, candidate in passes),
                                   blocking_reasons=tuple(dict.fromkeys(reason for baseline, candidate in passes
                                                                       for reason in blocking_reasons(baseline, candidate))))
         self.evidence = (dsn.digest, plan_digest(plan), report, items, context, snapshot)

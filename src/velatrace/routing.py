@@ -52,10 +52,13 @@ class ValidationReport:
     board_digest: str = ""
     preexisting_warnings: int = 0  # Present on the unrouted board too; reported, not blocking.
     blocking_reasons: tuple[str, ...] = ()
+    # Of drc_violations: errors already on the unrouted board. They still block (use
+    # the explicit override), but are reported as not caused by the route.
+    preexisting_errors: int = 0
 
     def __post_init__(self):
         for value in (self.drc_violations, self.unconnected_count, self.routed_connections, self.total_connections,
-                      self.preexisting_warnings):
+                      self.preexisting_warnings, self.preexisting_errors):
             if value is not None and (type(value) is not int or value < 0):
                 raise ValidationError("Routing validation counts must be non-negative integers or unknown.")
         if self.routed_connections is not None and self.total_connections is not None and self.routed_connections > self.total_connections:
@@ -82,7 +85,8 @@ class Router(Protocol):
 class CandidateValidator(Protocol):
     """May also define prepare(dsn, constraints): route-independent warm-up (e.g. the
     unrouted-board baseline DRC) run concurrently with the router. It is a cache only;
-    its errors are ignored because validate() re-derives and reports everything."""
+    its errors are ignored because validate() re-derives and reports everything.
+    A session `repair` (route_repair.repair_dangling) also needs inspect()/reuse()."""
     def supports(self, constraints: tuple[Constraint, ...]) -> bool:
         """True only when every numeric constraint can be enforced and checked."""
         ...
@@ -101,8 +105,10 @@ class BoardWriter(Protocol):
 
 
 class RoutingSession:
-    def __init__(self, constraints: ConstraintStore, router: Router, validator: CandidateValidator):
-        self.constraints, self.router, self.validator = constraints, router, validator
+    def __init__(self, constraints: ConstraintStore, router: Router, validator: CandidateValidator, repair=None):
+        """repair(plan, dsn, constraints, validator) -> plan runs on every routed plan
+        before it is previewed or checked (e.g. route_repair.repair_dangling)."""
+        self.constraints, self.router, self.validator, self.repair = constraints, router, validator, repair
         self.mode = Mode.AUDIT
         self.stage = RoutingStage.SETUP
         self.placed = False
@@ -217,7 +223,21 @@ class RoutingSession:
             plan = parse_ses(ses, expected_design=self.input.base_design or self.input.path.name, nets=set(self.input.nets),
                              layers=set(self.input.layers), via_catalog=via_catalog,
                              expected_placements=self.input.placements,
-                             expected_placement_resolution_mm=self.input.placement_resolution_mm)
+                             expected_placement_resolution_mm=self.input.placement_resolution_mm,
+                             layer_aliases=self.input.layer_aliases,
+                             optional_placements=self.input.unconnected_references)
+            if self.repair is not None:
+                # Before anything is shown: preview, DRC and applied copper are all this plan.
+                self.progress("Checking the route")
+                if self._warmup is not None:
+                    wait([self._warmup])
+                started = perf_counter()
+                repaired = self.repair(plan, self.input, self.constraints.items, self.validator)
+                # Research/benchmark repair callers may return diagnostics with
+                # the proposed plan; the live session consumes only that plan.
+                plan = repaired.plan if hasattr(repaired, "plan") else repaired
+                self.timings["repair"] = perf_counter() - started
+                self._check_confirmation()
             self.plan = plan
             self.stage = RoutingStage.VALIDATING
             return plan
@@ -258,17 +278,24 @@ class RoutingSession:
         if self.plan is None or self.report is None:
             return "No routing result."
         percent = self.report.percent_routed
-        completion = ("All connections verified" if self.report.unconnected_count == 0 else "Completion unknown") if percent is None else f"{percent:.1f}% routed"
+        completion = (("All connections verified" if self.report.unconnected_count == 0 else "Completion unknown")
+                      if percent is None else f"{self.report.routed_connections} of {self.report.total_connections} "
+                      f"connections routed ({percent:.1f}%)")
         drc = "unknown" if self.report.drc_violations is None else str(self.report.drc_violations)
         text = f"{self.plan.trace_count} traces; {len(self.plan.vias)} vias; layers: {', '.join(self.plan.layers_used)}; DRC violations: {drc}; {completion}."
         if self.report.drc_violations:
             text += " Approval blocked: " + ("; ".join(self.report.blocking_reasons) or "resolve the reported DRC violations") + "."
+        if self.report.preexisting_errors:
+            new = self.report.drc_violations - self.report.preexisting_errors
+            text += (f" {self.report.preexisting_errors} of these DRC error(s) were already on the unrouted board,"
+                     f" not caused by this route ({new} new); fix them in KiCad or approve anyway.")
         if self.report.preexisting_warnings:
             text += (f" {self.report.preexisting_warnings} pre-existing DRC warning(s) on the unrouted board"
                      " were not caused by this route and do not block approval; review them in KiCad.")
         if self.stage == RoutingStage.SHORTFALL:
             text += (" Routing stopped: completion verification is unavailable." if self.report.unconnected_count is None
-                     else " Routing stopped: needs more layers or relaxed clearance.")
+                     else f" Partial route: {self.report.unconnected_count} connection(s) left unrouted."
+                          " Reject and reroute, or the board needs more room, layers or relaxed clearance.")
             text += " Stackup was not changed."
         return text
 

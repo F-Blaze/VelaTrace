@@ -1,0 +1,58 @@
+name: Audit false positive / missed finding
+description: An audit or BOM finding was wrong, or a real mistake was not flagged. This directly improves rule quality.
+labels: ["audit-accuracy"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A minimal snippet (a few parts and nets) helps far more than a whole board.
+        Do not post confidential or NDA designs.
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id
+      description: Shown in the finding and listed in docs/behavior-and-limits.md and docs/bom.md. For a missed finding, write "none (missed)".
+      placeholder: "decoupling.missing"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong?
+      options: [False positive (flagged but design is fine), Missed finding (real problem not flagged), Wrong evidence / fix text, Wrong cost or saving]
+    validations:
+      required: true
+  - type: textarea
+    id: snippet
+    attributes:
+      label: Board or netlist snippet
+      description: Relevant parts with reference, value, footprint, and their nets/pins. A KiCad XML netlist excerpt or a short table is fine.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should VelaTrace have said (or stayed silent about), and why?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: The finding's title, evidence and fix as shown (copy the text).
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Audit source
+      options: [Open PCB, Saved schematic / XML netlist, Not sure]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: VelaTrace version or commit
+      placeholder: "0.1.0a1 / 61daf7f"

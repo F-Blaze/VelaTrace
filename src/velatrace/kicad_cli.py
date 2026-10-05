@@ -42,6 +42,7 @@ def user_config_dir(version: tuple[int, int, int]) -> Path:
     return Path(root) / f"{version[0]}.{version[1]}"
 
 
+_FONT_FACE = re.compile(r'\(face "(?:[^"\\]|\\.)*"\)')
 _FOOTPRINT_ID = re.compile(r'\(footprint\s+"((?:[^"\\]|\\.)*)"')
 
 
@@ -151,14 +152,17 @@ def parse_drc_report(path: Path) -> DrcResult:
                     not {"error", "warning", "exclusion"}.issubset(severities)):
                 raise ValidationError("KiCad omitted DRC severities; a complete report is required.")
         identities = [_issue(row) for row in (*rows[0], *rows[2])]
-        issues = () if any(issue is None for issue in identities) else tuple(sorted(identities))
+        # Keep identities KiCad did provide. The count still includes unidentified
+        # findings, which route_issues() treats as blocking; known carried warnings
+        # need not become blockers just because another row omitted its UUID.
+        issues = tuple(sorted(issue for issue in identities if issue is not None))
     except (ValueError, KeyError, TypeError) as exc:
         raise ValidationError("KiCad DRC report is incomplete or malformed; approval is unavailable.") from exc
     return DrcResult(*(len(items) for items in rows), issues)
 
 
 class KiCadCli:
-    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 120, *,
+    def __init__(self, executable: str | Path = "kicad-cli", timeout: float = 300, *,
                  config_directory: Path | None = None):
         found = shutil.which(str(executable))
         if not found:
@@ -443,7 +447,10 @@ class KiCadCli:
             raise ExportUnavailable("KiCad's bundled Python was not found next to kicad-cli.")
         board_path, folder = Path(board_path), Path(folder)
         board = folder / board_path.name
-        board.write_text(board_text, encoding="utf-8")
+        # A missing custom font can make KiCad's export interpreter spend minutes
+        # loading. The export copy uses its built-in font; DRC still checks the
+        # actual board text and independent copper-text handling uses SVG strokes.
+        board.write_text(_FONT_FACE.sub("", board_text), encoding="utf-8")
         project = board_path.with_suffix(".kicad_pro")
         if project.is_file():  # Net classes live in the project; the DSN carries them.
             shutil.copyfile(project, board.with_suffix(".kicad_pro"))

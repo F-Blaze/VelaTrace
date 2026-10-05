@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in VelaTrace crashed, misbehaved or wrote something unexpected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping. Please do not paste API keys, confidential boards or NDA designs.
+        For a wrong or missing audit finding use "Audit false positive" instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If you can reproduce it with `python -m velatrace --demo` or a fixture from `tests/fixtures`, say so.
+      placeholder: |
+        1. Open the PCB ...
+        2. Click Route board ...
+    validations:
+      required: true
+  - type: input
+    id: velatrace
+    attributes:
+      label: VelaTrace version or commit
+      placeholder: "0.1.0a1 / 61daf7f"
+    validations:
+      required: true
+  - type: input
+    id: kicad
+    attributes:
+      label: KiCad version (full, including patch)
+      placeholder: "10.0.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Audit, BOM savings, Routing / preview / approve, HTML report, Install / setup, UI, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error text, status message or log
+      description: Copy exact messages. Remove personal paths and keys.
+      render: text
+  - type: checkboxes
+    id: board-state
+    attributes:
+      label: Board safety (routing bugs only)
+      options:
+        - label: I checked the `.velatrace/backups` folder beside my board; my original board is intact or restored.

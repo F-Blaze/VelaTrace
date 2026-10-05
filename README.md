@@ -34,6 +34,8 @@ automation, measured against the current Freerouting workflow. See the
 
 ## Why VelaTrace
 
+**Current limits:** The installed companion window routes through Freerouting with one track width and clearance for all nets. It has no differential-pair or length tuning and no BGA fanout; dense boards may remain partially routed. DRC-clean does not establish electrical correctness. Vela-routing is experimental research and is not an available routing backend in the plugin.
+
 - **Connectivity-aware, not guesswork.** Checks and AI classification start from actual pad/net connectivity (open PCB, or a saved schematic/XML netlist), not just reference designators. Two parts on the same rail are not called duplicates unless value, footprint and pin connectivity match.
 - **Suggestions, never deletions.** Verdicts are advice. VelaTrace never removes a component; you approve everything.
 - **Code does the math.** Flags, Decimal totals, hypothetical savings and token counts are computed in code. The model supplies judgments only.
@@ -45,7 +47,7 @@ automation, measured against the current Freerouting workflow. See the
 
 ## Quickstart
 
-> **Status: 0.1.0a1, development alpha.** No signed release exists yet, and the maintainer recommends reviewing the code before installing. Live preview, cleanup and approval were accepted on KiCad 10.0.4/10.0.6. Details: [build status](docs/BUILD_STATUS.md), [release review](docs/RELEASE_REVIEW.md).
+> **Status: 0.1.0a1, development alpha.** No signed release exists yet; use a tagged release when available, and review the code before testing a source checkout. Live preview, cleanup and approval were accepted on KiCad 10.0.4/10.0.6. Details: [build status](docs/internal/BUILD_STATUS.md), [release review](docs/internal/RELEASE_REVIEW.md).
 
 **Requirements:** KiCad 9+ (tested on 10.0.4 / 10.0.6) with the IPC API enabled, and Python 3.11+. For routing also: Temurin **Java 21** and the **Freerouting 2.1.0** JAR.
 
@@ -53,7 +55,7 @@ Route validation on boards containing copper zones requires **KiCad 10+** for
 official CLI zone refilling. KiCad 9 reports this limitation instead of validating
 against potentially stale fills.
 
-1. **Install the plugin.** Clone into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace`:
+1. **Install the plugin.** Once a signed tagged release exists, follow the [install checklist](docs/install.md). Until then, testers can clone into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace`; review the code first:
 
    ```sh
    # Windows: Documents/KiCad/10.0/plugins   Linux: ~/.local/share/KiCad/10.0/plugins

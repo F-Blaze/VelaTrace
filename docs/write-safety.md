@@ -38,7 +38,7 @@ UI integration order:
    `intent.json` and `completion.json`. Its single
    transaction removes the preview and adds the candidate copper. Do not call
    `board.save()` afterward: saving is the user's explicit KiCad action.
-6. On normal close or `/autoroute_exit`, clear temporary graphics. If cleanup
+6. On normal close or when leaving Route mode, clear temporary graphics. If cleanup
    refuses or IPC is uncertain, display the error and backup path; do not silently
    dismiss the window or retry a copper commit.
 
@@ -60,7 +60,7 @@ name alone is not trusted. There is no stackup setter.
 The candidate is local temporary data under the project `.velatrace/backups`
 directory. It copies the corresponding project, rules and non-hierarchical
 schematic context. The validator binds both contents and absence of optional
-files, refuses DRC exclusions/ignored checks, and invokes official `kicad-cli`
+files, refuses DRC exclusions, runs checks the project sets to Ignore as warnings (in its temporary copy only), and invokes official `kicad-cli`
 DRC. The routing UI requires an exact editor/CLI version match before creating the
 routing session. Matching saved schematic context must export successfully before
 DRC explicitly enables schematic parity; malformed context refuses validation.

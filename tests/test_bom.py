@@ -3,8 +3,8 @@ from decimal import Decimal
 from pathlib import Path
 import unittest
 
-from velatrace.bom import (bom_findings, classify_roles, format_value, package_of, parse_value,
-                           passives)
+from velatrace.bom import (bom_findings, classify_roles, format_value, lcsc_code, mpn_of,
+                           package_of, parse_value, passives)
 from velatrace.findings import Severity
 from velatrace.models import Component, DesignSnapshot, Pin
 from velatrace.parts_db import parse_catalogue
@@ -146,7 +146,9 @@ class ConsolidationTests(unittest.TestCase):
             two_pin("R4", "5.1k", R0402, "/CC1", "GND"),        # USB-C Rd is spec-mandated
             two_pin("R5", "4.99k", R0402, "+3V3", "/NRST"),     # RC reset timing
             two_pin("C1", "100n", C0402, "/NRST", "GND")))
-        self.assertEqual(rules(findings, "bom.value_merge"), [])
+        # Only the SDA pull may move (onto the existing 5.1k line); R2-R5 never change.
+        for finding in rules(findings, "bom.value_merge"):
+            self.assertTrue(finding.fix.startswith("Change R1 to 5.1k"), finding.fix)
 
     def test_same_value_other_package_consolidates(self):
         findings = bom_findings(snapshot(two_pin("C1", "100n", C0402, "+3V3", "GND"),
@@ -231,6 +233,135 @@ class JlcTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bom_findings(snapshot(*parts), boards_per_order=0)
 
+
+PHY = Component("U2", "PHY", "Package_DFN_QFN:QFN-32", (
+    Pin("1", "Net-(U2-EPHY_RTX)", "EPHY_RTX"), Pin("2", "/TACH", "TACH"),
+    Pin("3", "Net-(U2-Pad3)", "PA3"), Pin("4", "Net-(U2-Pad4)", "PA4")))
+C1206 = "Capacitor_SMD:C_1206_3216Metric"
+
+
+def with_phy(*parts):
+    return DesignSnapshot((MCU, PHY) + parts, "fixture")
+
+
+class BomPrecisionTests(unittest.TestCase):
+    """Bench regressions: ottercast, rs485-moist-sensor, zereader, bitaxe, kicad-demo-video, tokay."""
+
+    def test_bias_reference_nets_are_never_pulls(self):
+        snap = with_phy(two_pin("R1", "5.6k", R0402, "GND", "Net-(U2-EPHY_RTX)"),
+                        two_pin("R2", "5.6k", R0402, "+3V3", "/TACH"))
+        roles = classify_roles(snap, passives(snap))
+        self.assertEqual(roles["R1"].role, "other")
+        self.assertEqual(roles["R2"].role, "pullup")
+
+    def test_e96_values_need_a_pull_signal_name(self):
+        snap = with_phy(two_pin("R1", "6k04", R0402, "GND", "Net-(U2-Pad3)"),  # unknown role
+                        two_pin("R2", "4k99", R0402, "+3V3", "/SDA"),          # named I2C pull
+                        two_pin("R3", "5.1k", R0402, "GND", "Net-(U2-Pad4)"))  # E24: topology
+        roles = classify_roles(snap, passives(snap))
+        self.assertEqual(roles["R1"].role, "other")
+        self.assertEqual(roles["R2"].role, "pullup")
+        self.assertEqual(roles["R3"].role, "pulldown")
+
+    def test_ephy_rtx_6k04_is_not_merged_into_pull_line(self):
+        snap = with_phy(two_pin("R1", "5.1k", R0402, "+3V3", "/SDA"),
+                        two_pin("R2", "5.1k", R0402, "+3V3", "/SCL"),
+                        two_pin("R3", "6k04", R0402, "GND", "Net-(U2-EPHY_RTX)"))
+        self.assertEqual(rules(bom_findings(snap), "bom.value_merge"), [])
+
+    def test_tolerance_on_one_member_only_is_incompatible(self):
+        self.assertFalse(parse_value("10k", "resistor").compatible(parse_value("10k 0.1%", "resistor")))
+        self.assertTrue(parse_value("10k 1%", "resistor").compatible(parse_value("10K 1%", "resistor")))
+        findings = bom_findings(snapshot(two_pin("R1", "10k", R0402, "+3V3", "/SDA"),
+                                         two_pin("R2", "10k 0.1%", R0402, "+3V3", "/SCL")))
+        self.assertEqual(rules(findings, "bom.value_normalise"), [])
+
+    def test_part_number_on_one_member_or_different_mpns_block_normalise(self):
+        findings = bom_findings(snapshot(
+            two_pin("R1", "10k", R0402, "+3V3", "/SDA"),
+            two_pin("R2", "10K", R0402, "+3V3", "/SCL", PartNo="ERJ3RBD1002V")))
+        self.assertEqual(rules(findings, "bom.value_normalise"), [])
+        findings = bom_findings(snapshot(
+            two_pin("R1", "10k", R0402, "+3V3", "/SDA", MPN="RC0402FR-0710KL"),
+            two_pin("R2", "10K", R0402, "+3V3", "/SCL", MPN="ERJ-2RKF1002X")))
+        self.assertEqual(rules(findings, "bom.value_normalise"), [])
+
+    def test_same_mpn_ignores_conflicting_voltage_text(self):
+        mpn = {"Manufacturer PartNo": "CL31B105KBHNFNE"}
+        parts = (two_pin("C1", "1uF, 25V", C1206, "+3V3", "GND", **mpn),
+                 two_pin("C2", "1uF, 50V", C1206, "/VGH", "GND", **mpn),
+                 two_pin("C3", "1uF, 10V", C1206, "/VGL", "GND", **mpn))
+        [finding] = rules(bom_findings(snapshot(*parts)), "bom.value_normalise")
+        self.assertEqual(finding.refs, ("C1", "C2", "C3"))
+        self.assertIn("CL31B105KBHNFNE", finding.evidence)
+        generic = tuple(two_pin(p.reference, p.value, C1206, "+3V3", "GND") for p in parts)
+        self.assertEqual(rules(bom_findings(snapshot(*generic)), "bom.value_normalise"), [])
+
+    def test_normalise_never_suggests_dropping_a_voltage_rating(self):
+        [finding] = rules(bom_findings(snapshot(
+            two_pin("C1", "10u", C0402, "+3V3", "GND"), two_pin("C2", "10u", C0402, "+3V3", "GND"),
+            two_pin("C3", "10u 25V", C0402, "+3V3", "GND"))), "bom.value_normalise")
+        self.assertIn("'10u 25V'", finding.fix)
+
+    def test_pull_can_move_onto_an_existing_non_pull_line(self):
+        snap = with_phy(two_pin("R1", "5.6k", R0402, "+3V3", "/TACH"),
+                        two_pin("R2", "5.1k", R0402, "/CC1", "GND"),
+                        two_pin("R3", "5.1k", R0402, "/CC1", "GND"))
+        [finding] = rules(bom_findings(snap), "bom.value_merge")
+        self.assertTrue(finding.fix.startswith("Change R1 to 5.1k"), finding.fix)
+        self.assertIn("already on the BOM", finding.evidence)
+        self.assertEqual(finding.refs, ("R1", "R2", "R3"))
+
+    def test_existing_line_with_other_ratings_or_far_value_is_not_a_target(self):
+        for other in ("5.1k 1%", "10k"):
+            with self.subTest(other=other):
+                snap = with_phy(two_pin("R1", "5.6k", R0402, "+3V3", "/TACH"),
+                                two_pin("R2", other, R0402, "/CC1", "GND"))
+                self.assertEqual(rules(bom_findings(snap), "bom.value_merge"), [])
+
+    def test_comma_decimals_ohm_and_rkm_notation(self):
+        cases = {("4,7uF", "capacitor"): Decimal("4.7e-6"), ("2,2k", "resistor"): Decimal(2200),
+                 ("5,6K", "resistor"): Decimal(5600), ("10 kΩ", "resistor"): Decimal(10000),
+                 ("10 kΩ", "resistor"): Decimal(10000), ("2R2", "resistor"): Decimal("2.2"),
+                 ("4k7Ω", "resistor"): Decimal(4700), ("100 nF 50V", "capacitor"): Decimal("1e-7"),
+                 ("0402 10uF", "capacitor"): Decimal("1e-5"),
+                 ("4.7 µF", "capacitor"): Decimal("4.7e-6")}
+        for (text, kind), value in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(parse_value(text, kind).value, value)
+        self.assertEqual(parse_value("100 nF 50V", "capacitor").voltage, Decimal(50))
+        self.assertTrue(parse_value("1k 0402 Resistor", "resistor").compatible(
+            parse_value("1K 0402", "resistor")))
+        for text, kind in (("4,7uF", "resistor"), ("10 V", "capacitor"), ("4k7F", "resistor"),
+                           ("1,5", "capacitor")):
+            with self.subTest(text=text):
+                self.assertIsNone(parse_value(text, kind))
+
+    def test_comma_decimal_spelling_is_normalised(self):
+        [finding] = rules(bom_findings(snapshot(
+            two_pin("C1", "4,7uF", C0603, "+3V3", "GND"),
+            two_pin("C2", "4.7uF", C0603, "+3V3", "GND"))), "bom.value_normalise")
+        self.assertEqual(finding.refs, ("C1", "C2"))
+
+    def test_supplier_part_fields(self):
+        def comp(**fields):
+            return two_pin("C1", "1u", C0402, "+3V3", "GND", **fields)
+        self.assertEqual(lcsc_code(comp(SPN1="C52923")), "C52923")
+        self.assertEqual(lcsc_code(comp(**{"LCSC Part #": "c1525"})), "C1525")
+        self.assertEqual(lcsc_code(comp(JLCPCB_Part="C1525")), "C1525")
+        self.assertEqual(lcsc_code(comp(**{"Supplier Part Number": "490-1234-1-ND",
+                                           "LCSC": "C1525"})), "C1525")
+        self.assertIsNone(lcsc_code(comp(SPN1="296-1234-1-ND")))
+        self.assertIsNone(lcsc_code(comp(Description="C1525")))
+        self.assertEqual(mpn_of(comp(**{"Manufacturer PartNo": "CL05A105KA5NQNC"})),
+                         "CL05A105KA5NQNC")
+        self.assertEqual(mpn_of(comp(PARTNO="RC0402FR-135K6L")), "RC0402FR-135K6L")
+        self.assertIsNone(mpn_of(comp(MFR="Samsung", PartNo="?")))
+
+    def test_spn1_lcsc_reaches_the_parts_list_checks(self):
+        findings = bom_findings(snapshot(
+            two_pin("C1", "1u", C0402, "+3V3", "GND", SPN1="C1525")), db())
+        self.assertTrue(rules(findings, "bom.lcsc_mismatch"))  # C1525 is a 100nF part
 
 if __name__ == "__main__":
     unittest.main()
