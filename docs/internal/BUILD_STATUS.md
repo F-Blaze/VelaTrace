@@ -45,6 +45,6 @@ Backups and refusal are implemented for every live board-write path, including t
 
 ## Reproduce and resume
 
-Follow [testing.md](testing.md) for environment setup and optional native paths. Default tests skip native router/CLI checks unless their executables are configured. [CONTRIBUTING](../CONTRIBUTING.md) and [repository security setup](repository-security.md) describe independent review and release controls. Development tooling under the workspace `work/` folder is not part of the deliverable or an installation dependency.
+Follow [testing.md](../testing.md) for environment setup and optional native paths. Default tests skip native router/CLI checks unless their executables are configured. [CONTRIBUTING](../../CONTRIBUTING.md) and [repository security setup](repository-security.md) describe independent review and release controls. Development tooling under the workspace `work/` folder is not part of the deliverable or an installation dependency.
 
 Do not call this production-ready, bypass review, install from main, create an unsigned release, or replace an unsupported operation with a success claim.

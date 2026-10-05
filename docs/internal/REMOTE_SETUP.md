@@ -15,10 +15,9 @@ Repository settings rechecked September 27, 2026 (branch protection, secret scan
 
 Still required:
 
-1. F-Blaze has confirmed account 2FA; the API does not independently disclose its status.
-2. Add the maintainer's trusted independent reviewer to CODEOWNERS. The checked file still lists only F-Blaze, who cannot approve their own PR.
-3. Obtain independent approval and passing CI/CodeQL for the current PR revision. No merge is authorized by an agent review.
-4. Complete the live KiCad/provider acceptance and remaining capabilities in [release review](RELEASE_REVIEW.md).
-5. Provision a trusted signing identity and controlled signed-tag release process before changing the tag lock. Never publish or install from main.
+1. Add the maintainer's trusted independent reviewer to CODEOWNERS. The checked file still lists only F-Blaze, who cannot approve their own PR.
+2. Obtain independent approval and passing CI/CodeQL for the current PR revision. No merge is authorized by an agent review.
+3. Complete the live KiCad/provider acceptance and remaining capabilities in [release review](RELEASE_REVIEW.md).
+4. Provision a trusted signing identity and controlled signed-tag release process before changing the tag lock. Never publish or install from main.
 
 The repository bootstrap is administrative license scaffolding, not a reviewed implementation merge or signed release.

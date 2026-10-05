@@ -2,9 +2,9 @@
 
 The complete, verified install path. The [README quickstart](../README.md#quickstart) is the short version.
 
-These steps become usable when an independently reviewed release tag and trusted signing identity are published. **Never install from `main`, an unsigned tag, or this development branch.** No release tag or maintainer signing fingerprint is available yet.
+**Alpha: install from a tagged release when available; cloning `main` is for testers.** No signed release tag or maintainer signing fingerprint exists yet. Until one does, the commands below with a tag placeholder cannot be completed; testers can follow the [README quickstart](../README.md#quickstart) instead (read the code first: it runs Java and writes to your board). Verified on Windows with KiCad 10.0.4 / 10.0.6 only.
 
-1. Install [KiCad](https://www.kicad.org/download/) 9 or newer and Python 3.11 or newer. Routing requires the `kicad-cli` version to exactly match the connected editor, including its patch version. Live editor compatibility still needs the acceptance tests below.
+1. Install [KiCad](https://www.kicad.org/download/) 10 (KiCad 9 is untested and may not work) and Python 3.11 or newer. Routing requires the `kicad-cli` version to exactly match the connected editor, including its patch version. Live editor compatibility still needs the acceptance tests below.
 2. Clone outside KiCad's plugin directory. Verify the chosen signed release against a maintainer key/fingerprint obtained through a trusted independent channel, then check out that tag. A signature from an unknown key is insufficient. Example PowerShell commands, after replacing the placeholder:
 
    ```powershell
@@ -19,9 +19,9 @@ These steps become usable when an independently reviewed release tag and trusted
    if ($LASTEXITCODE -ne 0) { throw 'Release checkout failed' }
    ```
 
-3. Put the verified checkout in `${KICAD_DOCUMENTS_HOME}/<version>/plugins/VelaTrace`, with `plugin.json` immediately inside `VelaTrace`. Typical roots are `Documents/KiCad` on Windows/macOS and `~/.local/share/KiCad` on Linux; use your version folder such as `10.0`. KiCad creates a separate Python environment and installs `requirements.txt`: **kicad-python 0.8.0** and **PySide6-Essentials 6.10.2**. Wait for dependency installation before looking for the action. [Official IPC installation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
+3. Put the verified checkout in `${KICAD_DOCUMENTS_HOME}/<version>/plugins/VelaTrace`, with `plugin.json` immediately inside `VelaTrace`. On Windows the root is `Documents/KiCad`; use your version folder such as `10.0`. Linux and macOS are untested. KiCad creates a separate Python environment and installs `requirements.txt`: **kicad-python 0.8.0** and **PySide6-Essentials 6.10.2**. Wait for dependency installation before looking for the action. [Official IPC installation](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 4. In **Preferences → Plugins**, enable **Enable KiCad API** and select a Python 3.11+ interpreter. Open the PCB Editor and use **Open VelaTrace**. Saved schematic analysis is selected inside the companion. [KiCad preferences](https://docs.kicad.org/10.0/en/kicad/kicad.html#_plugins_preferences).
-5. Download the unmodified **Freerouting 2.1.0 JAR** from its [official release](https://github.com/freerouting/freerouting/releases/tag/v2.1.0) and install **Temurin Java 21** from [Adoptium](https://adoptium.net/temurin/releases/?version=21). Java 21 is mandatory even if a newer runtime is installed. Native tests used **21.0.12.1+1**. Check the JAR SHA-256 below; VelaTrace also verifies it and the offline policy at startup. Missing or mismatched tools visibly block startup. The GPLv3 router runs only as a separate process; its JAR/code is not bundled. See [runtime instructions](freerouting.md).
+5. Download the unmodified **Freerouting 2.1.0 JAR** from its [official release](https://github.com/freerouting/freerouting/releases/tag/v2.1.0) and install **Temurin Java 21** from [Adoptium](https://adoptium.net/temurin/releases/?version=21). Java 21 is mandatory even if a newer runtime is installed. Native tests used **21.0.12.1+1**. Check the JAR SHA-256 below; VelaTrace also verifies it and the offline policy at startup. Missing or mismatched tools visibly block startup. The GPLv3 router JAR is not bundled or modified; VelaTrace's MIT launcher (`WarmRouter`) loads it in the same JVM, which the maintainer is still reviewing for licence implications (see the README License section). See [runtime instructions](freerouting.md).
 
    ```text
    2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def
