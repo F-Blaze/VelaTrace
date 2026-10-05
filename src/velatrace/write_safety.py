@@ -295,7 +295,12 @@ class BoardSafety:
         self.directory = self.path.parent / ".velatrace" / "backups"
         if not self.directory.resolve().is_relative_to(self.path.parent):
             raise ValidationError("Backup directory resolves outside the board's project folder.")
-        self.directory.mkdir(parents=True, exist_ok=True)
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            raise ValidationError("VelaTrace keeps its backups in a folder named .velatrace beside the board, but "
+                                  "that name is taken by a file or cannot be created. Rename or remove it, "
+                                  "then retry.") from None
         try:  # Backups and journals are local working data, never something to commit.
             (self.directory.parent / ".gitignore").open("x", encoding="utf-8").write("*\n")
         except OSError:

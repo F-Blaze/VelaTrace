@@ -73,10 +73,20 @@ class ProviderConfig:
         if (parsed.scheme != "https" or not parsed.hostname or parsed.username
                 or parsed.password or parsed.query or parsed.fragment):
             raise ValidationError("Configure a plain HTTPS API base URL without credentials or query.")
+        try:
+            parsed.port
+        except ValueError:
+            raise ValidationError("The API base URL has an invalid port number.") from None
         if self.protocol not in {"gemini", "openai"}:
             raise ValidationError("Provider protocol must be gemini or openai.")
         for model in (self.model, self.search_model):
-            if model is not None and not re.fullmatch(r"[A-Za-z0-9._/-]+", model):
+            if model is None:
+                continue
+            parts = model.split("/")
+            # "org/model" is a normal OpenAI-style id sent in the request body. A Gemini
+            # id becomes part of the URL path, and no id may walk it ("..", "//").
+            if (not re.fullmatch(r"[A-Za-z0-9._/-]+", model) or any(not part.strip(".") for part in parts)
+                    or (self.protocol == "gemini" and len(parts) > 1)):
                 raise ValidationError("Invalid provider model identifier.")
         if not self.model:
             raise ValidationError("Choose a model offered by the configured provider.")

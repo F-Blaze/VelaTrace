@@ -88,8 +88,9 @@ def project_context(board_path: Path):
             raise ValueError()
         if settings.get("drc_exclusions"):
             raise CapabilityError("Remove DRC exclusions before routing; excluded checks cannot prove safety.")
+        _require_shapes(data, settings)
         _require_clearance(data, settings)
-    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+    except (ValueError, KeyError, TypeError, AttributeError, RecursionError) as exc:
         raise ValidationError("Project design rules are missing or malformed.") from exc
     paths = [project]
     for suffix in (".kicad_dru", ".kicad_sch"):
@@ -101,6 +102,24 @@ def project_context(board_path: Path):
                 raise CapabilityError("Hierarchical schematic context is not supported by candidate validation yet.")
         paths.append(path)
     return data, {path: file_digest(path) if path.exists() else None for path in paths}
+
+
+def _require_shapes(data, settings):
+    """Everything later code reads from the project has the type KiCad writes, so a
+    hand-made .kicad_pro is refused here once instead of failing somewhere as a
+    Python error. ValueError: see project_context()."""
+    def number(value):
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+    severities, vias = settings.get("rule_severities", {}), settings.get("via_dimensions", [])
+    nets = data.get("net_settings", {})
+    classes = nets.get("classes", []) if isinstance(nets, dict) else None
+    if not (isinstance(severities, dict) and isinstance(settings.get("rules", {}), dict)
+            and isinstance(vias, list) and isinstance(classes, list)
+            and all(isinstance(row, dict) and number(row.get("diameter")) and number(row.get("drill")) for row in vias)
+            and all(isinstance(row, dict) and all(number(row[key]) for key in ("via_diameter", "via_drill", "clearance",
+                                                                               "track_width") if key in row)
+                    for row in classes)):
+        raise ValueError()
 
 
 def _require_clearance(data, settings):
@@ -148,9 +167,12 @@ def checked_project(data: bytes) -> bytes:
     than refuse it, the temporary DRC copy (never the user's file) checks them, so
     Board Setup severities cannot hide an issue a route adds. Custom rule files and
     zero clearances are handled by checked_rules(), STOCK and _require_clearance()."""
-    project = json.loads(data)
-    severities = project["board"]["design_settings"].get("rule_severities", {})
-    ignored = [name for name, value in severities.items() if value == "ignore"]
+    try:
+        project = json.loads(data)
+        severities = project["board"]["design_settings"].get("rule_severities", {})
+        ignored = [name for name, value in severities.items() if value == "ignore"]
+    except (ValueError, KeyError, TypeError, AttributeError, RecursionError) as exc:
+        raise ValidationError("Project design rules are missing or malformed.") from exc
     if not ignored:
         return data
     severities.update(dict.fromkeys(ignored, "warning"))

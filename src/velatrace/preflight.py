@@ -63,9 +63,12 @@ def outline_box(root):
 
 def _rule_notes(project: dict, board_path: Path | None) -> list[str]:
     """Board Setup constraints Freerouting never sees: KiCad's DSN carries net classes only."""
-    settings = project.get("board", {}).get("design_settings", {}) if isinstance(project, dict) else {}
-    rules = settings.get("rules", {}) if isinstance(settings, dict) else {}
-    classes = project.get("net_settings", {}).get("classes", []) if isinstance(project, dict) else []
+    def table(value, key):  # A hand-made project may hold anything anywhere.
+        return value.get(key, {}) if isinstance(value, dict) else {}
+    settings = table(table(project, "board"), "design_settings")
+    rules = table(settings, "rules")
+    classes = table(project, "net_settings").get("classes", []) if isinstance(table(project, "net_settings"), dict) else []
+    classes = classes if isinstance(classes, list) else []
     def least(key):
         values = [row[key] for row in classes if isinstance(row, dict) and isinstance(row.get(key), (int, float))]
         return min(values) if values else None
