@@ -6,6 +6,6 @@ Before release, enable a main branch ruleset: PRs required for everyone includin
 
 Add a trusted second reviewer/code owner: a maintainer cannot approve their own PR, so @F-Blaze alone cannot satisfy code-owner approval on F-Blaze-authored changes. Do not bypass this requirement merely because there is one maintainer.
 
-Alpha: install from a tagged release when available; cloning `main` is for testers. Once signed annotated release tags exist, verify the tag signature against an independently trusted maintainer key before installing. Local development commits are not evidence of reviewed PRs. First local commit contains the MIT license; no release tag is created until every release gate is independently satisfied.
+Alpha: install a tagged release; cloning `main` is for testers. Release tags are signed annotated tags (first: `v0.1.0-alpha.1`); verify the tag signature against an independently trusted maintainer key before installing. Local development commits are not evidence of reviewed PRs. First local commit contains the MIT license; no release tag is created until every release gate is independently satisfied.
 
 Review subprocess/network code, install scripts, and all filesystem writes. Do not log API keys or design prompts. No automatic uploads, telemetry or backend. Use the repository's enabled private vulnerability reporting; no support guarantee.

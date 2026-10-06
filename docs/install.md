@@ -2,13 +2,13 @@
 
 The complete, verified install path. The [README quickstart](../README.md#quickstart) is the short version.
 
-**Alpha: install from a tagged release when available; cloning `main` is for testers.** No signed release tag or maintainer signing fingerprint exists yet. Until one does, the commands below with a tag placeholder cannot be completed; testers can follow the [README quickstart](../README.md#quickstart) instead (read the code first: it runs Java and writes to your board). Verified on Windows with KiCad 10.0.4 / 10.0.6 only.
+**Alpha: install a tagged release; cloning `main` is for testers.** The first signed release is [v0.1.0-alpha.1](https://github.com/F-Blaze/VelaTrace/releases/tag/v0.1.0-alpha.1). Its tag is signed with the maintainer's SSH key, fingerprint `SHA256:komvC+jlhCr/yBGl/RA6BDSLwOMYT6uYdK8cpzpxVyw`; GitHub shows the tag as Verified. This file is not an independent channel for that fingerprint, so compare it with what GitHub shows for the tag. Read the code first: it runs Java and writes to your board. Verified on Windows with KiCad 10.0.4 / 10.0.6 only.
 
 1. Install [KiCad](https://www.kicad.org/download/) 10 (KiCad 9 is untested and may not work) and Python 3.11 or newer. Routing requires the `kicad-cli` version to exactly match the connected editor, including its patch version. Live editor compatibility still needs the acceptance tests below.
 2. Clone outside KiCad's plugin directory. Verify the chosen signed release against a maintainer key/fingerprint obtained through a trusted independent channel, then check out that tag. A signature from an unknown key is insufficient. Example PowerShell commands, after replacing the placeholder:
 
    ```powershell
-   $releaseTag = 'REPLACE_WITH_PUBLISHED_SIGNED_TAG'
+   $releaseTag = 'v0.1.0-alpha.1'
    git clone --no-checkout https://github.com/F-Blaze/VelaTrace.git VelaTrace
    Set-Location VelaTrace
    git fetch --tags origin
