@@ -64,15 +64,15 @@ Expect false positives and missed problems; treat findings as hints, not a sign-
 
 ## Quickstart
 
-> **Status: 0.1.0a1, development alpha.** No signed release exists yet. Alpha: install from a tagged release when available; cloning `main` is for testers. See the [full install checklist](docs/install.md). Verified only on a handful of small boards, on Windows with KiCad 10.0.4 / 10.0.6.
+> **Status: 0.1.0a1, development alpha.** Latest release: [v0.1.0-alpha.1](https://github.com/F-Blaze/VelaTrace/releases/tag/v0.1.0-alpha.1) (signed tag). Install that tag; cloning `main` is for testers. See the [full install checklist](docs/install.md). Verified only on a handful of small boards, on Windows with KiCad 10.0.4 / 10.0.6.
 
 **Requirements:** KiCad 10 (tested on 10.0.4 / 10.0.6; KiCad 9 is untested and may not work) with the IPC API enabled, and Python 3.11+. For routing also: Temurin **Java 21**, the **Freerouting 2.1.0** JAR, and a `kicad-cli` that matches the running editor exactly, patch version included. Windows is the only tested OS.
 
-1. **Install the plugin.** Once a tagged release exists, install that tag as described in the [install checklist](docs/install.md). Until then, testers can clone into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace`. Read the code first: it runs Java and writes to your board.
+1. **Install the plugin.** Clone the release tag into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace` (the [install checklist](docs/install.md) shows how to verify the tag's signature first). Read the code first: it runs Java and writes to your board.
 
    ```sh
    # Windows (the only tested OS): Documents/KiCad/10.0/plugins
-   git clone https://github.com/F-Blaze/VelaTrace.git VelaTrace
+   git clone --branch v0.1.0-alpha.1 --depth 1 https://github.com/F-Blaze/VelaTrace.git VelaTrace
    ```
 
    KiCad creates a Python environment (about 240 MB) and installs `kicad-python 0.8.0` and `PySide6-Essentials 6.10.2` itself; the first launch takes a few minutes. Linux and macOS are untested (reports welcome).
