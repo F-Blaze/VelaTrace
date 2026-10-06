@@ -300,8 +300,10 @@ class KiCadCli:
             raise ValidationError("Select a KiCad schematic file.")
         with tempfile.TemporaryDirectory(prefix="velatrace-netlist-", ignore_cleanup_errors=True) as directory:
             output = Path(directory) / "netlist.xml"
+            # Private settings: kicad-cli rewrites kicad_common.json (working_dir) on exit,
+            # and the user's own settings folder must only ever be read.
             self._run(["sch", "export", "netlist", "--format", "kicadxml", "--output",
-                       str(output), str(schematic)], schematic.parent)
+                       str(output), str(schematic)], schematic.parent, config_home=self._export_config_home())
             if not output.is_file():
                 raise ValidationError("KiCad did not produce a connectivity netlist.")
             snapshot = read_xml_netlist(output)
