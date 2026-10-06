@@ -10,6 +10,11 @@
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](#quickstart)
 
 <p align="center">
+  <img src="docs/hero.gif" alt="VelaTrace on a demo board in KiCad: Check design lists findings, an LED finding is expanded, Route board draws a preview, Approve applies the copper" width="820">
+</p>
+<p align="center"><sub>Recorded on the demo board in <a href="examples/velatrace-demo">examples/velatrace-demo</a>, which has deliberately planted issues. Waiting time is cut; the route took about 10 seconds.</sub></p>
+
+<p align="center">
   <img src="docs/ui-demo.png" alt="VelaTrace audit: offline findings grouped as errors, warnings and savings, with a per-board saving estimate" width="340">
   &nbsp;
   <img src="docs/ui-demo-routing.png" alt="VelaTrace routing: Freerouting preview per layer with reject and approve" width="340">
