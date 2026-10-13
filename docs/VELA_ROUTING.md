@@ -3,8 +3,129 @@
 Vela-routing is the name of VelaTrace's experimental routing system. It combines
 external routing engines with explicit constraints, independent checks and
 measured candidate selection. Freerouting and KiCadRoutingTools retain their own
-names, versions and licenses. The installed companion workflow still uses
-Freerouting; this research branch has not been released or installed.
+names, versions and licenses. Since 2026-10-12 it also has a native engine of
+its own, described next. The installed companion workflow still uses Freerouting;
+none of this is wired into the plugin or released.
+
+## Native engine (experimental, 2026-10-12)
+
+Vela-routing now has its own router: `vela_board.py` (reads a saved board
+directly), `vela_engine.py` (the router) and `vela_electrical.py` (stackup
+estimates). It is research code, needs `numpy` (the `routing-research` extra),
+and is **not wired into the plugin**. Every result is checked by KiCad DRC, which
+stays the only judge. It is an independent implementation from published ideas;
+no code was taken from other routers.
+
+```text
+python -m velatrace.vela_engine board.kicad_pcb --out <new folder> --kicad-cli <KiCad-10-cli>
+```
+
+The command never touches the board it is given. It writes a routed copy, an
+unrouted copy and `report.json` into the new folder.
+
+### How it works
+
+- **Board in, no DSN.** Pads (including custom shapes and hole offsets), holes,
+  board outline, rule areas, copper graphics, net classes and the stackup are read
+  from the `.kicad_pcb` and `.kicad_pro`. Pad positions were compared with KiCad's
+  own on 12 of the 13 boards below and matched exactly; KiCad's Python did not
+  load the thirteenth (mikoto) within 45 s. Copper text is taken from KiCad's rendering through the
+  existing `copper_text` extractor.
+- **Grid search with exact clearances.** A uniform grid, snapped to the finest
+  pad pitch, with 45-degree moves and through vias. Each net class has its own
+  occupancy map, so wide and narrow nets keep their own clearance. Via size is
+  raised to the board's minimums.
+- **Negotiated congestion, then a hard pass.** Nets first route through each
+  other at a rising price and with a growing history penalty around conflicts.
+  Whatever still overlaps is re-routed around everything else or dropped, so the
+  output never contains two nets in conflict by the engine's own maps.
+- **Tidy-up and rescue.** Each net is re-routed by plain shortest path and kept
+  only if not worse. A dropped connection is retried by moving up to four
+  blocking nets aside, accepted only when more connections result.
+- **Neck-down.** A class width is treated as a default: a pad the class width
+  cannot leave gets a short escape at the board minimum (0.15 mm floor), reported
+  as `necked_mm`.
+- **Restarts.** Up to four re-route orders are tried inside the time budget and
+  the best is kept. The order is seeded; run-to-run repeatability was not measured.
+
+### 4+ layers and electrical behaviour
+
+- **Reference planes.** An inner layer that is at least 30 % copper zone is kept
+  as a solid plane. No signal is routed on it. Surface pads of the plane's net
+  drop their own via into it (or join copper within about 1 mm that already
+  does); through-hole pads inside the plane count as connected. As a last resort
+  a dropped connection may use a plane layer, and the length is reported as
+  `signal_on_plane_mm`.
+- **Dielectric constant and delay.** Thickness and permittivity come from the
+  board stackup. Each signal layer is classed as microstrip, stripline, embedded
+  or unreferenced from the planes actually present. A grid step costs its
+  propagation delay, so the search minimises delay, not millimetres, and slower
+  buried layers are used only when they pay. The report gives delay in ps per
+  net, impedance per layer for the routed width, and the width that would give
+  50 ohm on each layer.
+- **Missing stackup data** is filled with generic FR-4 (permittivity 4.5,
+  0.2 mm outer dielectric on 4+ layers, 35 um copper) and every affected figure
+  is flagged `assumed`. This replaces "no guessed dielectric" for this engine
+  only; nothing is written back to the board.
+- **Pairs.** Nets named like `USB_D+`/`USB_D-` are routed first and their delay
+  skew is reported. They are **not** routed as coupled pairs.
+
+All figures are quasi-static estimates (the existing Hammerstad-Jensen
+microstrip and the IPC-2141 stripline approximation). They are not a field
+solver and not signal-integrity sign-off.
+
+### Measured on the 13-board set, 2026-10-12
+
+Same stripped open-source boards as the 2026-10-04 comparison. Accepted means
+what the plugin means: KiCad DRC with refilled zones reports nothing unconnected
+and no error or new warning. Times are wall-clock with three or four boards
+running at once on one PC and include the restarts. One run per board.
+
+| Board (layers) | Connections | Left open | New DRC issues | Accepted | Time |
+|---|---|---|---|---|---|
+| practice (2) | 8/8 | 0 | 0 | yes | 5 s |
+| Prod_v2 (2) | 15/15 | 0 | 0 | yes | 14 s |
+| tp4056-power-path (2) | 8/8 | 0 | 0 | yes | 1 s |
+| anvil-stm32f031 (2) | 117/117 | 0 | 0 | yes | 106 s |
+| esp32-4ch-relays (2) | 154/154 | 0 | 0 | yes | 96 s |
+| mtb-led-atmega328pb (2) | 222/222 | 0 | 0 | yes | 221 s |
+| usb-i2c-bridge (2) | 57/57 | 0 | 0 | no: 4 starved-thermal errors already on the unrouted board | 17 s |
+| bms-buck-boost (2) | 88/89 | 1 | 0 | no: also 109 errors already on the unrouted board | 201 s |
+| zereader-pico (2) | 221/223 | 2 | 2 (teardrop in a keep-out, starved thermal) | no | 318 s |
+| rp2040-breakout (4) | 107/108 | 1 | 0 | no | 183 s |
+| soleil (4) | 176/179 | 3 | 3 (2 connection-width warnings, 1 courtyard) | no | 304 s |
+| mikoto (4) | 161/166 | 6 | 1 (a via already on the board left dangling) | no | 209 s |
+| bitaxe-ultra (4) | 280/289 | 9 | 1 (unidentified) | no | 414 s |
+
+Six of 13 accepted; seven of 13 fully connected with no new DRC issue. **No
+4-layer board is fully routed yet**: they end at 97 to 99 % with clean copper.
+
+For context only, the record of 2026-10-04 for the Freerouting path on the same
+boards (900 s cap, not re-run today, so not a side-by-side test): accepted
+practice; 85.7 % on usb-i2c-bridge; no plan within the cap on anvil, bms,
+esp32-4ch-relays and rp2040-breakout; refused tp4056, bitaxe, zereader and
+mtb-led at import; mikoto and soleil not measured. Prod_v2 was rejected then;
+main's smoke test now expects it accepted. This is 13 boards, one run
+each, on one PC. It supports "routes more of this set", not a general ranking.
+
+### Known limits
+
+- No coupled differential-pair routing, no length or delay tuning (serpentines),
+  no impedance-driven width changes: delay, impedance and skew are reported, and
+  delay steers layer choice, but nothing is tuned to a target.
+- Through vias only. No blind, buried or micro vias, no BGA fanout patterns.
+- Custom rule files (`.kicad_dru`), footprint copper text, teardrops and
+  thermal-relief spoke rules are not modelled; KiCad DRC catches the misses.
+- Existing tracks are obstacles, not part of the net. Existing vias are
+  connected like pads.
+- Outer-layer copper pours are not trusted to connect pads; those nets are
+  routed with tracks.
+- Speed: the search loop is pure Python, roughly 100,000 steps per second.
+  Dense boards take minutes. A compiled kernel is the obvious next step.
+- The grid costs density: with 0.2 mm tracks and 0.13 mm clearance, tracks pack
+  at 0.4 mm, not 0.33 mm.
+- Tested on Windows with KiCad 10.0.6 only. `tests/test_vela_engine.py` covers
+  loader geometry, a brute-force clearance check, plane drops and neck-down.
 
 ## Targets and evidence required
 
