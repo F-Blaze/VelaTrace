@@ -1,6 +1,6 @@
 # VelaTrace
 
-**A free, local KiCad 10 plugin: a guarded front-end for Freerouting (preview, KiCad DRC check, one undoable commit) for small unrouted boards, plus an experimental offline rule check. Alpha, tested on Windows only.**
+**Check a KiCad board for small mistakes before you order it. A free KiCad 10 plugin: a fast first-pass check, a JLCPCB part-number check, and a Freerouting front-end with preview, KiCad DRC check and one undo. Alpha, tested on Windows only.**
 
 [![License: MIT](https://img.shields.io/github/license/F-Blaze/VelaTrace)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/F-Blaze/VelaTrace/ci.yml?branch=main&label=CI)](https://github.com/F-Blaze/VelaTrace/actions/workflows/ci.yml)
@@ -21,9 +21,29 @@
 </p>
 <p align="center"><sub>Screenshots use the built-in synthetic demo (<code>python -m velatrace --demo</code>): no API, IPC or board writes.</sub></p>
 
+Small mistakes are easy to skim past before ordering, and each one costs a re-order. Click **Check design** and in about a second you get a short list of things to look at, each with the evidence and a suggested fix. The check only reads your board and needs no account, key or network.
+
+**What it has found.** With the optional JLCPCB parts list loaded, it found 48 capacitors labelled "10u" that all carried the part number of a 1 µF part on one open-source board, and seven resistors of four different values sharing one 1 k part number on another. The parts check has been tried on three boards so far.
+
+**Try it on the demo board.** [examples/velatrace-demo](examples/velatrace-demo) has mistakes planted in it. Do the first two [Quickstart](#quickstart) steps (the check needs no Java and no Freerouting), open the demo board and click **Check design**.
+
+**How far to trust it.** It is a first pass, not a design review. On 12 boards it had never seen, 44% of the design-rule findings were judged correct, and the reviewers were LLM agents, not human engineers. See [Audit accuracy](#audit-accuracy).
+
 VelaTrace is a companion window for KiCad's PCB Editor. It is free (MIT), offline by default (network use is opt-in and listed in [docs/privacy.md](docs/privacy.md)), and there is no backend or paid service behind it. It is an alpha: expect rough edges, and treat every result as a suggestion to check.
 
 **Tested on:** Windows with KiCad 10.0.4 and 10.0.6. Linux and macOS are untested. KiCad 9 is untested and may not work. Development is AI-assisted; claims here are backed by tests or files in the repository.
+
+## Features
+
+- **Experimental offline rule check.** A small set of deterministic checks on pad/net connectivity, with no key and no network: LEDs without a series resistor, I2C pull-up value and rail problems, duplicated ICs, 0 Ω shorts, unset values and single-pin nets, among others. Four rules that were wrong too often (`decoupling.missing`, `i2c.pullup.missing`, `net.single_pin`, `pin.input_floating`) are shown as Info notes only. The check finds only a minority of the issues a reviewer would raise; see [Audit accuracy](#audit-accuracy). [Rule list](docs/behavior-and-limits.md#built-in-audit-checks)
+- **BOM tidy-ups.** Value and package spelling and merges (`100n` / `0.1uF` / `100nF`). With an opt-in JLCPCB parts list it can also suggest Basic-part swaps; those suggestions are lightly tested. [Details](docs/bom.md)
+- **JLCPCB parts (new, lightly tested).** An opt-in catalogue download (about 181 MB, 800 MB on disk; the public data file of the kicad-jlcpcb-tools project) gives an offline parts table with tier, stock and price. One click refreshes live stock and prices for the parts on your BOM. It flags LCSC numbers that do not match the part's value, flags out-of-stock parts, writes the LCSC field to the board in one undoable step, and exports JLCPCB BOM, placement and Gerber files. It cannot edit the schematic (a KiCad 10 limit). Tried on three boards so far. [Details](docs/jlcpcb.md)
+- **Guarded Freerouting front-end.** **Route board** runs pre-flight checks, exports the DSN, runs the unmodified [Freerouting](https://github.com/freerouting/freerouting) 2.1.0 JAR (SHA-256 checked, Java no-network policy), draws a `User.9` preview, then validates it with KiCad DRC in the background. **Approve** (or **Approve anyway**, after a confirmation that lists the DRC findings) writes the copper as a single undoable commit, after a backup. **Cancel routing** stops a run. It routes only placed, initially unrouted boards and refuses anything else (existing routing, per-net rules, header keepouts, hierarchical context). It is meant for small boards; see [Limits and alternatives](#limits-and-alternatives). [Freerouting setup](docs/freerouting.md)
+- **Optional AI explanation.** Bring your own key (Gemini or any OpenAI-compatible endpoint) for plain-language explanations. Token counts and a hard call budget are shown first; the key stays in memory.
+- **Shareable offline report.** **Save report** writes one self-contained HTML file (no scripts, no external requests). [Details](docs/report.md)
+- **Write safety.** Backup before every live write; board reads and writes go through KiCad's official IPC API (the DSN export alone runs KiCad's bundled Python on a private copy). Crash recovery is manual. [Write safety](docs/write-safety.md)
+
+## Limits and alternatives
 
 **What it does not do.** Routing uses one track width and one clearance for all nets, including power. There is no differential-pair or length tuning and no BGA fanout. Dense boards usually end as a partial route you can reject. **Approve anyway** applies a route that failed KiCad DRC. DRC-clean does not mean electrically correct. For those things, look at [KiCadRoutingTools](https://github.com/drandyhaas/KiCadRoutingTools) (its own router, differential pairs, length matching, BGA/QFN fanout), [kicad-happy](https://github.com/aklofas/kicad-happy) (datasheet-aware design review) and [kicad-jlcpcb-tools](https://github.com/Bouni/kicad-jlcpcb-tools) (a mature JLCPCB workflow: part assignment saved into the schematic, parametric search, placement corrections). VelaTrace does not do what the first two do, and its JLCPCB window (below) is newer and narrower than the third.
 
@@ -36,16 +56,6 @@ coverage checks and routing around ground-plane gaps on authored 4/6/8-layer boa
 Its development targets are faster accepted routing and broader electrical
 automation, measured against the current Freerouting workflow. See the
 [Vela-routing milestones and comparison criteria](docs/VELA_ROUTING.md).
-
-## Features
-
-- **Guarded Freerouting front-end.** **Route board** runs pre-flight checks, exports the DSN, runs the unmodified [Freerouting](https://github.com/freerouting/freerouting) 2.1.0 JAR (SHA-256 checked, Java no-network policy), draws a `User.9` preview, then validates it with KiCad DRC in the background. **Approve** (or **Approve anyway**, after a confirmation that lists the DRC findings) writes the copper as a single undoable commit, after a backup. **Cancel routing** stops a run. It routes only placed, initially unrouted boards and refuses anything else (existing routing, per-net rules, header keepouts, hierarchical context). It is meant for small boards; see the limits above. [Freerouting setup](docs/freerouting.md)
-- **Experimental offline rule check.** A small set of deterministic checks on pad/net connectivity, with no key and no network: LEDs without a series resistor, I2C pull-up value and rail problems, duplicated ICs, 0 Ω shorts, unset values and single-pin nets, among others. Four rules that were wrong too often (`decoupling.missing`, `i2c.pullup.missing`, `net.single_pin`, `pin.input_floating`) are shown as Info notes only. The check finds only a minority of the issues a reviewer would raise; see [Audit accuracy](#audit-accuracy). [Rule list](docs/behavior-and-limits.md#built-in-audit-checks)
-- **BOM tidy-ups.** Value and package spelling and merges (`100n` / `0.1uF` / `100nF`). With an opt-in JLCPCB parts list it can also suggest Basic-part swaps; those suggestions are lightly tested. [Details](docs/bom.md)
-- **JLCPCB parts (new, lightly tested).** An opt-in catalogue download (about 181 MB, 800 MB on disk; the public data file of the kicad-jlcpcb-tools project) gives an offline parts table with tier, stock and price. One click refreshes live stock and prices for the parts on your BOM. It flags LCSC numbers that do not match the part's value, flags out-of-stock parts, writes the LCSC field to the board in one undoable step, and exports JLCPCB BOM, placement and Gerber files. It cannot edit the schematic (a KiCad 10 limit). Tried on three boards so far. [Details](docs/jlcpcb.md)
-- **Optional AI explanation.** Bring your own key (Gemini or any OpenAI-compatible endpoint) for plain-language explanations. Token counts and a hard call budget are shown first; the key stays in memory.
-- **Shareable offline report.** **Save report** writes one self-contained HTML file (no scripts, no external requests). [Details](docs/report.md)
-- **Write safety.** Backup before every live write; board reads and writes go through KiCad's official IPC API (the DSN export alone runs KiCad's bundled Python on a private copy). Crash recovery is manual. [Write safety](docs/write-safety.md)
 
 ## Offline by default
 
