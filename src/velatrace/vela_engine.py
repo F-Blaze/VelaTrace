@@ -12,6 +12,7 @@ result must still pass KiCad DRC, which stays the only judge.
 ponytail: pure-Python search loop, roughly 1e5 expansions/s. Move the inner loop
 to a compiled kernel if boards beyond a few hundred nets matter.
 """
+from collections import deque
 from dataclasses import dataclass, field, replace
 import heapq
 import math
@@ -31,26 +32,30 @@ _SQRT2 = math.sqrt(2)
 @dataclass
 class Options:
     pitch: float = 0.1            # target grid pitch in mm; snapped to the finest pad pitch
-    via_cost: float = 40.0        # grid steps a via is worth
-    iterations: int = 25          # negotiated-congestion rounds before the hard pass
+    via_mm: float = 4.0           # track length a via is worth
+    iterations: int = 40          # negotiated-congestion rounds before the hard pass
     edge_clearance: float = 0.25  # floor under the board's own copper-to-edge rule, mm
     budget_s: float = 900.0
-    heuristic: float = 1.3        # A* weight; >1 trades a little length for speed
+    heuristic: float = 2.0        # A* weight while negotiating; >1 trades length for speed
+    tidy_heuristic: float = 1.2   # A* weight of the tidy-up pass, which decides the final shape
     pres0: float = 1.0
     pres_mult: float = 1.5
     pres_cap: float = 64.0
     hist_step: float = 0.3
     plane_fraction: float = 0.3   # inner layer is a reference plane above this zone coverage
-    plane_via_cost: float = 12.0  # a plane drop is cheap: every pad should get its own via
-    plane_cost: float = 3.0       # last-resort cost factor for a signal on a plane layer; 0 = never
+    plane_via_mm: float = 1.2     # a plane drop is cheap: every pad should get its own via
+    plane_cost: float = 3.0       # last-resort cost factor for a signal on a solid plane; 0 = never
+    mixed_cost: float = 1.5       # cost factor for signals on the other plane layers; 0 = keep all solid
     via_in_pad_min: float = 2.0   # SMD pads narrower than this never get a via in them, mm
-    rescue_blockers: int = 4      # most nets moved aside to fit one blocked net
+    rescue_turns: int = 12        # rip-up turns per dropped connection before giving up
+    partial_rounds: bool = True   # negotiation re-routes only the paths in conflict, not whole nets
+    rip_cost: float = 8.0         # price per grid step of pushing through another net in the rescue
     stall_rounds: int = 5         # stop negotiating after this many rounds without progress
-    probe: int = 4000             # expansions of the cheap backwards probe before the real search
+    probe: int = 1500             # expansions of the cheap backwards probe before the real search
     optimize_passes: int = 2
     neck_width: float = 0.15      # escape width for pads the class width cannot reach, mm
     seed: int | None = 1          # shuffles the re-route order each round to break ties; None = fixed
-    tries: int = 4                # route_board: different orders tried until one routes everything
+    tries: int = 3                # route_board: re-route orders tried until one routes everything
     hist_spread: float = 0.4      # mm around a conflict that gets the history penalty
     log: object = None            # callable(str) for progress
 
@@ -298,10 +303,11 @@ class Router:
                        default=0)
             if near >= 0.3 and (finest is None or near < finest - 1e-6):
                 finest, anchor = near, pads
-        p = opt.pitch
-        if finest:
-            p = finest / max(1, round(finest / opt.pitch))
+        steps = max(1, round(finest / opt.pitch)) if finest else 1
+        p = finest / steps if finest else opt.pitch
         self.p = p
+        self.via_cost, self.plane_via_cost = opt.via_mm / p, opt.plane_via_mm / p
+        self.weight = opt.heuristic
         self.margin = 0.13 * p   # chord sag of 45-degree steps against round obstacles
 
         def phase(values):
@@ -366,6 +372,12 @@ class Router:
         every = tuple(range(L))
         own = {name: [[] for _ in self.maps] for name in self.nets}
         self.pad_cells = {}
+        self.pour = {}   # copper pour mask per (net, layer)
+        for zone in board.zones:
+            if zone.net in self.nets:
+                mask = _inside(zone.points, self.xs, self.ys)
+                for layer in zone.layers:
+                    self.pour[(zone.net, layer)] = self.pour.get((zone.net, layer), False) | mask
         hole_clearance = board.rules.get("min_hole_clearance", 0) or 0.25
         for index, pad in enumerate(board.pads):
             reach = _pad_reach(pad)
@@ -444,16 +456,28 @@ class Router:
         shrink = int(max(e for e, _ in self.maps[self.track_maps:]) / self.p) + 1
         for layer in range(1, self.L - 1):
             masks = {}
-            for zone in board.zones:
-                if zone.net in self.nets and layer in zone.layers:
-                    mask = _inside(zone.points, self.xs, self.ys) & self.inside
-                    masks[zone.net] = masks.get(zone.net, False) | mask
+            for (name, on), mask in self.pour.items():
+                if on == layer:
+                    masks[name] = mask & self.inside
             if masks and sum(int(m.sum()) for m in masks.values()) >= self.opt.plane_fraction * area:
                 self.plane[layer] = True
                 for name, mask in masks.items():
                     self.zone[(name, layer)] = _erode(mask, shrink)
                     self.nets[name].plane_layers += (layer,)
-        named = [f"{board.layers[i]}={'/'.join(n for n, l in self.zone if l == i)}" for i in range(self.L) if self.plane[i]]
+        # Hand-routed 4-layer boards put signals on a plane layer too. Keep the plane next to
+        # the busier component side unbroken as the reference; the others also carry signals.
+        planes = [i for i in range(self.L) if self.plane[i]]
+        self.mixed = [False] * self.L
+        if len(planes) > 1 and self.opt.mixed_cost:
+            sides = [sum(1 for pad in board.pads if pad.net and pad.layers == (side,)) for side in (0, self.L - 1)]
+            solid = min(planes) if sides[0] >= sides[1] else max(planes)
+            # Only where every net of that plane also owns the solid one: a signal can then
+            # never cut a pad off from its plane.
+            self.mixed = [i in planes and i != solid
+                          and all(solid in self.nets[name].plane_layers for name, layer in self.zone if layer == i)
+                          for i in range(self.L)]
+        named = [f"{board.layers[i]}={'/'.join(n for n, l in self.zone if l == i)}{' (also signals)' * self.mixed[i]}"
+                 for i in planes]
         self._say(f"grid {self.W}x{self.H}x{self.L} at {self.p:.4f} mm; nets {len(self.nets)}; "
                   f"reference planes: {', '.join(named) or 'none'}")
 
@@ -545,8 +569,9 @@ class Router:
                 if layer in net.plane_layers:
                     goal[layer] = self.zone[(net.name, layer)][y0:y1, x0:x1] & ~blocked[layer]
                     cost[layer] = np.where(goal[layer], 1.0, -1.0)
-                elif planes_ok:
-                    cost[layer] = np.where(blocked[layer], -1.0, cost[layer] * self.opt.plane_cost)
+                elif self.mixed[layer] or planes_ok:
+                    factor = self.opt.mixed_cost if self.mixed[layer] else self.opt.plane_cost
+                    cost[layer] = np.where(blocked[layer], -1.0, cost[layer] * factor)
                 else:
                     cost[layer] = -1
         via_soft = self.soft[net.v][sl].sum(0)
@@ -576,25 +601,27 @@ class Router:
         flat = self.pad_cells[index]
         return np.concatenate([layer * self.HW + flat for layer in self.board.pads[index].layers])
 
-    def _connect(self, net, starts, target, pres, strict, *, extra=None, planes_ok=False, t=None, escape=False):
+    def _connect(self, net, starts, target, pres, strict, *, extra=None, planes_ok=False, t=None, escape=False,
+                 focus=None):
         """A* from starts to target cells, or (target None) into the net's plane or ``extra``.
 
         ``t`` is the track map (width) to route at. ``escape`` instead looks for the
         nearest open ground where the net's full width fits. The window grows on
-        failure. Returns global cells start..goal, or None.
+        failure. ``focus`` (cells) centres the first windows on where the join is expected,
+        so a big half-routed net is not searched end to end. Returns global cells or None.
         """
         t = net.t if t is None else t
-        if time.monotonic() - self.started > 1.5 * self.opt.budget_s:
+        if time.monotonic() - self.started > 3 * self.opt.budget_s:
             return None   # hard deadline: fail fast, what is routed stays valid
         to_plane = target is None
         ends = starts if to_plane else np.concatenate([starts, target])
-        iy, ix = np.divmod(ends % self.HW, self.W)
-        for grow in ((1,) if escape else (1, 4)):
-            pad = int(max(30, 0.3 * max(np.ptp(iy), np.ptp(ix))) * grow)
+        for grow in ((1,) if escape else (1, 4) if focus is None else (1, 4, 0)):
+            iy, ix = np.divmod((ends if focus is None or not grow else focus) % self.HW, self.W)
+            pad = int(max(3.0 / self.p, 0.3 * max(np.ptp(iy), np.ptp(ix))) * (grow or 1))
             y0, y1 = max(0, int(iy.min()) - pad), min(self.H, int(iy.max()) + pad + 1)
             x0, x1 = max(0, int(ix.min()) - pad), min(self.W, int(ix.max()) + pad + 1)
             cost, vcost, goal, h, w = self._costs(net, t, y0, y1, x0, x1, pres, strict,
-                                                  self.opt.plane_via_cost if to_plane else self.opt.via_cost,
+                                                  self.plane_via_cost if to_plane else self.via_cost,
                                                   planes_ok)
             hw = h * w
             flat = goal.reshape(-1)
@@ -603,7 +630,7 @@ class Router:
                 wide = self.hard[net.t][sl] == 0
                 if strict:
                     wide &= self.soft[net.t][sl] == 0
-                wide[self.plane] = False
+                wide[[plane and not mixed for plane, mixed in zip(self.plane, self.mixed)]] = False
                 # Open ground: the cell and its four neighbours all take the full width.
                 wide[:, 1:-1, 1:-1] &= wide[:, :-2, 1:-1] & wide[:, 2:, 1:-1] & wide[:, 1:-1, :-2] & wide[:, 1:-1, 2:]
                 goal[:] = 0
@@ -618,18 +645,20 @@ class Router:
                 local = self._local(target, y0, y1, x0, x1, w, hw)
                 flat[local] = 1
                 gy, gx = np.divmod(local % hw, w)
-                box, weight = (int(gx.min()), int(gy.min()), int(gx.max()), int(gy.max())), self.opt.heuristic
-            if not flat.any():
-                continue
+                box, weight = (int(gx.min()), int(gy.min()), int(gx.max()), int(gy.max())), self.weight
             begin = self._local(starts, y0, y1, x0, x1, w, hw)
+            if not flat.any() or not begin.size:
+                continue
             path = False
             if not to_plane:
                 # Probe backwards from the target first. A walled-in pad is found out in a few
                 # thousand steps instead of a whole-board search, and short hops finish here.
                 back = np.zeros(self.L * hw, np.uint8)
                 back[begin] = 1
+                by, bx = np.divmod(begin % hw, w)
                 path = _search(cost, vcost, w, hw, self.L, local.tolist(), bytearray(back.tobytes()),
-                               (0, 0, w, h), 0.0, limit=self.opt.probe)
+                               (int(bx.min()), int(by.min()), int(bx.max()), int(by.max())) if begin.size
+                               else (0, 0, w, h), self.weight, limit=self.opt.probe)
                 if path is None:
                     continue
                 path = path and path[::-1]
@@ -686,6 +715,32 @@ class Router:
             start = end
         return out
 
+    def _square_up(self, net, path, target):
+        """End a branch straight on the net's own copper instead of with a short jog.
+
+        A jog shorter than the track is wide ends inside the copper it joins; KiCad then
+        reports the stub as a dangling track.
+        """
+        last = len(path) - 1
+        if last < 2:
+            return path
+        step, corner = path[last] - path[last - 1], last - 1
+        while corner > 0 and path[corner] - path[corner - 1] == step:
+            corner -= 1
+        before = path[corner] - path[corner - 1] if corner else 0
+        reach = int(1.5 * net.cls.width / self.p) + 1
+        if not before or abs(before) >= self.HW or abs(step) >= self.HW or last - corner > reach:
+            return path
+        ahead = path[corner] + before * np.arange(1, reach + 1)
+        free = (self.hardf[net.t][ahead] == 0) & (self.softf[net.t][ahead] == 0)
+        joins = np.isin(ahead, target)
+        for count in range(reach):
+            if not free[count]:
+                break
+            if joins[count]:
+                return path[:corner + 1] + ahead[:count + 1].tolist()
+        return path
+
     def _joinable(self, net, path):
         """Cells of a path that a later branch of the same net may start from or end on.
 
@@ -705,11 +760,28 @@ class Router:
         self.vown.reshape(-1)[ring[~np.isin(ring, vias)]] = True
         pad = np.unique((vias[:, None] + self._disk(net.cls.via_diameter / 2 + self.p)[None, :]).ravel())
         cells = cells[~np.isin(cells % self.HW, pad)]
-        centres = np.concatenate([layer * self.HW + vias for layer in range(self.L) if not self.plane[layer]])
+        centres = np.concatenate([layer * self.HW + vias for layer in range(self.L)
+                                  if not self.plane[layer] or self.mixed[layer]])
         return np.concatenate([cells, centres])
 
-    def _route(self, net, pres, strict=False, planes_ok=False):
-        """Route every connection of a net against the current maps; own pads are free."""
+    def _reroute(self, net, pres, strict=False):
+        """Re-route only what is in conflict or missing; the rest of the net stays where it is.
+
+        Work per round then follows the number of conflicts, not the size of the nets.
+        """
+        keep = None
+        if net.stamps is not None and net.paths:
+            tracks, vias = self._conflicts(net)
+            bad, bad_vias = set(tracks.tolist()), set(vias.tolist())
+            keep = [(path, index in net.necks) for index, path in enumerate(net.paths)
+                    if bad.isdisjoint(path) and not any(a % self.HW == b % self.HW and a % self.HW in bad_vias
+                                                        for a, b in zip(path, path[1:]))]
+        self._ripup(net)
+        self._route(net, pres, strict, keep=keep)
+        self._stamp(net)
+
+    def _route(self, net, pres, strict=False, planes_ok=False, keep=None):
+        """Route a net against the current maps; own pads are free. ``keep``: paths to build on."""
         for m, cells in enumerate(self.own[net.name]):
             self.hardf[m][cells] -= 1
         self.vown = np.zeros((self.H, self.W), bool)
@@ -721,14 +793,14 @@ class Router:
                 self.vown.reshape(-1)[centre + self._disk(reach)] = True
         try:
             if net.plane_layers:
-                self._route_to_plane(net, pres, strict)
+                self._route_to_plane(net, pres, strict, keep or ())
             elif len(net.pads) > 1:
-                self._route_tree(net, pres, strict, planes_ok)
+                self._route_tree(net, pres, strict, planes_ok, keep or ())
         finally:
             for m, cells in enumerate(self.own[net.name]):
                 self.hardf[m][cells] += 1
 
-    def _route_to_plane(self, net, pres, strict):
+    def _route_to_plane(self, net, pres, strict, keep=()):
         """Each pad reaches its plane by its own via, or by a short track to copper that already does."""
         anchors, waiting = [], []
         for index in net.pads:
@@ -739,6 +811,17 @@ class Router:
                 anchors.append(cells[~np.isin(cells // self.HW, net.plane_layers)])
             else:
                 waiting.append(index)
+        pad_of = {cell: index for index in waiting for cell in self._pad_global(index).tolist()} if keep else {}
+        for path, narrow in keep:   # kept drops: only those that reach the plane on their own
+            index = pad_of.get(path[0])
+            if index in waiting and path[-1] // self.HW in net.plane_layers:
+                waiting.remove(index)
+                net.connections += 1
+                if narrow:
+                    net.necks.add(len(net.paths))
+                net.paths.append(path)
+                joinable = self._joinable(net, path)
+                anchors += [joinable[~np.isin(joinable // self.HW, net.plane_layers)], self._pad_global(index)]
         for index in waiting:
             net.connections += 1
             starts = self._pad_global(index)
@@ -757,7 +840,7 @@ class Router:
             else:
                 net.failed += 1
 
-    def _route_tree(self, net, pres, strict, planes_ok):
+    def _route_tree(self, net, pres, strict, planes_ok, keep=()):
         """Kruskal over the pads: join the closest components first, skip what will not join."""
         pads = net.pads
         root = {i: i for i in pads}
@@ -770,18 +853,40 @@ class Router:
         where = {i: (self.board.pads[i].x, self.board.pads[i].y) for i in pads}
         pairs = sorted((math.dist(where[a], where[b]), a, b) for n, a in enumerate(pads) for b in pads[n + 1:])
         tried, groups = set(), len(pads)
+        if keep:
+            owner = {cell: index for index in pads for cell in cells[index].tolist()}
+            for path, narrow in keep:   # in the order they were made, so a path hung on a dropped one drops too
+                a, b = owner.get(path[0]), owner.get(path[-1])
+                if a is None or (b is None and not narrow):
+                    continue
+                a = find(a)
+                if narrow:
+                    net.necks.add(len(net.paths))
+                net.paths.append(path)
+                joinable = self._joinable(net, path)
+                for cell in joinable.tolist():
+                    owner.setdefault(cell, a)
+                merged = [cells[a], joinable]
+                if b is not None and find(b) != a:
+                    b = find(b)
+                    merged.append(cells.pop(b))
+                    root[b] = a
+                    groups -= 1
+                cells[a] = np.unique(np.concatenate(merged))
 
         def join():
             nonlocal groups
-            for _, a, b in pairs:
-                a, b = find(a), find(b)
+            for _, pad_a, pad_b in pairs:
+                a, b = find(pad_a), find(pad_b)
                 if a == b or (a, b) in tried:
                     continue
                 if len(cells[a]) < len(cells[b]):
                     a, b = b, a
-                path = self._connect(net, cells[a], cells[b], pres, strict, planes_ok=planes_ok)
+                path = self._connect(net, cells[a], cells[b], pres, strict, planes_ok=planes_ok,
+                                     focus=np.concatenate([self._pad_global(pad_a), self._pad_global(pad_b)]))
                 if path:
-                    path = self._straighten(net, path)
+                    path = self._square_up(net, self._straighten(net, path), cells[b])
+                    path = self._square_up(net, path[::-1], cells[a])[::-1]
                     net.paths.append(path)
                     cells[a] = np.unique(np.concatenate([cells[a], cells.pop(b), self._joinable(net, path)]))
                     root[b] = a
@@ -790,7 +895,8 @@ class Router:
                         return
                 else:
                     tried.update(((a, b), (b, a)))
-        join()
+        if groups > 1:
+            join()
         if groups > 1 and net.neck is not None:
             # Neck-down: lone pads the full width cannot leave get a short narrow escape
             # to open ground, then the full-width joining is tried once more.
@@ -806,6 +912,7 @@ class Router:
             if escaped:
                 tried.clear()
                 join()
+        if net.necks:
             # An escape nothing joined would dangle: cut it back to where another path meets it.
             ends = [(path[0], path[-1]) for path in net.paths]
             kept, necks = [], set()
@@ -836,11 +943,11 @@ class Router:
 
     def _score(self, net):
         segments, vias = self.geometry(net)
-        return net.failed, sum(math.dist(a, b) for _, a, b, _ in segments) / self.p + self.opt.via_cost * len(vias)
+        return net.failed, sum(math.dist(a, b) for _, a, b, _ in segments) / self.p + self.via_cost * len(vias)
 
     def optimize(self):
         """Re-route each net by pure shortest path around the others; keep it only if no worse."""
-        better = 0
+        better, self.weight = 0, self.opt.tidy_heuristic
         for net in self.order:
             if not net.paths or self._late():
                 continue
@@ -853,6 +960,7 @@ class Router:
                 self._restore(net, saved)
             elif after < before:
                 better += 1
+        self.weight = self.opt.heuristic
         self._say(f"tidy-up: {better} nets shortened")
 
     def negotiate(self):
@@ -870,9 +978,12 @@ class Router:
             if opt.seed is not None and rounds > 1:
                 todo = [todo[i] for i in rng.permutation(len(todo))]
             for net in todo:
-                self._ripup(net)
-                self._route(net, pres)
-                self._stamp(net)
+                if opt.partial_rounds:
+                    self._reroute(net, pres)
+                else:
+                    self._ripup(net)
+                    self._route(net, pres)
+                    self._stamp(net)
             todo = []
             for net in order:
                 bad_tracks, bad_vias = self._conflicts(net)
@@ -907,9 +1018,7 @@ class Router:
             for net in pending:
                 # Past the budget only real conflicts are still fixed; dropped connections stay dropped.
                 if self._in_conflict(net) or (net.failed and not self._late()):
-                    self._ripup(net)
-                    self._route(net, 0.0, strict=True)
-                    self._stamp(net)
+                    self._reroute(net, 0.0, strict=True)
         self._say(f"hard pass: {sum(n.failed for n in self.order)} connections unrouted")
 
     def _state(self, net):
@@ -921,47 +1030,52 @@ class Router:
         self._stamp(net)
 
     def rescue(self):
-        """Finish what the hard pass dropped: move the nets in the way, then borrow a plane layer.
+        """Finish what the hard pass dropped, keeping the board free of conflicts throughout.
 
-        A blocked net is routed through its blockers to find them; they are ripped,
-        the net goes in, and unless that is a net gain in connections everything is put back.
+        Rip-up and re-route with a queue: a dropped net is routed straight through whatever
+        is in its way, the nets it crossed are ripped and re-routed around it, and any of
+        those that no longer fit take their turn in the queue. The best state seen is the
+        one that stays. Last resort for what is still open: a short run on a reference
+        plane layer, reported as such.
         """
         opt = self.opt
-        for net in sorted((n for n in self.order if n.failed), key=lambda n: n.failed):
-            if self._late():
-                break
-            before = net.failed
-            saved = {net.name: self._state(net)}
-            self._ripup(net)
-            self._route(net, opt.pres_cap)
-            self._stamp(net)
+
+        def dropped():
+            return sum(n.failed for n in self.order)
+        best, kept = dropped(), {n.name: self._state(n) for n in self.order}
+        queue = deque(sorted((n for n in self.order if n.failed), key=lambda n: n.failed))
+        turns = opt.rescue_turns * len(queue)
+        rng = np.random.default_rng(opt.seed)
+        while queue and turns > 0 and not self._late():
+            turns -= 1
+            net = queue.popleft()
+            if not net.failed:
+                continue
+            self._reroute(net, opt.rip_cost * (0.5 + rng.random()))   # jitter keeps two nets from trading places forever
             tracks, vias = self._conflicts(net)
             through = np.concatenate([layer * self.HW + vias for layer in range(self.L)])
             blockers = [other for other in self.order if other is not net and other.stamps is not None
                         and (np.isin(tracks, other.stamps[net.t]).any()
                              or (net.neck is not None and np.isin(tracks, other.stamps[net.neck]).any())
                              or np.isin(through, other.stamps[net.v]).any())]
-            done = False
-            if blockers and len(blockers) <= opt.rescue_blockers:
-                for other in blockers:
-                    saved[other.name] = self._state(other)
-                    self._ripup(other)
-                for one in [net, *blockers]:
-                    self._ripup(one)
-                    self._route(one, 0.0, strict=True)
-                    self._stamp(one)
-                # Keep the swap only if it connects more than it costs the nets moved aside.
-                done = before - net.failed > sum(o.failed - saved[o.name][2] for o in blockers)
-            if not done:
-                for name, state in saved.items():
-                    self._restore(self.nets[name], state)
-                if opt.plane_cost and any(self.plane):
-                    # Last resort: a short run on a reference plane layer, reported as such.
-                    self._ripup(net)
-                    self._route(net, 0.0, strict=True, planes_ok=True)
-                    self._stamp(net)
-                    if net.failed >= before:
-                        self._restore(net, saved[net.name])
+            for other in blockers:   # they give way: only their crossed paths are re-routed
+                self._reroute(other, 0.0, strict=True)
+                if other.failed:
+                    queue.append(other)
+            if dropped() < best:
+                best, kept = dropped(), {n.name: self._state(n) for n in self.order}
+        for net in self.order:   # back to the best state seen
+            if self._state(net)[0] is not kept[net.name][0]:
+                self._restore(net, kept[net.name])
+        if opt.plane_cost and any(self.plane):
+            for net in [n for n in self.order if n.failed]:
+                saved, before = self._state(net), net.failed
+                self._ripup(net)
+                self._route(net, 0.0, strict=True, planes_ok=True)
+                self._stamp(net)
+                if net.failed >= before:
+                    self._restore(net, saved)
+        self._say(f"rescue: {dropped()} connections unrouted")
 
     # ---- output ------------------------------------------------------------
     def _xy(self, cell):
@@ -1033,6 +1147,7 @@ class Router:
                   "coupled": False} for pair in self.pairs if pair[0] in nets and pair[1] in nets]
         return {"engine": "vela-native", "pitch_mm": round(self.p, 6), "grid": [self.W, self.H, self.L],
                 "reference_planes": planes,
+                "mixed_planes": [self.board.layers[i] for i in range(self.L) if self.mixed[i]],
                 "electrical": {"model": "quasi-static estimate, not sign-off",
                                "stackup_assumed": any(m.assumed for m in self.models),
                                "track_width_mm": width, "layers": stackup, "pairs": pairs,
@@ -1050,11 +1165,13 @@ class Router:
 def route_board(board: Board, options: Options | None = None, obstacles=()) -> Router:
     """Best of up to ``options.tries`` runs that differ only in re-route order.
 
-    ponytail: restarts instead of a smarter negotiation; the order matters on dense boards.
+    ponytail: restarts on top of the negotiation; the order still matters on dense boards.
+    A finer grid was tried instead (tracks pack 14 % tighter): 7x slower, no gain.
     """
     options = options or Options()
     started, best = time.monotonic(), None
-    for attempt in range(max(1, options.tries)):
+    tries = max(1, options.tries)
+    for attempt in range(tries):
         left = options.budget_s - (time.monotonic() - started)
         if best and left < 10:
             break

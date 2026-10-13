@@ -40,22 +40,31 @@ unrouted copy and `report.json` into the new folder.
   Whatever still overlaps is re-routed around everything else or dropped, so the
   output never contains two nets in conflict by the engine's own maps.
 - **Tidy-up and rescue.** Each net is re-routed by plain shortest path and kept
-  only if not worse. A dropped connection is retried by moving up to four
-  blocking nets aside, accepted only when more connections result.
+  only if not worse. Dropped connections then go through a rip-up queue: the net
+  is routed through whatever blocks it, the crossed nets give way and re-route
+  only their crossed paths, and any that no longer fit take their turn. The best
+  state seen is kept. Apart from the first full rounds and the tidy-up, only the
+  paths in conflict are re-routed, not whole nets.
 - **Neck-down.** A class width is treated as a default: a pad the class width
   cannot leave gets a short escape at the board minimum (0.15 mm floor), reported
   as `necked_mm`.
-- **Restarts.** Up to four re-route orders are tried inside the time budget and
+- **Restarts.** Up to three re-route orders are tried inside the time budget and
   the best is kept. The order is seeded; run-to-run repeatability was not measured.
 
 ### 4+ layers and electrical behaviour
 
-- **Reference planes.** An inner layer that is at least 30 % copper zone is kept
-  as a solid plane. No signal is routed on it. Surface pads of the plane's net
-  drop their own via into it (or join copper within about 1 mm that already
-  does); through-hole pads inside the plane count as connected. As a last resort
-  a dropped connection may use a plane layer, and the length is reported as
-  `signal_on_plane_mm`.
+- **Reference planes.** An inner layer that is at least 30 % copper zone is a
+  plane. Surface pads of the plane's net drop their own via into it (or join
+  copper within about 1 mm that already does); through-hole pads inside the plane
+  count as connected.
+- **One plane stays solid, the other may carry signals.** The hand-routed
+  originals of all four 4-layer test boards have signal tracks on an inner plane
+  layer. The engine keeps the plane next to the busier component side unbroken as
+  the reference. A second plane layer also carries signals (at 1.5x cost), but
+  only when every net of that plane also owns the solid one, so a signal can never
+  cut a pad off from its plane. Listed as `mixed_planes`; the length is reported
+  as `signal_on_plane_mm`. As a last resort a dropped connection may use any plane
+  layer.
 - **Dielectric constant and delay.** Thickness and permittivity come from the
   board stackup. Each signal layer is classed as microstrip, stripline, embedded
   or unreferenced from the planes actually present. A grid step costs its
@@ -74,39 +83,53 @@ All figures are quasi-static estimates (the existing Hammerstad-Jensen
 microstrip and the IPC-2141 stripline approximation). They are not a field
 solver and not signal-integrity sign-off.
 
-### Measured on the 13-board set, 2026-10-12
+### Measured on the 13-board set
 
 Same stripped open-source boards as the 2026-10-04 comparison. Accepted means
 what the plugin means: KiCad DRC with refilled zones reports nothing unconnected
-and no error or new warning. Times are wall-clock with three or four boards
-running at once on one PC and include the restarts. One run per board.
+and no error or new warning. One run per board, three or four boards running at
+once on one PC, 400 s budget. "Before" is the first version of the engine
+(2026-10-12, PR #41 as opened); "after" adds mixed plane layers, the rip-up
+queue, partial re-routing and squared-up joins (2026-10-13).
 
-| Board (layers) | Connections | Left open | New DRC issues | Accepted | Time |
+| Board (layers) | Before: connected | After: connected | After: new DRC issues | Accepted before / after | Time before / after |
 |---|---|---|---|---|---|
-| practice (2) | 8/8 | 0 | 0 | yes | 5 s |
-| Prod_v2 (2) | 15/15 | 0 | 0 | yes | 14 s |
-| tp4056-power-path (2) | 8/8 | 0 | 0 | yes | 1 s |
-| anvil-stm32f031 (2) | 117/117 | 0 | 0 | yes | 106 s |
-| esp32-4ch-relays (2) | 154/154 | 0 | 0 | yes | 96 s |
-| mtb-led-atmega328pb (2) | 222/222 | 0 | 0 | yes | 221 s |
-| usb-i2c-bridge (2) | 57/57 | 0 | 0 | no: 4 starved-thermal errors already on the unrouted board | 17 s |
-| bms-buck-boost (2) | 88/89 | 1 | 0 | no: also 109 errors already on the unrouted board | 201 s |
-| zereader-pico (2) | 221/223 | 2 | 2 (teardrop in a keep-out, starved thermal) | no | 318 s |
-| rp2040-breakout (4) | 107/108 | 1 | 0 | no | 183 s |
-| soleil (4) | 176/179 | 3 | 3 (2 connection-width warnings, 1 courtyard) | no | 304 s |
-| mikoto (4) | 161/166 | 6 | 1 (a via already on the board left dangling) | no | 209 s |
-| bitaxe-ultra (4) | 280/289 | 9 | 1 (unidentified) | no | 414 s |
+| practice (2) | 8/8 | 8/8 | 0 | yes / yes | 5 s / 1 s |
+| Prod_v2 (2) | 15/15 | 15/15 | 0 | yes / yes | 14 s / 7 s |
+| tp4056-power-path (2) | 8/8 | 8/8 | 0 | yes / yes | 1 s / 1 s |
+| anvil-stm32f031 (2) | 117/117 | 117/117 | 0 | yes / yes | 106 s / 70 s |
+| esp32-4ch-relays (2) | 154/154 | 154/154 | 0 | yes / yes | 96 s / 42 s |
+| mtb-led-atmega328pb (2) | 222/222 | 222/222 | 1 (starved thermal) | yes / **no** | 221 s / 198 s |
+| usb-i2c-bridge (2) | 57/57 | 57/57 | 0 | no / no: 4 starved-thermal errors already on the unrouted board | 17 s / 5 s |
+| bms-buck-boost (2) | 88/89 | 88/89 | 0 | no / no: also 109 errors already on the unrouted board | 201 s / 76 s |
+| zereader-pico (2) | 221/223 | 223/223 | 4 (2 starved thermal, 2 track not centred on via) | no / no | 318 s / 270 s |
+| rp2040-breakout (4) | 107/108 | **108/108** | 0 | no / **yes** | 183 s / 50 s |
+| soleil (4) | 176/179 | 176/179 | 1 (connection-width warning) | no / no | 304 s / 365 s |
+| mikoto (4) | 161/166 | 162/166 | 2 (vias already on the board left dangling) | no / no | 209 s / 401 s |
+| bitaxe-ultra (4) | 280/289 | 285/289 | 1 (unidentified) | no / no | 414 s / 404 s |
+| **All 13** | **1614/1635 (98.7 %)** | **1623/1635 (99.3 %)** | | **6 / 6** | **2089 s / 1890 s** |
 
-Six of 13 accepted; seven of 13 fully connected with no new DRC issue. **No
-4-layer board is fully routed yet**: they end at 97 to 99 % with clean copper.
+Open connections fell from 21 to 12; fully connected boards rose from 7 to 9.
+The first 4-layer board (rp2040-breakout) is now routed completely and accepted
+by KiCad DRC, with In1 kept solid and about 92 mm of signal on In2. The other
+three 4-layer boards are at 97.6 to 98.6 %; their second plane belongs to a
+power net with no other plane, so it stays solid. mtb-led lost its acceptance to
+one new starved-thermal error: tracks that pass close to a pad can cut the
+spokes that tie it to a copper pour, and the engine does not model that. A soft
+keep-off ring around such pads was tried and removed (slower, no fewer errors).
+Results still vary with the re-route order.
+
+Also tried and dropped: a finer grid (tracks pack 14 % tighter, 7x slower, no
+more connections on rp2040).
 
 For context only, the record of 2026-10-04 for the Freerouting path on the same
-boards (900 s cap, not re-run today, so not a side-by-side test): accepted
-practice; 85.7 % on usb-i2c-bridge; no plan within the cap on anvil, bms,
+boards (900 s cap, not re-run, so not a side-by-side test): accepted practice;
+85.7 % on usb-i2c-bridge; no plan within the cap on anvil, bms,
 esp32-4ch-relays and rp2040-breakout; refused tp4056, bitaxe, zereader and
 mtb-led at import; mikoto and soleil not measured. Prod_v2 was rejected then;
-main's smoke test now expects it accepted. This is 13 boards, one run
-each, on one PC. It supports "routes more of this set", not a general ranking.
+the smoke test on main now expects it accepted. This is 13 boards, one run each,
+on one PC. It supports "routes more of this set", not a general ranking. A
+same-day Freerouting run is still to do.
 
 ### Known limits
 
@@ -115,7 +138,11 @@ each, on one PC. It supports "routes more of this set", not a general ranking.
   delay steers layer choice, but nothing is tuned to a target.
 - Through vias only. No blind, buried or micro vias, no BGA fanout patterns.
 - Custom rule files (`.kicad_dru`), footprint copper text, teardrops and
-  thermal-relief spoke rules are not modelled; KiCad DRC catches the misses.
+  thermal-relief spokes are not modelled; KiCad DRC catches the misses. Starved
+  thermals are the most common new DRC error.
+- A plane that belongs to a net with no second plane never carries signals, which
+  is what holds back soleil, mikoto and bitaxe. Checking plane continuity after
+  routing would lift that.
 - Existing tracks are obstacles, not part of the net. Existing vias are
   connected like pads.
 - Outer-layer copper pours are not trusted to connect pads; those nets are
@@ -125,7 +152,8 @@ each, on one PC. It supports "routes more of this set", not a general ranking.
 - The grid costs density: with 0.2 mm tracks and 0.13 mm clearance, tracks pack
   at 0.4 mm, not 0.33 mm.
 - Tested on Windows with KiCad 10.0.6 only. `tests/test_vela_engine.py` covers
-  loader geometry, a brute-force clearance check, plane drops and neck-down.
+  loader geometry, a brute-force clearance check, plane drops, mixed planes and
+  neck-down.
 
 ## Targets and evidence required
 

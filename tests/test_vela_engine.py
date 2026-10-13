@@ -102,3 +102,15 @@ def test_wide_class_necks_down_to_leave_a_tight_pad(tmp_path):
     assert report["unrouted"] == 0 and report["electrical"]["necked_mm"] > 0
     widths = {width for net in router.nets.values() for *_, width in router.geometry(net)[0]}
     assert widths == {0.15, 0.5}
+
+
+def test_second_plane_carries_signals_only_when_its_net_keeps_a_solid_plane(tmp_path):
+    def zone(net, layer):
+        return f'(zone (net "{net}") (layer "{layer}") (polygon (pts (xy 0 0) (xy 20 0) (xy 20 12) (xy 0 12))))'
+    pads = (_pad("C1", 4, 3, "GND") + _pad("S1", 3, 6, "SIG") + _pad("S2", 17, 6, "SIG")
+            + _pad("P1", 10, 9, "VCC") + _pad("P2", 14, 9, "VCC"))
+    doubled = route_board(_board(tmp_path, zone("GND", "In1.Cu") + zone("GND", "In2.Cu") + pads, inner=True)).report()
+    assert doubled["mixed_planes"] == ["In2.Cu"] and doubled["unrouted"] == 0
+    # A signal on In2 could cut VCC pads off their only plane, so In2 stays solid here.
+    split = route_board(_board(tmp_path, zone("GND", "In1.Cu") + zone("VCC", "In2.Cu") + pads, inner=True)).report()
+    assert split["mixed_planes"] == [] and split["reference_planes"] == ["In1.Cu", "In2.Cu"] and split["unrouted"] == 0
