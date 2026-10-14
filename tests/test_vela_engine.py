@@ -104,13 +104,29 @@ def test_wide_class_necks_down_to_leave_a_tight_pad(tmp_path):
     assert widths == {0.15, 0.5}
 
 
-def test_second_plane_carries_signals_only_when_its_net_keeps_a_solid_plane(tmp_path):
+def test_second_plane_carries_signals_and_a_cut_plane_is_noticed(tmp_path):
     def zone(net, layer):
         return f'(zone (net "{net}") (layer "{layer}") (polygon (pts (xy 0 0) (xy 20 0) (xy 20 12) (xy 0 12))))'
     pads = (_pad("C1", 4, 3, "GND") + _pad("S1", 3, 6, "SIG") + _pad("S2", 17, 6, "SIG")
             + _pad("P1", 10, 9, "VCC") + _pad("P2", 14, 9, "VCC"))
-    doubled = route_board(_board(tmp_path, zone("GND", "In1.Cu") + zone("GND", "In2.Cu") + pads, inner=True)).report()
-    assert doubled["mixed_planes"] == ["In2.Cu"] and doubled["unrouted"] == 0
-    # A signal on In2 could cut VCC pads off their only plane, so In2 stays solid here.
-    split = route_board(_board(tmp_path, zone("GND", "In1.Cu") + zone("VCC", "In2.Cu") + pads, inner=True)).report()
-    assert split["mixed_planes"] == [] and split["reference_planes"] == ["In1.Cu", "In2.Cu"] and split["unrouted"] == 0
+    doubled = route_board(_board(tmp_path, zone("GND", "In1.Cu") + zone("GND", "In2.Cu") + pads, inner=True))
+    assert doubled.report()["mixed_planes"] == ["In2.Cu"] and doubled.report()["unrouted"] == 0
+    assert doubled.guard == []   # GND keeps In1 whole whatever happens on In2
+    # VCC has no other plane: In2 still carries signals, but its continuity is checked afterwards.
+    split = route_board(_board(tmp_path, zone("GND", "In1.Cu") + zone("VCC", "In2.Cu") + pads, inner=True))
+    report = split.report()
+    assert report["mixed_planes"] == ["In2.Cu"] and split.guard == [("VCC", 2)]
+    assert report["unrouted"] == 0 and report["plane_connections_mended"] == 0
+
+
+def test_pieces_tells_a_cut_plane_from_a_whole_one():
+    import numpy as np
+    from velatrace.vela_engine import _pieces
+    region = np.ones((5, 9), bool)
+    region[:, 4] = False                     # a track's keep-off band cuts the plane in two
+    labels, image = _pieces(region, [1 * 9 + 1, 3 * 9 + 2, 2 * 9 + 7, 2 * 9 + 4 + 9 * 0])
+    assert labels[0] == labels[1] != labels[2] and labels[3] in (labels[0], labels[2])   # rim seed joins a neighbour
+    assert (image == labels[0]).sum() == 20 and (image == labels[2]).sum() == 20
+    region[2, 4] = True                      # a gap in the band: one piece again
+    labels, _ = _pieces(region, [10, 25])
+    assert labels[0] == labels[1]

@@ -147,6 +147,37 @@ def _erode(mask, cells):
     return mask
 
 
+def _pieces(region, seeds):
+    """Which connected piece of ``region`` each seed cell sits in (0 = none), and the label image.
+
+    ponytail: labels stop at 255, so past 253 pieces the rest share one label.
+    """
+    h, w = region.shape
+    state = bytearray(region.astype(np.uint8).tobytes())   # 1 = in the region, not yet labelled
+    labels, label = [], 1
+    for seed in seeds:
+        # A seed on the rim counts for the piece beside it.
+        near = (seed, seed - 1, seed + 1, seed - w, seed + w, seed - w - 1, seed - w + 1, seed + w - 1, seed + w + 1,
+                seed - 2, seed + 2, seed - 2 * w, seed + 2 * w)
+        start = next((cell for cell in near if 0 <= cell < h * w and state[cell]), None)
+        if start is None:
+            labels.append(0)
+            continue
+        if state[start] == 1:
+            label = min(label + 1, 255)
+            state[start] = label
+            stack = [start]
+            while stack:
+                i = stack.pop()
+                x = i % w
+                for j in (i - w, i + w, i - 1 if x else -1, i + 1 if x < w - 1 else -1):
+                    if 0 <= j < h * w and state[j] == 1:
+                        state[j] = label
+                        stack.append(j)
+        labels.append(state[start])
+    return labels, np.frombuffer(bytes(state), np.uint8).reshape(h, w)
+
+
 def _flood_outside(blocked):
     """Cells reachable from the grid corner without crossing ``blocked``."""
     h, w = blocked.shape
@@ -372,12 +403,15 @@ class Router:
         every = tuple(range(L))
         own = {name: [[] for _ in self.maps] for name in self.nets}
         self.pad_cells = {}
-        self.pour = {}   # copper pour mask per (net, layer)
+        self.tied = {}   # net -> [(map, cells)] of net-tie copper it may touch, each counted on its own
+        self.pour, self.pour_gap = {}, {}   # copper pour mask, and how far its fill stays from other nets
         for zone in board.zones:
             if zone.net in self.nets:
                 mask = _inside(zone.points, self.xs, self.ys)
                 for layer in zone.layers:
-                    self.pour[(zone.net, layer)] = self.pour.get((zone.net, layer), False) | mask
+                    key = (zone.net, layer)
+                    self.pour[key] = self.pour.get(key, False) | mask
+                    self.pour_gap[key] = max(self.pour_gap.get(key, 0), zone.clearance + zone.min_thickness / 2)
         hole_clearance = board.rules.get("min_hole_clearance", 0) or 0.25
         for index, pad in enumerate(board.pads):
             reach = _pad_reach(pad)
@@ -387,13 +421,20 @@ class Router:
             net = self.nets.get(pad.net)
             layers = pad.layers if pad.plated and pad.layers else every
             clearance = max(net.cls.clearance if net else 0.0, pad.clearance)
+            sharers = [name for name in (pad.net, *pad.tie) if name in self.nets] if pad.tie else []
+            owner = [[] for _ in self.maps] if sharers else own[pad.net] if net else None
             if pad.plated and pad.layers:
-                self._block(d, iy0, ix0, layers, clearance, own[pad.net] if net else None)
+                self._block(d, iy0, ix0, layers, clearance, owner)
             if pad.drill:
                 hole = np.hypot(X - pad.x, Y - pad.y) - pad.drill / 2
                 self._block(hole, iy0, ix0, every, max(hole_clearance, pad.clearance),
-                            own[pad.net] if net and pad.plated else None,
-                            copper=False)
+                            owner if net and pad.plated else None, copper=False)
+            for m, parts in enumerate(owner if sharers else ()):
+                if parts:
+                    cells = np.unique(np.concatenate(parts))
+                    self.hardf[m][cells] += 1
+                    for name in sharers:
+                        self.tied.setdefault(name, []).append((m, cells))
             if net:
                 # Route ends must sit well inside the pad, not on its rim.
                 depth = min(net.cls.width / 2, -0.5 * float(d.min())) if d.min() < 0 else None
@@ -450,7 +491,7 @@ class Router:
     def _planes(self):
         """Inner layers that are mostly zone become reference planes for their nets."""
         board = self.board
-        self.zone = {}
+        self.zone, self.zone_full = {}, {}
         self.plane = [False] * self.L
         area = max(1, int(self.inside.sum()))
         shrink = int(max(e for e, _ in self.maps[self.track_maps:]) / self.p) + 1
@@ -463,19 +504,20 @@ class Router:
                 self.plane[layer] = True
                 for name, mask in masks.items():
                     self.zone[(name, layer)] = _erode(mask, shrink)
+                    self.zone_full[(name, layer)] = mask
                     self.nets[name].plane_layers += (layer,)
         # Hand-routed 4-layer boards put signals on a plane layer too. Keep the plane next to
         # the busier component side unbroken as the reference; the others also carry signals.
         planes = [i for i in range(self.L) if self.plane[i]]
-        self.mixed = [False] * self.L
+        self.mixed, self.guard, self.mended = [False] * self.L, [], 0
         if len(planes) > 1 and self.opt.mixed_cost:
             sides = [sum(1 for pad in board.pads if pad.net and pad.layers == (side,)) for side in (0, self.L - 1)]
             solid = min(planes) if sides[0] >= sides[1] else max(planes)
-            # Only where every net of that plane also owns the solid one: a signal can then
-            # never cut a pad off from its plane.
-            self.mixed = [i in planes and i != solid
-                          and all(solid in self.nets[name].plane_layers for name, layer in self.zone if layer == i)
-                          for i in range(self.L)]
+            self.mixed = [i in planes and i != solid for i in range(self.L)]
+            # A plane whose net has no solid plane as well can be cut apart by those signals:
+            # these are checked after routing and mended (_mend_planes).
+            self.guard = [(name, layer) for name, layer in self.zone
+                          if self.mixed[layer] and solid not in self.nets[name].plane_layers]
         named = [f"{board.layers[i]}={'/'.join(n for n, l in self.zone if l == i)}{' (also signals)' * self.mixed[i]}"
                  for i in planes]
         self._say(f"grid {self.W}x{self.H}x{self.L} at {self.p:.4f} mm; nets {len(self.nets)}; "
@@ -602,7 +644,7 @@ class Router:
         return np.concatenate([layer * self.HW + flat for layer in self.board.pads[index].layers])
 
     def _connect(self, net, starts, target, pres, strict, *, extra=None, planes_ok=False, t=None, escape=False,
-                 focus=None):
+                 focus=None, plane_goal=True):
         """A* from starts to target cells, or (target None) into the net's plane or ``extra``.
 
         ``t`` is the track map (width) to route at. ``escape`` instead looks for the
@@ -615,7 +657,8 @@ class Router:
             return None   # hard deadline: fail fast, what is routed stays valid
         to_plane = target is None
         ends = starts if to_plane else np.concatenate([starts, target])
-        for grow in ((1,) if escape else (1, 4) if focus is None else (1, 4, 0)):
+        # A pad far from its plane's outline may need the whole board to reach it.
+        for grow in ((1,) if escape else (1, 4, 1000) if to_plane else (1, 4) if focus is None else (1, 4, 0)):
             iy, ix = np.divmod((ends if focus is None or not grow else focus) % self.HW, self.W)
             pad = int(max(3.0 / self.p, 0.3 * max(np.ptp(iy), np.ptp(ix))) * (grow or 1))
             y0, y1 = max(0, int(iy.min()) - pad), min(self.H, int(iy.max()) + pad + 1)
@@ -638,6 +681,8 @@ class Router:
                 flat[self._local(starts, y0, y1, x0, x1, w, hw)] = 0
                 box, weight = (0, 0, w, h), 0.0
             elif to_plane:
+                if not plane_goal:   # only copper that already reaches the plane will do
+                    flat[:] = 0
                 if extra is not None:
                     flat[self._local(extra, y0, y1, x0, x1, w, hw)] = 1
                 box, weight = (0, 0, w, h), 0.0     # nearest of many goals: plain Dijkstra
@@ -764,7 +809,7 @@ class Router:
                                   if not self.plane[layer] or self.mixed[layer]])
         return np.concatenate([cells, centres])
 
-    def _reroute(self, net, pres, strict=False):
+    def _reroute(self, net, pres, strict=False, thin=False):
         """Re-route only what is in conflict or missing; the rest of the net stays where it is.
 
         Work per round then follows the number of conflicts, not the size of the nets.
@@ -777,12 +822,15 @@ class Router:
                     if bad.isdisjoint(path) and not any(a % self.HW == b % self.HW and a % self.HW in bad_vias
                                                         for a, b in zip(path, path[1:]))]
         self._ripup(net)
-        self._route(net, pres, strict, keep=keep)
+        self._route(net, pres, strict, keep=keep, thin=thin)
         self._stamp(net)
 
-    def _route(self, net, pres, strict=False, planes_ok=False, keep=None):
-        """Route a net against the current maps; own pads are free. ``keep``: paths to build on."""
-        for m, cells in enumerate(self.own[net.name]):
+    def _route(self, net, pres, strict=False, planes_ok=False, keep=None, thin=False):
+        """Route a net against the current maps; own pads are free. ``keep``: paths to build on.
+
+        ``thin`` draws the new connections at the escape width from end to end.
+        """
+        for m, cells in (*enumerate(self.own[net.name]), *self.tied.get(net.name, ())):
             self.hardf[m][cells] -= 1
         self.vown = np.zeros((self.H, self.W), bool)
         for index in net.pads:   # no via too close to the net's own drilled pads
@@ -795,26 +843,32 @@ class Router:
             if net.plane_layers:
                 self._route_to_plane(net, pres, strict, keep or ())
             elif len(net.pads) > 1:
-                self._route_tree(net, pres, strict, planes_ok, keep or ())
+                self._route_tree(net, pres, strict, planes_ok, keep or (), thin)
         finally:
-            for m, cells in enumerate(self.own[net.name]):
+            for m, cells in (*enumerate(self.own[net.name]), *self.tied.get(net.name, ())):
                 self.hardf[m][cells] += 1
 
     def _route_to_plane(self, net, pres, strict, keep=()):
         """Each pad reaches its plane by its own via, or by a short track to copper that already does."""
-        anchors, waiting = [], []
+        anchors, waiting, loose = [], [], []
         for index in net.pads:
             pad = self.board.pads[index]
             centre = (int(round((pad.y - self.y0) / self.p)), int(round((pad.x - self.x0) / self.p)))
             if any(layer in pad.layers and self.zone[(net.name, layer)][centre] for layer in net.plane_layers):
                 cells = self._pad_global(index)   # through-hole pad already sits in its plane
-                anchors.append(cells[~np.isin(cells // self.HW, net.plane_layers)])
+                cells = cells[~np.isin(cells // self.HW, net.plane_layers)]
+                if pad.number == "via" and not pad.ref:
+                    loose.append(cells)   # a via left on the board: KiCad wants copper on a second layer
+                else:
+                    anchors.append(cells)
             else:
                 waiting.append(index)
         pad_of = {cell: index for index in waiting for cell in self._pad_global(index).tolist()} if keep else {}
         for path, narrow in keep:   # kept drops: only those that reach the plane on their own
             index = pad_of.get(path[0])
-            if index in waiting and path[-1] // self.HW in net.plane_layers:
+            layer = path[-1] // self.HW
+            if (index in waiting and layer in net.plane_layers
+                    and self.zone[(net.name, layer)].reshape(-1)[path[-1] % self.HW]):
                 waiting.remove(index)
                 net.connections += 1
                 if narrow:
@@ -822,25 +876,39 @@ class Router:
                 net.paths.append(path)
                 joinable = self._joinable(net, path)
                 anchors += [joinable[~np.isin(joinable // self.HW, net.plane_layers)], self._pad_global(index)]
-        for index in waiting:
-            net.connections += 1
-            starts = self._pad_global(index)
-            extra = np.concatenate(anchors) if anchors else None
-            path = self._connect(net, starts, None, pres, strict, extra=extra)
-            t = net.t
-            if not path and net.neck is not None:   # a short plane stub may be drawn narrow
-                path, t = self._connect(net, starts, None, pres, strict, extra=extra, t=net.neck), net.neck
+        net.connections += len(waiting)
+        for _ in range(2):   # second pass: a pad may only reach copper that another pad's drop laid down
+            left = []
+            for index in waiting:
+                starts = self._pad_global(index)
+                extra = np.concatenate(anchors) if anchors else None
+                path = self._connect(net, starts, None, pres, strict, extra=extra)
+                t = net.t
+                if not path and net.neck is not None:   # a short plane stub may be drawn narrow
+                    path, t = self._connect(net, starts, None, pres, strict, extra=extra, t=net.neck), net.neck
+                    if path:
+                        net.necks.add(len(net.paths))
                 if path:
-                    net.necks.add(len(net.paths))
+                    path = self._straighten(net, path, t)
+                    net.paths.append(path)
+                    joinable = self._joinable(net, path)
+                    anchors += [joinable[~np.isin(joinable // self.HW, net.plane_layers)], starts]
+                else:
+                    left.append(index)
+            if len(left) in (0, len(waiting)):
+                break
+            waiting = left
+        net.failed += len(left)
+        for cells in loose if anchors else ():
+            net.connections += 1
+            path = self._connect(net, cells, None, pres, strict, extra=np.concatenate(anchors), plane_goal=False)
             if path:
-                path = self._straighten(net, path, t)
-                net.paths.append(path)
-                joinable = self._joinable(net, path)
-                anchors += [joinable[~np.isin(joinable // self.HW, net.plane_layers)], starts]
+                net.paths.append(self._straighten(net, path))
+                anchors.append(cells)
             else:
                 net.failed += 1
 
-    def _route_tree(self, net, pres, strict, planes_ok, keep=()):
+    def _route_tree(self, net, pres, strict, planes_ok, keep=(), thin=False):
         """Kruskal over the pads: join the closest components first, skip what will not join."""
         pads = net.pads
         root = {i: i for i in pads}
@@ -883,10 +951,15 @@ class Router:
                 if len(cells[a]) < len(cells[b]):
                     a, b = b, a
                 path = self._connect(net, cells[a], cells[b], pres, strict, planes_ok=planes_ok,
-                                     focus=np.concatenate([self._pad_global(pad_a), self._pad_global(pad_b)]))
-                if path:
+                                     focus=np.concatenate([self._pad_global(pad_a), self._pad_global(pad_b)]),
+                                     t=net.neck if thin else None)
+                if path and thin:
+                    path = self._straighten(net, path, net.neck)
+                    net.necks.add(len(net.paths))
+                elif path:
                     path = self._square_up(net, self._straighten(net, path), cells[b])
                     path = self._square_up(net, path[::-1], cells[a])[::-1]
+                if path:
                     net.paths.append(path)
                     cells[a] = np.unique(np.concatenate([cells[a], cells.pop(b), self._joinable(net, path)]))
                     root[b] = a
@@ -915,12 +988,14 @@ class Router:
         if net.necks:
             # An escape nothing joined would dangle: cut it back to where another path meets it.
             ends = [(path[0], path[-1]) for path in net.paths]
+            landed = set(np.concatenate([self._pad_global(index) for index in pads]).tolist())
             kept, necks = [], set()
             for index, path in enumerate(net.paths):
                 if index in net.necks:
                     met = {cell for other, pair in enumerate(ends) if other != index for cell in pair}
-                    last = max((k for k, cell in enumerate(path) if cell in met), default=0)
-                    path = path[:last + 1]
+                    if path[-1] not in landed and path[-1] not in met:   # an escape, not a thin connection
+                        last = max((k for k, cell in enumerate(path) if cell in met), default=0)
+                        path = path[:last + 1]
                     if len(path) < 2:
                         continue
                     necks.add(len(kept))
@@ -933,13 +1008,59 @@ class Router:
         self.legalize()
         for _ in range(self.opt.optimize_passes):
             self.optimize()
+            self._mend_planes()
             if not any(n.failed for n in self.order) or self._late():
                 break
             self.legalize()   # the tidy-up freed room: try the dropped connections again
             self.rescue()
+            self._mend_planes()
         self._say(f"done: {sum(n.connections - n.failed for n in self.order)}/"
                   f"{sum(n.connections for n in self.order)} connections routed")
         return self
+
+    def _mend_planes(self):
+        """Signals on a shared plane layer may have cut a plane apart: find the pieces and re-join.
+
+        The fill is estimated on the grid: inside the zone outline and far enough from other
+        nets' copper. Every via and through-hole pad that relies on the plane must sit in one
+        piece. Those that do not are re-routed to the main piece (or by track to copper that
+        reaches it); the plane shrinks to that piece for the rest of the run.
+        """
+        extent, clearance = self.maps[0]
+        for name, layer in self.guard:
+            net = self.nets[name]
+            if net.stamps is None:
+                continue
+            mine = ((self.own[name][0], self.hardf[0]), (net.stamps[0], self.softf[0]))
+            for cells, flat in mine:
+                flat[cells] -= 1
+            fill = self.zone_full[(name, layer)] & (self.hard[0][layer] == 0) & (self.soft[0][layer] == 0)
+            for cells, flat in mine:
+                flat[cells] += 1
+            fill = _erode(fill, int(math.ceil(max(0.0, self.pour_gap[(name, layer)] - extent - clearance) / self.p)))
+            drops = [index for index, path in enumerate(net.paths) if path[-1] // self.HW == layer]
+            seeds = [net.paths[index][-1] % self.HW for index in drops]
+            for index in net.pads:
+                pad = self.board.pads[index]
+                centre = int(round((pad.y - self.y0) / self.p)) * self.W + int(round((pad.x - self.x0) / self.p))
+                if layer in pad.layers and self.zone[(name, layer)].reshape(-1)[centre]:
+                    seeds.append(centre)
+            if len(seeds) < 2:
+                continue
+            labels, image = _pieces(fill, seeds)
+            found = [label for label in labels if label]
+            main = max(set(found), key=found.count) if found else 0
+            if all(label == main for label in labels):
+                continue
+            self.zone[(name, layer)] = self.zone[(name, layer)] & (image == main)
+            cut = {index for index, label in zip(drops, labels) if label != main}
+            keep = [(path, index in net.necks) for index, path in enumerate(net.paths) if index not in cut]
+            self._ripup(net)
+            self._route(net, 0.0, strict=True, keep=keep)
+            self._stamp(net)
+            self.mended += sum(label != main for label in labels)
+        if self.mended:
+            self._say(f"planes: {self.mended} plane connections re-joined after signals cut their plane")
 
     def _score(self, net):
         segments, vias = self.geometry(net)
@@ -1051,7 +1172,10 @@ class Router:
             net = queue.popleft()
             if not net.failed:
                 continue
-            self._reroute(net, opt.rip_cost * (0.5 + rng.random()))   # jitter keeps two nets from trading places forever
+            # Jitter keeps two nets from trading places forever. A signal that was dropped at
+            # its class width comes back at the escape width.
+            self._reroute(net, opt.rip_cost * (0.5 + rng.random()), thin=(
+                net.neck is not None and not net.plane_layers and net.cls.width <= 2 * self.neck_width + 1e-9))
             tracks, vias = self._conflicts(net)
             through = np.concatenate([layer * self.HW + vias for layer in range(self.L)])
             blockers = [other for other in self.order if other is not net and other.stamps is not None
@@ -1067,6 +1191,16 @@ class Router:
         for net in self.order:   # back to the best state seen
             if self._state(net)[0] is not kept[net.name][0]:
                 self._restore(net, kept[net.name])
+        for net in [n for n in self.order if n.failed and n.neck is not None and not n.plane_layers
+                    and n.cls.width <= 2 * self.neck_width + 1e-9]:
+            # A signal still open: draw the missing connection at the escape width end to end.
+            saved, before = self._state(net), net.failed
+            keep = [(path, index in net.necks) for index, path in enumerate(net.paths)]
+            self._ripup(net)
+            self._route(net, 0.0, strict=True, keep=keep, thin=True)
+            self._stamp(net)
+            if net.failed >= before:
+                self._restore(net, saved)
         if opt.plane_cost and any(self.plane):
             for net in [n for n in self.order if n.failed]:
                 saved, before = self._state(net), net.failed
@@ -1148,6 +1282,7 @@ class Router:
         return {"engine": "vela-native", "pitch_mm": round(self.p, 6), "grid": [self.W, self.H, self.L],
                 "reference_planes": planes,
                 "mixed_planes": [self.board.layers[i] for i in range(self.L) if self.mixed[i]],
+                "plane_connections_mended": self.mended,
                 "electrical": {"model": "quasi-static estimate, not sign-off",
                                "stackup_assumed": any(m.assumed for m in self.models),
                                "track_width_mm": width, "layers": stackup, "pairs": pairs,

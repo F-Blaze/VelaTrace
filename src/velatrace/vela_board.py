@@ -8,7 +8,7 @@ render it), custom-rule files (.kicad_dru), blind/buried vias, trapezoid/chamfer
 corners (treated as their full rectangle). Existing tracks are obstacles only;
 existing vias are treated as pads of their net, so they get connected.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fnmatch import fnmatchcase
 import json
 import math
@@ -34,6 +34,7 @@ class Pad:
     drill: float = 0.0
     plated: bool = True
     clearance: float = 0.0       # local override from the pad or its footprint; 0 = net class
+    tie: tuple = ()              # net-tie footprint: other nets allowed to touch this copper
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,8 @@ class Zone:
     points: tuple[tuple[float, float], ...]
     no_tracks: bool = False
     no_vias: bool = False
+    clearance: float = 0.0       # the pour's own clearance to other nets
+    min_thickness: float = 0.25  # narrowest copper the fill keeps
 
 
 @dataclass(frozen=True)
@@ -213,11 +216,14 @@ def _zones(parent, layers, codes):
         names = [str(n) for item in children(node, "layer") + children(node, "layers") for n in item[1:]]
         keepout = _first(node, "keepout")
         flags = {item[0]: item[1] for item in (keepout or [])[1:] if isinstance(item, list) and len(item) == 2}
+        gap = _first(_first(node, "connect_pads") or [], "clearance")
+        thin = _first(node, "min_thickness")
         for polygon in children(node, "polygon"):
             points = tuple((_f(xy, 1), _f(xy, 2)) for xy in children(_first(polygon, "pts"), "xy"))
             if len(points) >= 3:
                 yield Zone("" if keepout else _net_name(node, codes), _copper(names, layers), points,
-                           flags.get("tracks") == "not_allowed", flags.get("vias") == "not_allowed")
+                           flags.get("tracks") == "not_allowed", flags.get("vias") == "not_allowed",
+                           _f(gap) if gap else 0.0, _f(thin) if thin else 0.25)
 
 
 def load_board(path: Path) -> Board:
@@ -253,6 +259,7 @@ def load_board(path: Path) -> Board:
         at = _first(fp, "at")
         fx, fy, frot = _f(at, 1), _f(at, 2), (_f(at, 3) if len(at) > 3 else 0.0)
         reference = next((str(p[2]) for p in children(fp, "property") if len(p) > 2 and p[1] == "Reference"), "")
+        first = len(board.pads)
 
         def place(x, y, fx=fx, fy=fy, frot=frot):
             dx, dy = _rot(x, y, frot)
@@ -275,6 +282,15 @@ def load_board(path: Path) -> Board:
                 _pad_shapes(pad, pad[3], _f(size, 1), _f(size, 2)),
                 _copper([str(n) for n in (_first(pad, "layers") or [])[1:]], layers),
                 hole, pad[2] != "np_thru_hole", _f(_first(pad, "clearance") or local or [0, 0])))
+        # A net tie joins nets on purpose: its grouped pads and its copper may touch each other.
+        for group in (_first(fp, "net_tie_pad_groups") or [])[1:]:
+            numbers = {part.strip() for part in str(group).split(",")}
+            nets = {pad.net for pad in board.pads[first:] if pad.number in numbers and pad.net}
+            if len(nets) > 1:
+                for index in range(first, len(board.pads)):
+                    pad = board.pads[index]
+                    if (pad.number in numbers and pad.net) or not (pad.net or pad.ref):
+                        board.pads[index] = replace(pad, tie=tuple(sorted(nets - {pad.net})))
         board.zones.extend(_zones(fp, layers, codes))
     board.zones.extend(_zones(root, layers, codes))
     for node in children(root, "segment"):

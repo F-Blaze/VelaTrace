@@ -131,6 +131,51 @@ the smoke test on main now expects it accepted. This is 13 boards, one run each,
 on one PC. It supports "routes more of this set", not a general ranking. A
 same-day Freerouting run is still to do.
 
+### Third round and a same-day Freerouting run, 2026-10-14
+
+Added since the table above: any second plane layer may carry signals, with the
+plane's continuity checked on the grid afterwards and cut-off pads re-joined
+(`plane_connections_mended`); net-tie footprints; a dropped signal may be drawn
+at the escape width end to end; plane drops search the whole board and get a
+second pass; vias already on the board are linked to their net.
+
+Both routers ran on the same 13 boards on the same PC with a 500 s cap. The
+Freerouting column is the path the plugin uses today (current `main`, through
+the bench harness `cmp_run.py` arm A), judged by the plugin's own validator. One
+run each, so order-to-order variation is not averaged out. The two routers did
+not run at the same moment; each shared the PC with two or three other boards.
+
+| Board (layers) | Vela: connected | Vela: new DRC issues | Vela accepted | Freerouting: left unconnected | Freerouting accepted |
+|---|---|---|---|---|---|
+| practice (2) | 8/8 | 0 | yes | 0 | yes |
+| Prod_v2 (2) | 15/15 | 0 | yes | 0 | yes |
+| tp4056-power-path (2) | 8/8 | 0 | yes | refused at import (layer check) | no |
+| anvil-stm32f031 (2) | 117/117 | 0 | yes | 14, plus 4 new DRC issues | no |
+| esp32-4ch-relays (2) | 154/154 | 0 | yes | 1 | no |
+| mtb-led-atmega328pb (2) | 222/222 | 1 (starved thermal) | no | 7, plus 3 warnings | no |
+| usb-i2c-bridge (2) | 57/57 | 0 (4 errors already on the board) | no | 2, plus 3 new DRC issues | no |
+| bms-buck-boost (2) | 88/89 | 0 (109 errors already on the board) | no | 20 | no |
+| zereader-pico (2) | 223/223 | 4 | no | result refused (placement list changed) | no |
+| rp2040-breakout (4) | 108/108 | 0 | yes | 3, plus 1 warning | no |
+| mikoto (4) | 166/166 | 1 (a via already on the board) | no | not measured (harness board load timed out) | - |
+| soleil (4) | 176/179 | 1 | no | not measured (harness board load timed out) | - |
+| bitaxe-ultra (4) | 282/289 | 8 | no | result refused (placement list changed) | no |
+| **Total** | **1624/1635 (99.3 %)** | | **6 of 13** | | **2 of 11 measured** |
+
+Vela connects every pad on 10 of the 13 boards; Freerouting on 2 of the 11 it
+was measured on. Four of Freerouting's misses are not routing failures: one
+import refusal, two results the plugin's validator refused, and two boards the
+harness could not load. On the seven boards where both produced a checked
+route, Vela left 1 connection open in total and Freerouting 47. Freerouting was
+faster where it finished (10 to 160 s; Vela 2 to 220 s on the same boards).
+
+Still open on the 4-layer boards: soleil (a centre ball of a 0.5 mm BGA whose
+only escape clears by 6 um, less than the grid margin; a 0.5 mm power net with
+no narrower fallback; one signal) and bitaxe (the run hit the time cap after
+seven negotiation rounds, each 50 to 110 s). mikoto is fully connected but keeps
+one DRC error on a via that was already on the stripped board. Starved-thermal
+errors still cost mtb-led and zereader their acceptance.
+
 ### Known limits
 
 - No coupled differential-pair routing, no length or delay tuning (serpentines),
