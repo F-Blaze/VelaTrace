@@ -36,7 +36,7 @@ class Options:
     iterations: int = 40          # negotiated-congestion rounds before the hard pass
     edge_clearance: float = 0.25  # floor under the board's own copper-to-edge rule, mm
     budget_s: float = 900.0
-    heuristic: float = 2.0        # A* weight while negotiating; >1 trades length for speed
+    heuristic: float = 1.2        # A* weight while negotiating; >1 trades length for speed
     tidy_heuristic: float = 1.2   # A* weight of the tidy-up pass, which decides the final shape
     pres0: float = 1.0
     pres_mult: float = 1.5
@@ -69,8 +69,6 @@ class _Net:
     pads: list
     plane_layers: tuple = ()
     neck: int | None = None       # track map index of the narrow escape width, if narrower
-    neck_width: float | None = None   # width of the narrow paths when not the escape width
-    fallback: int | None = None   # track map index of the default width, for a wide class
     paths: list = field(default_factory=list)   # each: list of global flat cells
     necks: set = field(default_factory=set)     # indexes of paths drawn at the escape width
     stamps: list | None = None
@@ -206,25 +204,30 @@ def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0):
     g = [inf] * (layers * hw)
     came = [-1] * (layers * hw)
     gx0, gy0, gx1, gy1 = box
+    # Octile distance to the goal box, weighted; per column and per row.
+    hx = [(gx0 - x if x < gx0 else (x - gx1 if x > gx1 else 0)) * weight for x in range(w)]
+    hy = [(gy0 - y if y < gy0 else (y - gy1 if y > gy1 else 0)) * weight for y in range(hw // w)]
     heap = []
     for s in starts:
         if cost[s] < 0 and not goal[s]:
             continue
         g[s] = 0.0
         r = s % hw
-        x, y = r % w, r // w
-        dx = gx0 - x if x < gx0 else (x - gx1 if x > gx1 else 0)
-        dy = gy0 - y if y < gy0 else (y - gy1 if y > gy1 else 0)
-        heap.append(((dx + dy - 0.5857864 * (dx if dx < dy else dy)) * weight, 0.0, s))
+        a, b = hx[r % w], hy[r // w]
+        heap.append((a + b - 0.5857864 * (a if a < b else b), 0.0, s))
     heapq.heapify(heap)
-    moves = ((1, 1, 0, 1.0), (-1, -1, 0, 1.0), (w, 0, 1, 1.0), (-w, 0, -1, 1.0),
-             (w + 1, 1, 1, _SQRT2), (w - 1, -1, 1, _SQRT2), (-w + 1, 1, -1, _SQRT2), (-w - 1, -1, -1, _SQRT2))
+    straight = ((1, 1, 0), (-1, -1, 0), (w, 0, 1), (-w, 0, -1))
+    diagonal = ((w + 1, 1, 1), (w - 1, -1, 1), (-w + 1, 1, -1), (-w - 1, -1, -1))
     bases = tuple(range(0, layers * hw, hw))
     push, pop = heapq.heappush, heapq.heappop
     while heap:
         _, gi, i = pop(heap)
-        if gi > g[i]:
+        if g[i] < 0:
             continue
+        # Expanded once, never again (g < 0 also fails every ``ng < g[j]`` below). Re-opening
+        # under a weighted heuristic re-expanded congested windows ~50 times per cell; without
+        # it the path stays within ``weight`` of the cheapest.
+        g[i] = -1.0
         if limit:
             limit -= 1
             if not limit:
@@ -238,25 +241,33 @@ def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0):
             return path
         r = i % hw
         x, y = r % w, r // w
-        for off, mx, my, mult in moves:
+        for off, mx, my in straight:
             j = i + off
             c = cost[j]
             if c < 0:
                 continue
-            ng = gi + c * mult
+            ng = gi + c
             if ng < g[j]:
                 g[j] = ng
                 came[j] = i
-                nx, ny = x + mx, y + my
-                dx = gx0 - nx if nx < gx0 else (nx - gx1 if nx > gx1 else 0)
-                dy = gy0 - ny if ny < gy0 else (ny - gy1 if ny > gy1 else 0)
-                push(heap, (ng + (dx + dy - 0.5857864 * (dx if dx < dy else dy)) * weight, ng, j))
+                a, b = hx[x + mx], hy[y + my]
+                push(heap, (ng + a + b - 0.5857864 * (a if a < b else b), ng, j))
+        for off, mx, my in diagonal:
+            j = i + off
+            c = cost[j]
+            if c < 0:
+                continue
+            ng = gi + c * _SQRT2
+            if ng < g[j]:
+                g[j] = ng
+                came[j] = i
+                a, b = hx[x + mx], hy[y + my]
+                push(heap, (ng + a + b - 0.5857864 * (a if a < b else b), ng, j))
         vc = vcost[r]
         if vc >= 0:
             here = i - r
-            dx = gx0 - x if x < gx0 else (x - gx1 if x > gx1 else 0)
-            dy = gy0 - y if y < gy0 else (y - gy1 if y > gy1 else 0)
-            h = (dx + dy - 0.5857864 * (dx if dx < dy else dy)) * weight
+            a, b = hx[x], hy[y]
+            h = a + b - 0.5857864 * (a if a < b else b)
             for base in bases:
                 if base == here:
                     continue
@@ -317,10 +328,7 @@ class Router:
             c = classes[name]
             self.nets[name] = _Net(name, c, tracks.index((c.width, c.clearance)),
                                    len(tracks) + vias.index((c.via_diameter, c.clearance)), pads,
-                                   neck=tracks.index((neck, c.clearance)) if c.width > neck + 1e-9 else None,
-                                   fallback=tracks.index((self.default_width, c.clearance))
-                                   if c.width > 2 * neck + 1e-9 and self.default_width > neck + 1e-9
-                                   and (self.default_width, c.clearance) in tracks else None)
+                                   neck=tracks.index((neck, c.clearance)) if c.width > neck + 1e-9 else None)
         self.max_clearance = max(c for _, c in self.maps)
         self.max_extent = max(e for e, _ in self.maps)
 
@@ -571,7 +579,7 @@ class Router:
             if tracks.size:
                 parts.append((tracks[:, None] + self._disk(c.width / 2 + gap)[None, :]).ravel())
             if narrow.size:
-                parts.append((narrow[:, None] + self._disk((net.neck_width or self.neck_width) / 2 + gap)[None, :]).ravel())
+                parts.append((narrow[:, None] + self._disk(self.neck_width / 2 + gap)[None, :]).ravel())
             if vias.size:
                 disk = self._disk(c.via_diameter / 2 + gap)
                 for layer in range(self.L):
@@ -634,7 +642,8 @@ class Router:
         vpadded[1:-1, 1:-1] = vcost
         gpadded = np.zeros((self.L, h, w), np.uint8)
         gpadded[:, 1:-1, 1:-1] = goal
-        return padded.ravel().tolist(), vpadded.ravel().tolist(), gpadded, h, w
+        # memoryviews: indexed as fast as lists by the search, without converting whole windows
+        return memoryview(padded.reshape(-1)), memoryview(vpadded.reshape(-1)), gpadded, h, w
 
     def _local(self, cells, y0, y1, x0, x1, w, hw):
         """Global flat cells -> window flat cells (dropping any outside the window)."""
@@ -1183,10 +1192,11 @@ class Router:
                 net.neck is not None and not net.plane_layers and net.cls.width <= 2 * self.neck_width + 1e-9))
             tracks, vias = self._conflicts(net)
             through = np.concatenate([layer * self.HW + vias for layer in range(self.L)])
-            blockers = [other for other in self.order if other is not net and other.stamps is not None
-                        and (np.isin(tracks, other.stamps[net.t]).any()
-                             or (net.neck is not None and np.isin(tracks, other.stamps[net.neck]).any())
-                             or np.isin(through, other.stamps[net.v]).any())]
+            blockers = [] if not tracks.size and not vias.size else [
+                other for other in self.order if other is not net and other.stamps is not None
+                and (np.isin(tracks, other.stamps[net.t]).any()
+                     or (net.neck is not None and np.isin(tracks, other.stamps[net.neck]).any())
+                     or np.isin(through, other.stamps[net.v]).any())]
             for other in blockers:   # they give way: only their crossed paths are re-routed
                 self._reroute(other, 0.0, strict=True)
                 if other.failed:
@@ -1205,19 +1215,6 @@ class Router:
             self._route(net, 0.0, strict=True, keep=keep, thin=True)
             self._stamp(net)
             if net.failed >= before:
-                self._restore(net, saved)
-        for net in [n for n in self.order if n.failed and n.fallback is not None and not n.plane_layers]:
-            # A wide power net still open: the missing connection at the default class width end
-            # to end, never thinner (thinner drew connection-width warnings). Its escapes are
-            # re-drawn at that width too, so every narrow path of the net has one width.
-            saved, before, neck = self._state(net), net.failed, net.neck
-            keep = [(path, False) for index, path in enumerate(net.paths) if index not in net.necks]
-            self._ripup(net)
-            net.neck, net.neck_width = net.fallback, self.default_width
-            self._route(net, 0.0, strict=True, keep=keep, thin=True)
-            self._stamp(net)
-            if net.failed >= before:
-                net.neck, net.neck_width = neck, None
                 self._restore(net, saved)
         if opt.plane_cost and any(self.plane):
             for net in [n for n in self.order if n.failed]:
@@ -1238,7 +1235,7 @@ class Router:
         """(segments, vias): segments are (layer, (x1, y1), (x2, y2), width); vias are (x, y)."""
         segments, vias = set(), set()
         for index, path in enumerate(net.paths):
-            width = (net.neck_width or self.neck_width) if index in net.necks else net.cls.width
+            width = self.neck_width if index in net.necks else net.cls.width
             run_start, previous, direction = path[0], path[0], None
             for cell in path[1:] + [None]:
                 step = None if cell is None else cell - previous
