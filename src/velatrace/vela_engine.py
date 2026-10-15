@@ -69,6 +69,8 @@ class _Net:
     pads: list
     plane_layers: tuple = ()
     neck: int | None = None       # track map index of the narrow escape width, if narrower
+    neck_width: float | None = None   # width of the narrow paths when not the escape width
+    fallback: int | None = None   # track map index of the default width, for a wide class
     paths: list = field(default_factory=list)   # each: list of global flat cells
     necks: set = field(default_factory=set)     # indexes of paths drawn at the escape width
     stamps: list | None = None
@@ -315,7 +317,10 @@ class Router:
             c = classes[name]
             self.nets[name] = _Net(name, c, tracks.index((c.width, c.clearance)),
                                    len(tracks) + vias.index((c.via_diameter, c.clearance)), pads,
-                                   neck=tracks.index((neck, c.clearance)) if c.width > neck + 1e-9 else None)
+                                   neck=tracks.index((neck, c.clearance)) if c.width > neck + 1e-9 else None,
+                                   fallback=tracks.index((self.default_width, c.clearance))
+                                   if c.width > 2 * neck + 1e-9 and self.default_width > neck + 1e-9
+                                   and (self.default_width, c.clearance) in tracks else None)
         self.max_clearance = max(c for _, c in self.maps)
         self.max_extent = max(e for e, _ in self.maps)
 
@@ -566,7 +571,7 @@ class Router:
             if tracks.size:
                 parts.append((tracks[:, None] + self._disk(c.width / 2 + gap)[None, :]).ravel())
             if narrow.size:
-                parts.append((narrow[:, None] + self._disk(self.neck_width / 2 + gap)[None, :]).ravel())
+                parts.append((narrow[:, None] + self._disk((net.neck_width or self.neck_width) / 2 + gap)[None, :]).ravel())
             if vias.size:
                 disk = self._disk(c.via_diameter / 2 + gap)
                 for layer in range(self.L):
@@ -1201,6 +1206,19 @@ class Router:
             self._stamp(net)
             if net.failed >= before:
                 self._restore(net, saved)
+        for net in [n for n in self.order if n.failed and n.fallback is not None and not n.plane_layers]:
+            # A wide power net still open: the missing connection at the default class width end
+            # to end, never thinner (thinner drew connection-width warnings). Its escapes are
+            # re-drawn at that width too, so every narrow path of the net has one width.
+            saved, before, neck = self._state(net), net.failed, net.neck
+            keep = [(path, False) for index, path in enumerate(net.paths) if index not in net.necks]
+            self._ripup(net)
+            net.neck, net.neck_width = net.fallback, self.default_width
+            self._route(net, 0.0, strict=True, keep=keep, thin=True)
+            self._stamp(net)
+            if net.failed >= before:
+                net.neck, net.neck_width = neck, None
+                self._restore(net, saved)
         if opt.plane_cost and any(self.plane):
             for net in [n for n in self.order if n.failed]:
                 saved, before = self._state(net), net.failed
@@ -1220,7 +1238,7 @@ class Router:
         """(segments, vias): segments are (layer, (x1, y1), (x2, y2), width); vias are (x, y)."""
         segments, vias = set(), set()
         for index, path in enumerate(net.paths):
-            width = self.neck_width if index in net.necks else net.cls.width
+            width = (net.neck_width or self.neck_width) if index in net.necks else net.cls.width
             run_start, previous, direction = path[0], path[0], None
             for cell in path[1:] + [None]:
                 step = None if cell is None else cell - previous
