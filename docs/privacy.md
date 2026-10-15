@@ -5,9 +5,9 @@ VelaTrace has no backend and no telemetry. It is offline by default: network use
 - **Optional AI provider calls** (**Explain with AI**): go only to the HTTPS endpoint you configure, using your own API key.
 - **Optional JLCPCB parts-list download** (BOM Basic/Extended hints): a one-off download of a public CSV from a third-party GitHub Pages site, which can see your IP address and user agent. See [BOM](bom.md) for sources and licence status.
 - **Optional provider-side search** (for example Groq search, which uses Tavily): processed by the provider and its search services outside the plugin, under their terms.
-- **Installation downloads** (the plugin source, Python packages, Java, the Freerouting JAR) are separate from runtime activity.
+- **Installation downloads** (the plugin source and Python packages) are separate from runtime activity.
 
-VelaTrace connects to KiCad through local IPC. Freerouting runs in a Java process with network access denied by the verified Java policy.
+VelaTrace connects to KiCad through local IPC. Routing (Vela-routing) runs inside the plugin's own Python process and makes no network requests.
 
 **Check design** runs entirely on this computer: it reads KiCad over local IPC or a saved file and sends nothing anywhere. Only the optional **Explain with AI** step contacts a provider.
 

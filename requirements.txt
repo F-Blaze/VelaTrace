@@ -1,3 +1,4 @@
 # Dependencies installed by KiCad's IPC plugin virtual environment manager.
 kicad-python==0.8.0
 PySide6-Essentials==6.10.2
+numpy==2.3.5

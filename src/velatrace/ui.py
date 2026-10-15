@@ -34,7 +34,6 @@ from .dsn import ExportTicket, accept_export, export_live
 from .errors import ExportUnavailable, RoutingCancelled, ValidationError
 from .findings import Finding, Severity
 from .flags import Bucket, Function, Verdict
-from .freerouting import CANCELLED, Freerouting
 from .ipc import KiCadReader
 from .kicad_cli import KiCadCli, sweep_stale_settings
 from .models import Component, DesignSnapshot, Pin
@@ -49,6 +48,7 @@ from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
 from .route_repair import repair_dangling
 from .routing import Mode, RoutingSession, RoutingStage
+from .vela_router import VelaRouter
 from .sexpr import parse
 from .tokens import LocalChatTokenizer
 from .theme import saved_kicad_theme
@@ -194,8 +194,6 @@ class Worker(QThread):
 
 @dataclass
 class Settings:
-    jar: str = ""
-    java: str = "java"
     cli: str = "kicad-cli"
     name: str = "Gemini"
     endpoint: str = "https://generativelanguage.googleapis.com/v1beta"
@@ -204,7 +202,6 @@ class Settings:
     key: str = field(default="", repr=False)
     search_model: str = ""
     search: bool = False
-    warm_router: bool = False
     tokenizer: str = ""
     verified_model: str = ""
     cap: int = 40
@@ -281,18 +278,9 @@ class SettingsDialog(QDialog):
             return field
 
         ready = getattr(parent, "ready", False)
-        tools = section("Tools", not (settings.jar and ready),
+        tools = section("Tools", not ready,
                         f"Needed for routing only. Saved in {parent.config_dir}")
-        text(tools, "jar", "Freerouting 2.1.0 JAR", browse="Freerouting JAR (*.jar)")
-        text(tools, "java", "Java 21", browse="All files (*)")
         text(tools, "cli", "kicad-cli", "Must match the running KiCad version exactly.", browse="All files (*)")
-        self.warm_router = QCheckBox("Keep Freerouting running (faster)")
-        self.warm_router.setToolTip("Keeps one Freerouting Java process between routes. Every route runs "
-                                    "VelaTrace's MIT launcher and the GPLv3 Freerouting JAR in one Java process "
-                                    "(needed to stop a stalled router and keep its partial route); "
-                                    "off starts a fresh process per route.")
-        self.warm_router.setChecked(settings.warm_router)
-        tools.addRow(self.warm_router)
 
         ai = section("AI (optional)", True, "Only for Explain with AI and pricing. "
                      "No backend or telemetry: only your endpoint receives requests.")
@@ -344,7 +332,7 @@ class SettingsDialog(QDialog):
 
     def value(self):
         values = {name: field.text().strip() for name, field in self.fields.items()}
-        return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(), warm_router=self.warm_router.isChecked(),
+        return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(),
                         cap=self.cap.value(), output_cap=self.output_cap.value())
 
 
@@ -592,9 +580,7 @@ class MainWindow(QMainWindow):
         self.demo = demo
         self.config_dir = Path(config_dir or QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppConfigLocation))
         self.constraints = ConstraintStore(self.config_dir / "constraints.json")
-        self.settings = Settings(jar=os.environ.get("VELATRACE_FREEROUTING_JAR", ""),
-                                 java=os.environ.get("VELATRACE_JAVA", "java"),
-                                 cli=os.environ.get("VELATRACE_KICAD_CLI", "kicad-cli"),
+        self.settings = Settings(cli=os.environ.get("VELATRACE_KICAD_CLI", "kicad-cli"),
                                  key=os.environ.get("VELATRACE_API_KEY", ""),
                                  model=os.environ.get("VELATRACE_MODEL", ""))
         if not demo:
@@ -638,8 +624,8 @@ class MainWindow(QMainWindow):
         self.apply_theme("KiCad")
         if demo:
             self.load_demo()
-        elif self.settings.jar:
-            # Re-verify a remembered router quietly; no dialog stands between launch
+        else:
+            # Verify the built-in router quietly; no dialog stands between launch
             # and the audit, which needs no setup at all.
             QTimer.singleShot(0, lambda: self.apply_settings(self.settings, save=False))
 
@@ -782,8 +768,8 @@ class MainWindow(QMainWindow):
         route_layout.addLayout(constraints)
         # One click reads the open board, checks it, exports its DSN and routes it.
         self.route_button = tip(QPushButton("Route board"),
-                                "Reads the open board, checks it, exports the DSN and routes it "
-                                "(Ctrl+Enter). The preview is dashed on User.9.")
+                                "Reads the open board, checks it, exports the DSN and routes it with "
+                                "Vela-routing, VelaTrace's own router (Ctrl+Enter). The preview is dashed on User.9.")
         self.route_button.setObjectName("primary")
         self.route_button.clicked.connect(self.route)
         route_layout.addWidget(self.route_button)
@@ -909,8 +895,7 @@ class MainWindow(QMainWindow):
         self.route_page.setEnabled(not busy and (self.ready or self.demo))
         locked = not (self.ready or self.demo)
         self.setup_hint.setVisible(locked)
-        self.setup_hint.setText("Routing locked: " + (self._setup_error or "Java 21 and Freerouting 2.1.0 "
-                                "are not verified.") + " Click Setup.")
+        self.setup_hint.setText("Routing locked: " + (self._setup_error or "the router is not verified.") + " Click Setup.")
         for button in (*self.mode_buttons.values(), self.setup_button):
             gate(button, "Not available in the demo." if self.demo else "Busy." if busy else "")
         stage = self.audit.stage if self.audit else None
@@ -1079,17 +1064,15 @@ class MainWindow(QMainWindow):
             if self.safety:
                 self.safety.clear_preview()
             try:
-                router = Freerouting(Path(settings.jar), settings.java, work_directory=self.config_dir / "router-work",
-                                     warm=settings.warm_router, forbidden=self._project_folders())
+                router = VelaRouter()
                 router.check_startup()
-                self._remember_tool("java", router.java)
             except Exception as exc:
                 self._setup_error = str(exc) or type(exc).__name__
                 raise
             return router
         def success(router):
             if self.router is not None:
-                self.router.close()  # Stop the replaced router's warm JVM.
+                self.router.close()
             self.settings, self.router, self.ready = settings, router, True
             self.audit = self.pricing = self.routing = None
             self.reader = self.safety = self.validator = self.writer = None
@@ -1430,9 +1413,6 @@ class MainWindow(QMainWindow):
                 return Path(snapshot.path).parent
         return Path.home()
 
-    def _project_folders(self):
-        return (self.snapshot.path.parent,) if self.snapshot is not None and self.snapshot.path else ()
-
     def _remember_tool(self, name, path):
         """Keep the verified absolute path, so later launches never search PATH again."""
         if self.demo or path is None or getattr(self.settings, name) == str(path):
@@ -1459,6 +1439,7 @@ class MainWindow(QMainWindow):
             if self.safety is None or self.safety.path != snapshot.path.resolve():
                 self.safety = BoardSafety(board, snapshot.path, journal_dir=self.config_dir / "journals")
             self.validator = SafeCandidateValidator(self.safety, cli)
+            self.router.cli = cli  # Copper text is modelled through KiCad's own rendering.
             self.routing = RoutingSession(self.constraints, self.router, self.validator, repair_dangling)
             self.routing.command("/autoroute")
             self.writer = SafeBoardWriter(self.safety, self.validator)
@@ -1473,7 +1454,7 @@ class MainWindow(QMainWindow):
         if problems:
             raise ValidationError("\n".join(problems))
         if cancel.is_set():
-            raise RoutingCancelled(CANCELLED)
+            raise RoutingCancelled("Cancelled; nothing was written to the board.")
         if self._dsn_folder:
             shutil.rmtree(self._dsn_folder, ignore_errors=True)
         (self.config_dir / "dsn-export").mkdir(parents=True, exist_ok=True)
@@ -1509,7 +1490,7 @@ class MainWindow(QMainWindow):
         self.start_routing(prepare)
 
     def start_routing(self, prepare):
-        """Route board: prepare (export), Freerouting, then the User.9 preview; DRC follows."""
+        """Route board: prepare (export), Vela-routing, then the User.9 preview; DRC follows."""
         try:
             if self.route_prompt.text().strip():
                 raise ValidationError("Add or clear the pending rule first.")
@@ -1537,7 +1518,7 @@ class MainWindow(QMainWindow):
                 if cancel.is_set():
                     session.cancel()
                     self.safety.clear_preview()
-                    raise RoutingCancelled(CANCELLED)
+                    raise RoutingCancelled("Cancelled; nothing was written to the board.")
                 return plan, generation, snapshot, exported, time.monotonic() - started, notes
             def done(value):
                 self._cancel = None
@@ -1708,7 +1689,7 @@ class MainWindow(QMainWindow):
             worker.jobs.put(None)
             worker.wait(2000)
         if self.router is not None:
-            self.router.close()  # No java.exe outlives the window.
+            self.router.close()
         if self._dsn_folder:
             shutil.rmtree(self._dsn_folder, ignore_errors=True)  # The exported board copy.
         event.accept()
