@@ -222,6 +222,39 @@ In2 be cut (KiCad finds 1 to 3 vias cut off); soleil (one 0.5 mm BGA ball the
 grid cannot reach, one power net); bitaxe needs the full 600 s and ends with 2
 to 4 open; starved-thermal errors on a few 2-layer boards.
 
+### Plane keep-outs and thermal reliefs, 2026-10-15
+
+- Rule areas that forbid copper pour (`copperpour not_allowed`) are cut from
+  every pour before plane detection. Before, vias could land where KiCad fills
+  no copper (mikoto: 3/1/3 vias cut off, now 0 on all three orders).
+- Thermal reliefs: the loader reads each pour's connect mode, thermal gap and
+  spoke width and each pad's zone connection and spoke angle. After routing,
+  nets whose tracks leave a pad with only one live spoke (KiCad's
+  "starved thermal") are re-routed around two reserved spoke corridors; the
+  change is kept only if every net still routes cleanly. The threshold for a
+  spoke counting as cut was fitted against KiCad's fills on these boards.
+
+Same comparison as above (Vela seeds 1, 4, 7; Freerouting frozen baseline):
+
+| Board (layers) | Vela accepted | Vela left unconnected (min/med/max) | What still blocks Vela | Freerouting accepted |
+|---|---|---|---|---|
+| practice, Prod_v2, tp4056 (2) | 3/3 each | 0 | - | 3/3, 3/3, 0/1 |
+| esp32-4ch-relays (2) | 3/3 | 0 | - | 1/3 |
+| mtb-led-atmega328pb (2) | 3/3 | 0 | - | 1/3 |
+| anvil-stm32f031 (2) | 2/3 | 0 | one dangling-track warning on seed 7 | 0/3 |
+| rp2040-breakout (4) | 3/3 | 0 | - | 0/3 |
+| mikoto (4) | 0/3 | 0/0/0 | only errors already on the unrouted board | 0/1 (refused by validator) |
+| usb-i2c-bridge (2) | 0/3 | 0/0/0 | only errors already on the unrouted board | 0/3 |
+| bms-buck-boost (2) | 0/3 | 0/0/1 | errors already on the unrouted board | 0/3 |
+| zereader-pico (2) | 0/3 | 0/0/0 | a teardrop in a keep-out; a connection-width warning | 0/3 (refused by validator) |
+| soleil (4) | 0/3 | 1/2/2 | 1-2 open, connection-width warnings | 0/1 (refused by validator) |
+| bitaxe-ultra (4) | 0/3 | 2/3/4 | hits the 600 s budget with six boards running at once (routed completely when it ran with less load) | 0/3 (refused by validator) |
+| **Accepted runs** | **20 of 39** | | | **8 of 33** |
+
+On 11 of 13 boards Vela connects every pad in every order and adds no DRC
+error beyond warnings; on mikoto, usb-i2c and bms only errors that were already
+on the unrouted board stop acceptance.
+
 ### Known limits
 
 - No coupled differential-pair routing, no length or delay tuning (serpentines),
