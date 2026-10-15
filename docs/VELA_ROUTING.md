@@ -176,6 +176,52 @@ seven negotiation rounds, each 50 to 110 s). mikoto is fully connected but keeps
 one DRC error on a via that was already on the stripped board. Starved-thermal
 errors still cost mtb-led and zereader their acceptance.
 
+### Speed-up and a three-order comparison, 2026-10-14 (later)
+
+Changes: the A* search now expands each cell once (closed set). Before, the
+weighted heuristic re-expanded congested windows many times over. Cost windows
+are passed to the search without copying, and the A* weight is 1.2. Two changes
+from the round above were measured and reverted: spoke corridors around
+through-hole pads (more starved thermals) and a wider fallback for power nets
+(soleil lost connections). Total time on the 13 boards fell from 2208 s to
+958 s for one order each.
+
+Freerouting is not re-run for each Vela change. Its result is frozen in
+`VelaTrace-bench/runs/freerouting-baseline-2026-10-14/`: 3 runs per board (one
+for mikoto, soleil and tp4056), main 5ceaa61, 500 s cap. Vela ran each board
+with three different re-route orders (seeds 1, 4 and 7), 600 s budget, judged
+by KiCad DRC.
+
+| Board (layers) | Vela accepted | Vela left unconnected (min/med/max) | Vela time (median) | Freerouting accepted | Freerouting left unconnected (median) | Freerouting time (median) |
+|---|---|---|---|---|---|---|
+| practice (2) | 3/3 | 0/0/0 | 2 s | 3/3 | 0 | 6 s |
+| Prod_v2 (2) | 3/3 | 0/0/0 | 5 s | 3/3 | 0 | 8 s |
+| tp4056-power-path (2) | 3/3 | 0/0/0 | 0 s | 0/1 | refused at import | - |
+| esp32-4ch-relays (2) | 3/3 | 0/0/0 | 31 s | 1/3 | 0 | 79 s |
+| mtb-led-atmega328pb (2) | 2/3 | 0/0/0 | 57 s | 1/3 | 0 | 98 s |
+| anvil-stm32f031 (2) | 2/3 | 0/0/0 | 39 s | 0/3 | 16 | 160 s |
+| usb-i2c-bridge (2) | 0/3 | 0/0/0 | 22 s | 0/3 | 5 | 74 s |
+| bms-buck-boost (2) | 0/3 | 0/0/1 | 41 s | 0/3 | 15 | 149 s |
+| zereader-pico (2) | 0/3 | 0/0/0 | 75 s | 0/3 | result refused by validator | 299 s |
+| rp2040-breakout (4) | 3/3 | 0/0/0 | 34 s | 0/3 | 5 | 130 s |
+| mikoto (4) | 0/3 | 1/3/3 | 29 s | 0/1 | result refused by validator | 238 s |
+| soleil (4) | 0/3 | 1/2/2 | 196 s | 0/1 | result refused by validator | 279 s |
+| bitaxe-ultra (4) | 0/3 | 2/3/4 | 607 s | 0/3 | result refused by validator | 445 s |
+| **Accepted runs** | **19 of 39** | | | **8 of 33** | | |
+
+Vela is accepted on 8 boards in at least one order, Freerouting on 4. Vela
+connects every pad in every order on 9 boards and is faster on every board both
+finish. Where neither is accepted, Vela's misses are small: pre-existing errors
+(usb-i2c, bms), a few new DRC items (zereader: teardrop in a keep-out, starved
+thermal), or 1 to 4 open connections on three 4-layer boards. Five Freerouting
+misses are refusals by the plugin pipeline on main (layer check at import, SES
+placement check), not routing results.
+
+Still open for Vela: mikoto's plane-fill estimate lets a split power plane on
+In2 be cut (KiCad finds 1 to 3 vias cut off); soleil (one 0.5 mm BGA ball the
+grid cannot reach, one power net); bitaxe needs the full 600 s and ends with 2
+to 4 open; starved-thermal errors on a few 2-layer boards.
+
 ### Known limits
 
 - No coupled differential-pair routing, no length or delay tuning (serpentines),

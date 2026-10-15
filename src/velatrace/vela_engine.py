@@ -1355,6 +1355,7 @@ def main(argv=None):
     parser.add_argument("--kicad-cli", type=Path, help="kicad-cli for the independent DRC verdict")
     parser.add_argument("--pitch", type=float, default=Options.pitch)
     parser.add_argument("--budget", type=float, default=Options.budget_s, help="seconds")
+    parser.add_argument("--seed", type=int, default=Options.seed, help="first re-route order; later tries use the next seeds")
     args = parser.parse_args(argv)
     board = load_board(args.board)
     cli = KiCadCli(args.kicad_cli) if args.kicad_cli else None
@@ -1364,7 +1365,7 @@ def main(argv=None):
             obstacles = extract_copper_text(args.board, cli).obstacles
         except (CapabilityError, ValidationError) as exc:
             notes.append(f"copper text not modelled: {exc}")
-    router = route_board(board, Options(pitch=args.pitch, budget_s=args.budget, log=lambda text: print(text, flush=True)), obstacles)
+    router = route_board(board, Options(pitch=args.pitch, budget_s=args.budget, seed=args.seed, log=lambda text: print(text, flush=True)), obstacles)
     report = router.report()
     report["notes"] = notes
     folders = {name: args.out / name for name in ("routed", "baseline")}
