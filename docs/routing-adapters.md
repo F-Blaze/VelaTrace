@@ -23,10 +23,14 @@ The external process adapter implements `Router.check_startup()` and
 constraints through checked router settings or an appropriately validated DSN copy.
 It must not transmit data to any router service, modify the stackup, or accept
 AI-produced trace geometry. `RoutingSession` checks startup when constructed.
-The implemented `Freerouting` adapter pins version 2.1.0 and Java 21 with a tested
-process-local network-denial policy. See [external router setup and evidence](freerouting.md).
-It supports numeric width/clearance constraints for `all nets`; header keepouts
-and other targets are explicitly refused.
+The default adapter is `VelaRouter` (`vela_router.py`): Vela-routing, VelaTrace's own
+router, routes the private board copy the DSN was exported from and returns SES text
+(Specctra Y-up, whole nanometres, the DSN's layer and via padstack names, no placement
+section because it never moves footprints), so `parse_ses` and everything after it are
+unchanged. Confirmed `all nets` width/clearance minimums raise every net class before
+routing; other targets are refused. There is no Freerouting fallback. The older
+`Freerouting` adapter (version 2.1.0, Java 21, process-local network-denial policy; see
+[external router setup and evidence](freerouting.md)) is kept for the research benchmarks only.
 
 `parse_ses` supports straight polyline wires and circular vias mapped through a
 trusted `ViaSpec` catalog derived by the board adapter. It verifies `library_out`

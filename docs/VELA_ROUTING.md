@@ -4,8 +4,9 @@ Vela-routing is the name of VelaTrace's experimental routing system. It combines
 external routing engines with explicit constraints, independent checks and
 measured candidate selection. Freerouting and KiCadRoutingTools retain their own
 names, versions and licenses. Since 2026-10-12 it also has a native engine of
-its own, described next. The installed companion workflow still uses Freerouting;
-none of this is wired into the plugin or released.
+its own, described next. Since 2026-10-15 that native engine is the router behind
+the plugin's **Route board** (`vela_router.py`, no Freerouting fallback); every
+route still passes the same preview, KiCad DRC and approval steps. Not yet released.
 
 ## Native engine (experimental, 2026-10-12)
 

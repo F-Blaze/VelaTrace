@@ -167,7 +167,7 @@ class UiTests(unittest.TestCase):
         self.window.safety = safety
         with patch.object(SettingsDialog, "exec", return_value=QDialog.DialogCode.Accepted), \
                 patch.object(SettingsDialog, "value", return_value=new_settings), \
-                patch("velatrace.ui.Freerouting.check_startup", side_effect=CapabilityError("Router missing")):
+                patch("velatrace.ui.VelaRouter.check_startup", side_effect=CapabilityError("Router missing")):
             self.window.configure()
             self.wait_idle()
         self.assertIsNone(self.window.audit)
@@ -189,7 +189,7 @@ class UiTests(unittest.TestCase):
         safety = SimpleNamespace(clear_preview=fail_cleanup)
         self.window.safety = safety
         with patch.object(SettingsDialog, "exec", return_value=QDialog.DialogCode.Accepted), \
-                patch("velatrace.ui.Freerouting.check_startup") as startup:
+                patch("velatrace.ui.VelaRouter.check_startup") as startup:
             self.window.configure()
             self.wait_idle()
         startup.assert_not_called()
@@ -637,7 +637,7 @@ class SetupUsabilityTests(unittest.TestCase):
         clean = {key: value for key, value in os.environ.items() if not key.startswith("VELATRACE_")}
         with patch.dict(os.environ, clean, clear=True), \
                 patch.object(ui.SettingsDialog, "exec", dialog_exec), \
-                patch.object(ui.Freerouting, "check_startup", check_startup or (lambda router: None)):
+                patch.object(ui.VelaRouter, "check_startup", check_startup or (lambda router: None)):
             window = MainWindow(config_dir=self.config)
             window.show()
             self.settle(window)
@@ -673,38 +673,25 @@ class SetupUsabilityTests(unittest.TestCase):
         window = self.launch()
         self.assertEqual(self.dialogs, [])
         self.assertTrue(window.load_button.isEnabled())
-        self.assertFalse(window.ready)
-        self.assertIn("Click Setup", window.setup_hint.text())
 
-    def test_saved_router_is_verified_quietly_at_launch(self):
-        from velatrace.ui import Settings
-        Settings(jar="C:/tools/freerouting.jar").save(self.config / "settings.json")
+    def test_built_in_router_is_verified_quietly_at_launch_without_setup(self):
         checked = []
         window = self.launch(check_startup=lambda router: checked.append(router))
         self.assertEqual(self.dialogs, [])
         self.assertEqual(len(checked), 1)
         self.assertTrue(window.ready)
+        self.assertNotIn("jar", vars(window.settings))
+        self.assertNotIn("java", vars(window.settings))
 
-    def test_verified_java_is_remembered_as_an_absolute_path(self):
-        # VT-02: later launches use the verified path instead of searching PATH again.
-        from velatrace.ui import Settings
-        tools = self.config / "tools"
-        tools.mkdir()
-        java = tools / ("java.exe" if os.name == "nt" else "java")
-        java.write_bytes(b"")
-        java.chmod(0o755)
-        Settings(jar="C:/tools/freerouting.jar").save(self.config / "settings.json")
-        with patch.dict(os.environ, {"PATH": str(tools)}):
-            window = self.launch()
-        self.assertTrue(window.ready)
-        self.assertEqual(json.loads((self.config / "settings.json").read_text(encoding="utf-8"))["java"],
-                         str(java.resolve()))
-
-    def test_audit_is_usable_and_routing_lock_is_explained_before_setup(self):
-        window = self.launch(accept=False)
+    def test_audit_is_usable_and_routing_lock_is_explained_when_router_check_fails(self):
+        from velatrace.errors import CapabilityError
+        def missing(router):
+            raise CapabilityError("Vela-routing needs numpy.")
+        window = self.launch(check_startup=missing)
         self.assertTrue(window.description.isEnabled())
         self.assertTrue(window.load_button.isEnabled())
         self.assertFalse(window.route_button.isEnabled())
+        self.assertIn("Vela-routing needs numpy.", window.setup_hint.text())
         self.assertIn("Click Setup", window.setup_hint.text())
         window.run_command("/autoroute")
         self.app.processEvents()
@@ -714,9 +701,9 @@ class SetupUsabilityTests(unittest.TestCase):
     def test_failed_setup_names_the_error_and_keeps_typed_values(self):
         from velatrace.errors import CapabilityError
         def missing(router):
-            raise CapabilityError("Freerouting is missing.")
+            raise CapabilityError("Vela-routing needs numpy.")
         window = self.launch(accept=True, check_startup=missing)
-        self.assertIn("Freerouting is missing.", window.setup_hint.text())
+        self.assertIn("Vela-routing needs numpy.", window.setup_hint.text())
         self.assertFalse(window.route_button.isEnabled())
         # Values from the dialog are kept for the retry, not reset to old defaults.
         self.assertEqual(window.settings.name, "Gemini")
@@ -732,12 +719,14 @@ class SetupUsabilityTests(unittest.TestCase):
     def test_settings_persist_without_the_api_key(self):
         from velatrace.ui import Settings
         path = self.config / "settings.json"
-        Settings(jar="C:/tools/fr.jar", model="gemini-x", key="secret-key", cap=7).save(path)
+        Settings(cli="C:/tools/kicad-cli.exe", model="gemini-x", key="secret-key", cap=7).save(path)
         self.assertNotIn("secret-key", path.read_text(encoding="utf-8"))
         loaded = Settings()
         loaded.load(path)
-        self.assertEqual((loaded.jar, loaded.model, loaded.cap, loaded.key), ("C:/tools/fr.jar", "gemini-x", 7, ""))
-        path.write_text('{"cap": "not a number", "key": "x", "unknown": 1}', encoding="utf-8")
+        self.assertEqual((loaded.cli, loaded.model, loaded.cap, loaded.key), ("C:/tools/kicad-cli.exe", "gemini-x", 7, ""))
+        # Old files still name the retired Freerouting JAR and Java; they are ignored.
+        path.write_text('{"cap": "not a number", "key": "x", "unknown": 1, "jar": "fr.jar", "java": "java"}',
+                        encoding="utf-8")
         damaged = Settings()
         damaged.load(path)
         self.assertEqual((damaged.cap, damaged.key), (40, ""))

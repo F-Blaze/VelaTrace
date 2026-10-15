@@ -10,11 +10,11 @@ Routing has two actions: **Route board**, then **Approve and apply copper**.
 **Route board** reads the open board through IPC (no save needed), runs the
 pre-flight checks, exports the DSN with KiCad's own exporter, routes and draws
 the preview. No checkbox, no file picker, no export dialog. User.9 graphics are non-copper and do not clear the ratsnest.
-Approval uses the validated route without rerunning Freerouting. Blocking DRC
+Approval uses the validated route without rerunning the router. Blocking DRC
 types are shown separately from pre-existing warnings. The routing page scrolls
 so approval remains reachable on smaller screens.
 
-The User.9 preview is drawn as soon as Freerouting's result is imported. Candidate
+The User.9 preview is drawn as soon as the router's result is imported. Candidate
 KiCad DRC then runs on a separate background thread while the status reads
 **Checking DRC…**; approval stays disabled until it finishes. Reject and
 **Route board** stay usable meanwhile: rejecting, rerouting, changing
@@ -28,14 +28,14 @@ only when a complete preview (zero unconnected items) is blocked by known DRC
 findings. Its confirmation lists the blocking count and the first five DRC issue
 types, states that copper will be written despite them, and defaults to Cancel.
 It bypasses only the DRC gate: backup, the single undoable commit, board-unchanged,
-stale-preview and preview-collision checks, and the Freerouting JAR pin all still
+stale-preview and preview-collision checks all still
 apply, and incomplete routes or unknown DRC still refuse. The override and the
 blocking issues are written to that commit's `intent.json` and `completion.json`,
 and the result line says the route was applied despite DRC errors.
 
 The status shows the current stage and its elapsed seconds: **Exporting the board
-to DSN** → **Routing · pass N · K unrouted** (parsed from Freerouting's log; a
-stalled router is stopped, and restarted while time remains: **Routing again**) →
+to DSN** → **Routing · round N: K nets in conflict** (Vela-routing's progress lines;
+**Cancel routing** stops it) →
 **Checking the route** (candidate DRC with copper pours filled; dead-end stubs it
 names are removed, so the preview, the DRC result and the applied copper are the
 same plan) → **Importing the route and drawing the preview** → **Checking DRC…**
@@ -48,11 +48,11 @@ router process (one-shot or warm JVM) and writes nothing; during DRC it discards
 the check and removes the preview. Finished runs show export, routing, preview
 and DRC durations separately.
 
-Pre-flight checks run on the live board before Freerouting starts and refuse with
+Pre-flight checks run on the live board before routing starts and refuse with
 one line each: tracks or vias already present, no Edge.Cuts outline, footprints
 whose pads lie outside the outline's bounding box (this replaces the old "every
 footprint is placed" checkbox), and duplicate reference designators. Board Setup
-rules that KiCad's DSN does not carry (only net classes reach Freerouting:
+rules that KiCad's DSN does not carry (only net classes reach the router:
 minimum clearance/track width above the net classes, copper-to-edge and hole
 clearance, custom `.kicad_dru` rules) are reported as notes, since DRC still
 checks them. Numeric-only names were tested and route fine, so they are not
@@ -66,7 +66,7 @@ via and layer counts after reading the copper back from KiCad. Failed approval
 retains the panel preview with an explicit error; that is not a new routing run.
 An uncertain result blocks retry until inspected.
 
-Before Freerouting starts, **Route board** checks User.9. Old
+Before routing starts, **Route board** checks User.9. Old
 VelaTrace previews (saved into the board, restored by Undo, or left by an earlier
 run) are recognised by the UUIDs in `.velatrace/backups/*/completion.json` and
 removed through the normal backed-up transaction. Dashed 0.1 mm User.9 lines that
@@ -81,22 +81,21 @@ for printed labels; intentionally copper lettering needs routing clearance. Zone
 filling is separate from track routing and is not automatically performed by
 approval. VelaTrace does not create ground planes or change the stackup.
 
-Setup verifies the exact external Freerouting JAR and Java runtime before enabling
-routing. The audit page works without them; while routing is locked, a red line
+Routing uses Vela-routing, VelaTrace's own router; launch checks that it can run
+(numpy present) before enabling routing. While routing is locked, a red line
 at the top of the Route page names the reason (including the last Setup error) and points to
-**Setup**. See [Freerouting setup](freerouting.md). Tool paths, provider and model
+**Setup**. Tool paths, provider and model
 choices are remembered in `settings.json` in the local configuration directory and
 are kept for a retry if verification fails. The API key is never written to a
-config file; it lasts for the current launch only. Environment variables `VELATRACE_FREEROUTING_JAR`, `VELATRACE_JAVA`,
+config file; it lasts for the current launch only. Environment variables
 `VELATRACE_KICAD_CLI`, `VELATRACE_MODEL` and `VELATRACE_API_KEY` can supply defaults.
 Do not place secrets in repository files or shared launch scripts. Gemini requires
 an exact currently available model ID. OpenAI-compatible/Groq classification
 additionally requires a locally installed tokenizer and chat template verified
 against that precise provider/model. Nothing downloads a tokenizer at runtime.
 
-Launch opens no dialog. If Setup already saved a Freerouting JAR, the router is
-re-verified quietly in the background; otherwise the red hint explains how to
-unlock routing. The audit needs no setup at all.
+Launch opens no dialog. The router is verified quietly in the background; if
+that fails, the red hint explains how to unlock routing. The audit needs no setup at all.
 
 Audit: choose the open PCB through official IPC, a saved schematic exported
 through `kicad-cli`, or a previously exported KiCad XML netlist, then click
@@ -144,7 +143,7 @@ KiCad 9/10's IPC and CLI do not expose DSN export, so **Route board** runs
 `pcbnew.ExportSpecctraDSN` in KiCad's bundled Python (next to `kicad-cli`) on a
 private copy of the live board text and saved project, with a private
 `KICAD_CONFIG_HOME`. The complete numeric constraint list is shown beside
-**Route board**; each click confirms it (Ctrl+Enter also works). Freerouting and the preview run on the service worker; candidate CLI
+**Route board**; each click confirms it (Ctrl+Enter also works). Vela-routing and the preview run on the service worker; candidate CLI
 DRC follows on its own background worker.
 The panel draws a separate dashed-violet preview for each used copper layer;
 board graphics are dashed on `User.9`, whose color remains under KiCad's control.

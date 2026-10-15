@@ -6,8 +6,8 @@ grid with 45-degree moves, through vias, PathFinder-style negotiated congestion
 Inner layers that are mostly copper zone are kept as solid reference planes: no
 signal is routed on them, and pads of the plane's net drop a via into it.
 
-Needs numpy (the ``routing-research`` extra). Not wired into the plugin; every
-result must still pass KiCad DRC, which stays the only judge.
+Needs numpy. The plugin's Route board uses it through ``vela_router.VelaRouter``;
+every result must still pass KiCad DRC, which stays the only judge.
 
 ponytail: pure-Python search loop, roughly 1e5 expansions/s. Move the inner loop
 to a compiled kernel if boards beyond a few hundred nets matter.
@@ -22,6 +22,7 @@ import uuid
 import numpy as np
 
 from .candidate import CopperItem
+from .errors import RoutingCancelled
 from .stackup import homogeneous_delay_ps
 from .vela_board import Board
 from .vela_electrical import differential_pairs, layer_models
@@ -59,6 +60,7 @@ class Options:
     hist_spread: float = 0.4      # mm around a conflict that gets the history penalty
     relieve: bool = True          # re-route tracks that starve a pad's thermal relief
     log: object = None            # callable(str) for progress
+    cancel: object = None         # threading.Event; once set, routing stops with RoutingCancelled
 
 
 @dataclass
@@ -303,7 +305,12 @@ class Router:
         self._planes()
         self._electrical()
 
+    def _stop_if_cancelled(self):
+        if self.opt.cancel is not None and self.opt.cancel.is_set():
+            raise RoutingCancelled("Cancelled; nothing was written to the board.")
+
     def _say(self, text):
+        self._stop_if_cancelled()
         if self.opt.log:
             self.opt.log(f"[{time.monotonic() - self.started:6.1f}s] {text}")
 
@@ -745,6 +752,7 @@ class Router:
         so a big half-routed net is not searched end to end. Returns global cells or None.
         """
         t = net.t if t is None else t
+        self._stop_if_cancelled()
         if time.monotonic() - self.started > 3 * self.opt.budget_s:
             return None   # hard deadline: fail fast, what is routed stays valid
         to_plane = target is None

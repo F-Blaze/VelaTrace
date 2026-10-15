@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "velatrace"
 version = "0.1.0a1"
-description = "Connectivity-aware component audits and guarded external routing for KiCad"
+description = "Connectivity-aware component audits and guarded routing for KiCad"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = ["kicad-python==0.8.0", "PySide6-Essentials==6.10.2"]
+dependencies = ["kicad-python==0.8.0", "PySide6-Essentials==6.10.2", "numpy==2.3.5"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1", "shapely==2.1.1", "numpy>=1.26,<3"]
