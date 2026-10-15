@@ -44,6 +44,7 @@ class Zone:
     points: tuple[tuple[float, float], ...]
     no_tracks: bool = False
     no_vias: bool = False
+    no_pour: bool = False        # a rule area that keeps zone fill out
     clearance: float = 0.0       # the pour's own clearance to other nets
     min_thickness: float = 0.25  # narrowest copper the fill keeps
 
@@ -223,7 +224,7 @@ def _zones(parent, layers, codes):
             if len(points) >= 3:
                 yield Zone("" if keepout else _net_name(node, codes), _copper(names, layers), points,
                            flags.get("tracks") == "not_allowed", flags.get("vias") == "not_allowed",
-                           _f(gap) if gap else 0.0, _f(thin) if thin else 0.25)
+                           flags.get("copperpour") == "not_allowed", _f(gap) if gap else 0.0, _f(thin) if thin else 0.25)
 
 
 def load_board(path: Path) -> Board:

@@ -425,6 +425,12 @@ class Router:
                     key = (zone.net, layer)
                     self.pour[key] = self.pour.get(key, False) | mask
                     self.pour_gap[key] = max(self.pour_gap.get(key, 0), zone.clearance + zone.min_thickness / 2)
+        for zone in board.zones:   # KiCad fills nothing inside a no-pour rule area
+            if not zone.net and zone.no_pour:
+                mask = _inside(zone.points, self.xs, self.ys)
+                for key in self.pour:
+                    if key[1] in zone.layers:
+                        self.pour[key] = self.pour[key] & ~mask
         hole_clearance = board.rules.get("min_hole_clearance", 0) or 0.25
         for index, pad in enumerate(board.pads):
             reach = _pad_reach(pad)

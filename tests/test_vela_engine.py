@@ -130,3 +130,15 @@ def test_pieces_tells_a_cut_plane_from_a_whole_one():
     region[2, 4] = True                      # a gap in the band: one piece again
     labels, _ = _pieces(region, [10, 25])
     assert labels[0] == labels[1]
+
+
+def test_no_pour_rule_area_is_not_plane(tmp_path):
+    zone = '(zone (net "GND") (layer "In1.Cu") (polygon (pts (xy 0 0) (xy 20 0) (xy 20 12) (xy 0 12))))'
+    keepout = ('(zone (layers "In1.Cu") (keepout (tracks allowed) (vias allowed) (copperpour not_allowed)) '
+               '(polygon (pts (xy 12 0) (xy 20 0) (xy 20 12) (xy 12 12))))')
+    board = _board(tmp_path, zone + keepout + _pad("C1", 4, 3, "GND") + _pad("C2", 16, 9, "GND"), inner=True)
+    assert [z.no_pour for z in board.zones] == [False, True]
+    router = route_board(board, Options())
+    _, vias = router.geometry(router.nets["GND"])
+    # KiCad fills nothing in the rule area, so C2 must not drop its via there.
+    assert router.report()["unrouted"] == 0 and vias and all(x < 12 for x, _ in vias)
