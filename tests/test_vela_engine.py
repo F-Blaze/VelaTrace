@@ -142,3 +142,19 @@ def test_no_pour_rule_area_is_not_plane(tmp_path):
     _, vias = router.geometry(router.nets["GND"])
     # KiCad fills nothing in the rule area, so C2 must not drop its via there.
     assert router.report()["unrouted"] == 0 and vias and all(x < 12 for x, _ in vias)
+
+
+def test_tracks_that_starve_a_thermal_relief_move_off_its_spokes(tmp_path):
+    zone = ('(zone (net "GND") (layer "F.Cu") (connect_pads (clearance 0.2)) (min_thickness 0.25) '
+            '(fill yes (thermal_gap 0.5) (thermal_bridge_width 0.5)) (polygon (pts (xy 0 0) (xy 20 0) (xy 20 12) (xy 0 12))))')
+    # N1 and N2 sit in G1's side spokes, so only the upper and lower spokes can reach the pour.
+    board = _board(tmp_path, zone + _pad("G1", 10, 6.9, "GND") + _pad("N1", 8.6, 6.9, "N1") + _pad("N2", 11.4, 6.9, "N2")
+                   + _pad("S1", 3, 6, "SIG") + _pad("S2", 17, 6, "SIG"))
+    assert board.zones[0].thermal_gap == 0.5 and board.zones[0].connect == "thermal"
+
+    def nearest(relieve):   # SIG centre line to G1's upper spoke axis: 0.5 mm thermal gap plus half the fill's 0.25 mm
+        router = route_board(board, Options(relieve=relieve))
+        assert router.report()["unrouted"] == 0 and [len(g) for *_, g in router.corridors] == ([2] if relieve else [])
+        return min(_gap(p, q, (10, 6.3), (10, 5.675)) for _, p, q, _ in router.geometry(router.nets["SIG"])[0])
+    # The straight line clears the pads but cuts that spoke: one left, KiCad reports a starved thermal.
+    assert nearest(False) < 0.1 and nearest(True) >= 0.1 + 0.2 - 1e-6

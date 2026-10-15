@@ -35,6 +35,8 @@ class Pad:
     plated: bool = True
     clearance: float = 0.0       # local override from the pad or its footprint; 0 = net class
     tie: tuple = ()              # net-tie footprint: other nets allowed to touch this copper
+    zone_connect: int = -1       # pad/footprint override: 0 none, 1 thermal, 2 solid, 3 thermal if THT; -1 zone
+    spoke_angle: float | None = None   # thermal spoke angle; None = KiCad default (45 round, 90 other)
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,9 @@ class Zone:
     no_pour: bool = False        # a rule area that keeps zone fill out
     clearance: float = 0.0       # the pour's own clearance to other nets
     min_thickness: float = 0.25  # narrowest copper the fill keeps
+    connect: str = "thermal"     # how pads join it: thermal, yes (solid), no, thru_hole_only
+    thermal_gap: float = 0.5
+    spoke_width: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -217,14 +222,19 @@ def _zones(parent, layers, codes):
         names = [str(n) for item in children(node, "layer") + children(node, "layers") for n in item[1:]]
         keepout = _first(node, "keepout")
         flags = {item[0]: item[1] for item in (keepout or [])[1:] if isinstance(item, list) and len(item) == 2}
-        gap = _first(_first(node, "connect_pads") or [], "clearance")
+        connect = _first(node, "connect_pads") or []
+        gap = _first(connect, "clearance")
+        mode = str(connect[1]) if len(connect) > 1 and isinstance(connect[1], str) else "thermal"
+        fill = _first(node, "fill") or []
+        relief = [_first(fill, key) for key in ("thermal_gap", "thermal_bridge_width")]
         thin = _first(node, "min_thickness")
         for polygon in children(node, "polygon"):
             points = tuple((_f(xy, 1), _f(xy, 2)) for xy in children(_first(polygon, "pts"), "xy"))
             if len(points) >= 3:
                 yield Zone("" if keepout else _net_name(node, codes), _copper(names, layers), points,
                            flags.get("tracks") == "not_allowed", flags.get("vias") == "not_allowed",
-                           flags.get("copperpour") == "not_allowed", _f(gap) if gap else 0.0, _f(thin) if thin else 0.25)
+                           flags.get("copperpour") == "not_allowed", _f(gap) if gap else 0.0, _f(thin) if thin else 0.25, mode,
+                           *(_f(value) if value else 0.5 for value in relief))
 
 
 def load_board(path: Path) -> Board:
@@ -269,7 +279,7 @@ def load_board(path: Path) -> Board:
         for kind in _GRAPHICS:
             for node in children(fp, "fp_" + kind):
                 graphic(node, place)
-        local = _first(fp, "clearance")
+        local, joined = _first(fp, "clearance"), _first(fp, "zone_connect")
         for pad in children(fp, "pad"):
             pad_at, size, drill = _first(pad, "at"), _first(pad, "size"), _first(pad, "drill")
             hole = 0.0
@@ -282,7 +292,9 @@ def load_board(path: Path) -> Board:
                 _f(pad_at, 3) if len(pad_at) > 3 else 0.0,
                 _pad_shapes(pad, pad[3], _f(size, 1), _f(size, 2)),
                 _copper([str(n) for n in (_first(pad, "layers") or [])[1:]], layers),
-                hole, pad[2] != "np_thru_hole", _f(_first(pad, "clearance") or local or [0, 0])))
+                hole, pad[2] != "np_thru_hole", _f(_first(pad, "clearance") or local or [0, 0]),
+                zone_connect=int(_f(_first(pad, "zone_connect") or joined or [0, -1])),
+                spoke_angle=_f(_first(pad, "thermal_bridge_angle")) if _first(pad, "thermal_bridge_angle") else None))
         # A net tie joins nets on purpose: its grouped pads and its copper may touch each other.
         for group in (_first(fp, "net_tie_pad_groups") or [])[1:]:
             numbers = {part.strip() for part in str(group).split(",")}

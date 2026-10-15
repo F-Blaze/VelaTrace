@@ -57,6 +57,7 @@ class Options:
     seed: int | None = 1          # shuffles the re-route order each round to break ties; None = fixed
     tries: int = 3                # route_board: re-route orders tried until one routes everything
     hist_spread: float = 0.4      # mm around a conflict that gets the history penalty
+    relieve: bool = True          # re-route tracks that starve a pad's thermal relief
     log: object = None            # callable(str) for progress
 
 
@@ -506,6 +507,77 @@ class Router:
                 self.inside = ~outside
                 for m in range(len(self.maps)):
                     self.hard[m][:, outside] += 1
+        self._spokes()
+
+    def _spokes(self):
+        """Thermal-spoke corridors of pads in their own pour: ``self.corridors`` [(pad, layer, gap, [(bands, axis)])].
+
+        KiCad ties such a pad to the pour with up to four spokes across the thermal gap and
+        reports a starved thermal when only one reaches the fill. A corridor is a spoke's axis
+        from the pad's rim across the gap and half the fill's minimum width beyond; its band per
+        map holds the cells where a probe's centre line would cut it. Corridors that fixed
+        copper of another net (or the outline) already cuts are left out: no routing helps them.
+        """
+        self.corridors = []
+        relief = {}   # (net, layer) -> [mode, thermal gap, spoke width, fill clearance, min thickness]
+        for zone in self.board.zones:
+            if zone.net in self.nets:
+                for layer in zone.layers:
+                    old = relief.setdefault((zone.net, layer), [zone.connect, 0.0, 0.0, 0.0, 0.0])
+                    for i, v in enumerate((zone.thermal_gap, zone.spoke_width, zone.clearance, zone.min_thickness)):
+                        old[i + 1] = max(old[i + 1], v)
+        mine, fills = {}, {}   # net -> its own fixed copper (map 0); (net, layer) -> fill around fixed copper
+        for pad in self.board.pads if relief and self.opt.relieve else ():
+            if pad.net not in self.nets or not pad.plated:
+                continue
+            cy = min(max(int(round((pad.y - self.y0) / self.p)), 0), self.H - 1)
+            cx = min(max(int(round((pad.x - self.x0) / self.p)), 0), self.W - 1)
+            for layer in pad.layers:
+                mode, gap, spoke, clearance, thin = relief.get((pad.net, layer), ("no", 0, 0, 0, 0))
+                thermal = (pad.zone_connect == 1 or (pad.zone_connect == 3 and pad.drill)
+                           or (pad.zone_connect == -1 and (mode == "thermal" or (mode == "thru_hole_only" and pad.drill))))
+                pour = self.pour[(pad.net, layer)].reshape(-1) if thermal else None
+                if pour is None or not pour[cy * self.W + cx]:
+                    continue
+                if pad.net not in mine:
+                    mine[pad.net] = np.zeros(self.L * self.HW, bool)
+                    mine[pad.net][self.own[pad.net][0]] = True
+                if (pad.net, layer) not in fills:
+                    free = self.pour[(pad.net, layer)] & (self.hard[0][layer] <= mine[pad.net].reshape(self.hard[0].shape)[layer])
+                    fills[(pad.net, layer)] = _erode(free, int(math.ceil(
+                        max(0.0, clearance + thin / 2 - self.maps[0][0] - self.maps[0][1]) / self.p)))
+                first, ts = pad.shapes[0], np.linspace(0, _pad_reach(pad), 64)
+                round_pad = first[0] == "rrect" and first[3] == first[4] and first[5] >= first[3] / 2 - 1e-9
+                turn = pad.spoke_angle if pad.spoke_angle is not None else 45.0 if round_pad else 90.0
+                group = []
+                for quarter in range(4):
+                    a = math.radians(pad.angle + turn + 90 * quarter)
+                    dx, dy = math.cos(a), -math.sin(a)   # Y is down
+                    # Pad extent along the spoke and across it (KiCad narrows a spoke to the pad).
+                    edge, side = (float(ts[_pad_sdf(pad, pad.x + ts * ex, pad.y + ts * ey) <= 0].max(initial=0))
+                                  for ex, ey in ((dx, dy), (-dy, dx)))
+                    width = min(spoke, 2 * side) if side > 0 else spoke
+                    x1, y1 = pad.x + edge * dx, pad.y + edge * dy
+                    x2, y2 = x1 + (gap + thin / 2) * dx, y1 + (gap + thin / 2) * dy
+                    iy0, iy1, ix0, ix1 = self._window_of(x1, y1, x2, y2, thin / 2 + self.reach)
+                    # The axis across the gap and into the fill: copper of another net within a clearance
+                    # plus a quarter of the fill minimum width cuts the spoke. ponytail: fitted on the bench
+                    # boards against KiCad fills: none of it missed cut spokes, half of it flagged kept ones.
+                    d = _segment_sdf(x1, y1, x2, y2, self.xs[None, ix0:ix1], self.ys[iy0:iy1, None])
+                    iy, ix = np.nonzero(d < self.p)
+                    flat = (iy + iy0) * self.W + ix + ix0
+                    cells = layer * self.HW + flat
+                    if (not pour[flat].any() or (self.hardf[0][cells] > mine[pad.net][cells]).any()
+                            or not self._reaches_fill(pad, layer, x2, y2, gap, thin, fills[(pad.net, layer)],
+                                                      mine[pad.net].reshape(self.hard[0].shape)[layer])):
+                        continue
+                    bands = []
+                    for extent, map_clearance in self.maps:
+                        iy, ix = np.nonzero(d < extent + max(clearance, map_clearance) + thin / 4 + self.margin)
+                        bands.append(layer * self.HW + (iy + iy0) * self.W + ix + ix0)
+                    group.append((bands, (pad.x, pad.y, x2, y2, width / 2)))
+                if group:
+                    self.corridors.append((pad, layer, gap, group))
 
     def _planes(self):
         """Inner layers that are mostly zone become reference planes for their nets."""
@@ -1034,9 +1106,140 @@ class Router:
             self.legalize()   # the tidy-up freed room: try the dropped connections again
             self.rescue()
             self._mend_planes()
+        self.relieve()
         self._say(f"done: {sum(n.connections - n.failed for n in self.order)}/"
                   f"{sum(n.connections for n in self.order)} connections routed")
         return self
+
+    def _reaches_fill(self, pad, layer, x, y, gap, thin, fill, mine, radius=3.0):
+        """Whether the fill at a spoke's end (x, y) is more than a pocket that only this pad touches.
+
+        KiCad does not count spokes into a fill island with a single connection. Fixed copper
+        only: a pocket that stays within ``radius`` mm and meets no other copper of the net is one.
+        """
+        iy0, iy1, ix0, ix1 = self._window_of(pad.x, pad.y, pad.x, pad.y, _pad_reach(pad) + radius)
+        X, Y = self.xs[None, ix0:ix1], self.ys[iy0:iy1, None]
+        rim = _pad_sdf(pad, X, Y)
+        free = fill[iy0:iy1, ix0:ix1] & (rim > gap)
+        other = mine[iy0:iy1, ix0:ix1] & (rim > gap + self.reach)
+        seen = free & (np.hypot(X - x, Y - y) <= thin / 2 + 2 * self.p)
+        while seen.any():
+            if seen[0].any() or seen[-1].any() or seen[:, 0].any() or seen[:, -1].any() or (seen & other).any():
+                return True
+            grown = seen.copy()
+            grown[1:] |= seen[:-1]
+            grown[:-1] |= seen[1:]
+            grown[:, 1:] |= seen[:, :-1]
+            grown[:, :-1] |= seen[:, 1:]
+            grown &= free
+            if (grown == seen).all():
+                break
+            seen = grown
+        return False
+
+    def _occupancy(self):
+        """Per map: flat array of 1 + the index (in ``self.order``) of the net whose centre line is there."""
+        occ = [np.zeros(self.L * self.HW, np.int16) for _ in self.maps]
+        for i, net in enumerate(self.order, 1):
+            for index, path in enumerate(net.paths):
+                occ[net.neck if index in net.necks else net.t][path] = i
+                vias = [a % self.HW for a, b in zip(path, path[1:]) if a % self.HW == b % self.HW]
+                for layer in range(self.L) if vias else ():
+                    occ[net.v][layer * self.HW + np.array(vias, np.int64)] = i
+        return occ
+
+    def _own_spokes(self, pad, layer, gap, segments, spokes):
+        """Own tracks KiCad counts as spokes: one end in the pad, the other in the fill.
+
+        In the fill: on a spoke that reaches the pour (``spokes``: their axes), or in the pour
+        clear of every pad of the net and its thermal gap (a via in the gap does not count).
+        """
+        count = 0
+        for a, b in segments:
+            inside = [float(_pad_sdf(pad, np.array(e[0]), np.array(e[1]))) <= 0 for e in (a, b)]
+            if inside[0] == inside[1]:
+                continue
+            x, y = b if inside[0] else a
+            if any(_segment_sdf(*axis[:4], x, y) <= axis[4] for axis in spokes):
+                count += 1
+                continue
+            iy, ix = int(round((y - self.y0) / self.p)), int(round((x - self.x0) / self.p))
+            if not (0 <= iy < self.H and 0 <= ix < self.W and self.pour[(pad.net, layer)][iy, ix]):
+                continue
+            near = (self.board.pads[i] for i in self.nets[pad.net].pads)
+            count += all(abs(q.x - x) > 3 or abs(q.y - y) > 3 or layer not in q.layers
+                         or float(_pad_sdf(q, np.array(x), np.array(y))) > gap for q in near)
+        return count
+
+    def _jogs(self, nets):
+        """Short jogs off the middle of another track: KiCad reports such a stub as dangling."""
+        count = 0
+        for net in nets:
+            segments, vias = self.geometry(net)
+            ends = [e for _, a, b, _ in segments for e in (a, b)]
+            for layer, a, b, width in segments:
+                if math.dist(a, b) > width + 1e-6:
+                    continue
+                for e in (a, b):
+                    if ends.count(e) == 1 and e not in vias and any(
+                            at == layer and e not in (p, q) and _segment_sdf(*p, *q, *e) < 1e-6
+                            for at, p, q, _ in segments):
+                        count += 1
+        return count
+
+    def relieve(self):
+        """Re-route the tracks that leave a pad a single thermal spoke (KiCad wants two), around two corridors.
+
+        Only where routing did the damage, and only if every net it touches still routes in
+        full and clear (otherwise all is put back): a keep-out reserved up front walled in
+        neighbours' escapes.
+        """
+        if not self.corridors:
+            return
+        fixed = given_up = 0
+        occ = None
+        for k, (pad, layer, gap, group) in enumerate(self.corridors):
+            if self._late():
+                break
+            if occ is None:   # who crosses which corridor, and the spokes left whole
+                occ, drawn, index = self._occupancy(), {}, {net.name: i for i, net in enumerate(self.order, 1)}
+                cuts, whole = [], {}
+                for other, at, _, corridors in self.corridors:
+                    cuts.append([{int(i) for m, band in enumerate(bands) for i in np.unique(occ[m][band])}
+                                 - {0, index.get(other.net)} for bands, _ in corridors])
+                    whole.setdefault((other.net, at), []).extend(
+                        axis for (_, axis), c in zip(corridors, cuts[-1]) if not c)
+            name, cut = pad.net, cuts[k]
+            # KiCad: a pad no spoke reaches is left to the connectivity check; one is starved below two.
+            uncut, need = sum(not c for c in cut), 2
+            if len(group) < need or not uncut or uncut >= need:
+                continue
+            if (name, layer) not in drawn:
+                drawn[(name, layer)] = [(a, b) for at, a, b, _ in self.geometry(self.nets[name])[0] if at == layer]
+            if uncut + self._own_spokes(pad, layer, gap, drawn[(name, layer)], whole[(name, layer)]) >= need:
+                continue
+            chosen = sorted(range(len(group)), key=lambda i: len(cut[i]))[:need]
+            nets = [self.order[i - 1] for i in sorted(set().union(*(cut[i] for i in chosen)))]
+            reserved = [(m, band) for i in chosen for m, band in enumerate(group[i][0])]
+            saved, before, jogs = [self._state(net) for net in nets], sum(n.failed for n in self.order), self._jogs(nets)
+            for m, band in reserved:
+                self.hardf[m][band] += 1
+            for net in nets:   # whole nets, as the tidy-up does: a partly kept net can leave a stub
+                self._ripup(net)
+                self._route(net, 0.0, strict=True)
+                self._stamp(net)
+            if (sum(n.failed for n in self.order) > before or any(self._in_conflict(n) for n in nets)
+                    or self._jogs(nets) > jogs):
+                for net, state in zip(nets, saved):
+                    self._restore(net, state)
+                for m, band in reserved:
+                    self.hardf[m][band] -= 1
+                given_up += 1
+            else:
+                fixed += 1
+                occ = None
+        if fixed or given_up:
+            self._say(f"thermal relief: {fixed} pads cleared, {given_up} left as routed")
 
     def _mend_planes(self):
         """Signals on a shared plane layer may have cut a plane apart: find the pieces and re-join.
