@@ -88,14 +88,14 @@ class IpcReaderTests(unittest.TestCase):
         board.name = ""
         client = SimpleNamespace(get_version=lambda: SimpleNamespace(major=10, minor=0, patch=6),
                                  get_board=lambda: board)
-        snapshot = KiCadReader(client).read_board()
+        snapshot = KiCadReader(client).read_board(copper=True)
         self.assertEqual(len(snapshot.copper.segments), 4)
-        self.assertIsNone(KiCadReader(client).read_board(copper=False).copper)
+        self.assertIsNone(KiCadReader(client).read_board().copper)
 
         def broken():
             raise RuntimeError("no IPC")
         board.get_as_string = broken
-        snapshot = KiCadReader(client).read_board()
+        snapshot = KiCadReader(client).read_board(copper=True)
         self.assertIsNone(snapshot.copper)
         self.assertTrue(any("high-speed" in warning for warning in snapshot.warnings))
 

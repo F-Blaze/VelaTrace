@@ -32,7 +32,7 @@ class KiCadReader:
                 "Cannot connect to KiCad. Open PCB Editor and enable Preferences > Plugins > IPC API."
             ) from exc
 
-    def read_board(self, copper: bool = True) -> DesignSnapshot:
+    def read_board(self, copper: bool = False) -> DesignSnapshot:
         """Footprints, pads and copper layers of the open board; with ``copper`` also its
         routed copper (live text, unsaved edits included) for the high-speed checks."""
         from kipy.board_types import Field
