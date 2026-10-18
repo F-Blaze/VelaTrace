@@ -203,3 +203,47 @@ def test_reconnect_routes_what_kicad_reports_open(tmp_path):
     assert result.unconnected == 0 and not a.failed and not c.failed and a.paths
     assert c.links and c.links[0][1:3] == ((3.0, 2.0), (4.6, 2.0))   # off-grid straight link, pad to pad
     assert not router._in_conflict(a) and "(segment" in text
+
+
+def _pair_part(ref, x, y, angle=0):
+    return (f'(footprint "P" (layer "F.Cu") (at {x} {y}) (property "Reference" "{ref}") '
+            f'(pad "1" smd rect (at 0 -0.4) (size 0.6 0.4) (layers "F.Cu") (net "D+")) '
+            f'(pad "2" smd rect (at 0 0.4) (size 0.6 0.4) (layers "F.Cu") (net "D-")))')
+
+
+def _clear(router, names, rule):
+    """Every pair of segments and vias of different nets keeps ``rule`` between copper edges."""
+    shapes = [(name, layer, p, q, w) for name in names for layer, p, q, w in router.geometry(router.nets[name])[0]]
+    for i, (na, la, p, q, wa) in enumerate(shapes):
+        for nb, lb, r, s, wb in shapes[i + 1:]:
+            assert na == nb or la != lb or _gap(p, q, r, s) >= (wa + wb) / 2 + rule - 1e-6
+
+
+def test_coupled_pair_keeps_its_gap_and_is_delay_matched(tmp_path):
+    blocker = '(footprint "X" (layer "F.Cu") (at 10 6) (property "Reference" "X1") (pad "1" smd rect (at 0 0) (size 2 2) (layers "F.Cu") (net "X")))'
+    _board(tmp_path, _pair_part("U1", 2, 6) + _pair_part("U2", 18, 6) + blocker)
+    (tmp_path / "board.kicad_pro").write_text(
+        '{"net_settings": {"classes": [{"name": "Default", "track_width": 0.2, "clearance": 0.2, "via_diameter": 0.6, '
+        '"via_drill": 0.3, "diff_pair_width": 0.25, "diff_pair_gap": 0.3}]}}', encoding="utf-8")
+    router = route_board(load_board(tmp_path / "board.kicad_pcb"), Options())
+    report = router.report()
+    pair, = report["electrical"]["pairs"]
+    assert report["unrouted"] == 0 and pair["coupled"] and pair["width_mm"] == 0.25
+    assert abs(pair["gap_mm"] - 0.3) < 1e-6 and pair["coupled_pct"] > 50
+    assert pair["skew_ps"] <= 1.0
+    trunk = [[(p, q) for _, p, q, w in router.geometry(router.nets[name])[0] if w == 0.25] for name in ("D+", "D-")]
+    assert min(_gap(p, q, r, s) for p, q in trunk[0] for r, s in trunk[1]) >= 0.25 + 0.3 - 1e-5
+    _clear(router, ("D+", "D-", "X"), 0.2)
+
+
+def test_meander_matches_delay_without_breaking_clearance(tmp_path):
+    # Uncoupled pair with one net much shorter; a neighbour track runs alongside the short one.
+    body = (_pad("A1", 2, 3, "D+") + _pad("A2", 18, 3, "D+") + _pad("B1", 2, 9, "D-") + _pad("B2", 14, 9, "D-")
+            + _pad("C1", 2, 11, "N") + _pad("C2", 14, 11, "N"))
+    router = route_board(_board(tmp_path, body), Options(couple=False))
+    report = router.report()
+    pair, = report["electrical"]["pairs"]
+    assert report["unrouted"] == 0 and not pair["coupled"]
+    assert pair["skew_ps_before"] > 20 and pair["meanders"] > 0 and pair["skew_ps"] <= 1.0
+    assert not any(router._in_conflict(net) for net in router.order)
+    _clear(router, ("D+", "D-", "N"), 0.2)

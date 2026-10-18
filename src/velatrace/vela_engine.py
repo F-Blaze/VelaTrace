@@ -26,7 +26,7 @@ import numpy as np
 from .candidate import CopperItem
 from .errors import RoutingCancelled
 from .stackup import homogeneous_delay_ps
-from .vela_board import Board
+from .vela_board import Board, Pad
 from .vela_electrical import differential_pairs, layer_models
 
 _SQRT2 = math.sqrt(2)
@@ -62,6 +62,9 @@ class Options:
     tries: int = 3                # route_board: re-route orders tried until one routes everything
     hist_spread: float = 0.4      # mm around a conflict that gets the history penalty
     relieve: bool = True          # re-route tracks that starve a pad's thermal relief
+    couple: bool = True           # route name-detected differential pairs as one coupled trunk
+    skew_ps: float = 1.0          # delay matching target within each pair, ps; 0 = no tuning
+    meander_mm: float = 1.0       # tallest trombone bump of the delay matching, mm
     log: object = None            # callable(str) for progress
     cancel: object = None         # threading.Event; once set, routing stops with RoutingCancelled
 
@@ -128,6 +131,30 @@ def _poly_sdf(points, X, Y):
         if ay != by:
             inside ^= ((ay > Y) != (by > Y)) & (X < ax + (Y - ay) * (bx - ax) / (by - ay))
     return np.where(inside, -d, d)
+
+
+def _offset(points, distance):
+    """Polyline (numpy points, 45/90-degree corners) shifted sideways by ``distance`` mm, mitred; None if it folds."""
+    dirs = [(b - a) / np.linalg.norm(b - a) for a, b in zip(points, points[1:])]
+    normals = [np.array((-d[1], d[0])) for d in dirs]
+    out = []
+    for k, point in enumerate(points):
+        n1, n2 = normals[max(k - 1, 0)], normals[min(k, len(normals) - 1)]
+        if n1 @ n2 < -1e-9:
+            return None   # a turn sharper than 90 degrees
+        shift = (n1 + n2) / (1 + n1 @ n2)
+        out.append(tuple(np.round(point + distance * shift, 6).tolist()))
+    if any((np.subtract(q, p) @ d) <= 1e-6 for p, q, d in zip(out, out[1:], dirs)):
+        return None   # a leg shorter than the corner it turns
+    return out
+
+
+def _gap(a, b, width):
+    """Smallest copper gap between two polylines of tracks ``width`` wide (exact for disjoint legs)."""
+    def nearest(points, line):
+        X, Y = np.array([x for x, _ in points]), np.array([y for _, y in points])
+        return min(float(_segment_sdf(*p, *q, X, Y).min()) for p, q in zip(line, line[1:]))
+    return min(nearest(a, b), nearest(b, a)) - width
 
 
 def _inside(points, xs, ys):
@@ -293,7 +320,8 @@ def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0):
 class Router:
     def __init__(self, board: Board, options: Options | None = None, obstacles=()):
         """``obstacles``: extra copper boxes (copper_obstacles.CopperObstacle), e.g. copper text."""
-        self.board, self.opt = board, options or Options()
+        # Own copy of the pad list: coupled trunks of differential pairs are added as pads.
+        self.board, self.opt = replace(board, pads=list(board.pads)), options or Options()
         self.started = time.monotonic()
         self.obstacles, self.kicad_s = tuple(obstacles), 0.0   # kicad_s: time spent in KiCad's checks
         self.rips = {}        # rescue: how often each net lost a connection as a rip victim
@@ -311,6 +339,7 @@ class Router:
                 self._block(d, iy0, ix0, (board.layers.index(box.layer),), 0.0, None)
         self._planes()
         self._electrical()
+        self._couple()
 
     def _stop_if_cancelled(self):
         if self.opt.cancel is not None and self.opt.cancel.is_set():
@@ -331,8 +360,20 @@ class Router:
         classes = {name: board.netclass(name) for name in by_net}
         # A class width is a default, not a limit: the board minimum may be used to leave tight pads.
         neck = self.neck_width = max(self.opt.neck_width, board.rules.get("min_track_width", 0))
+        self.pairs, self.couples = differential_pairs(by_net), {}
+        for pair in self.pairs if self.opt.couple else ():
+            a, b = (classes[name] for name in pair)
+            clearance = max(a.clearance, b.clearance)
+            width = max(a.diff_pair_width or a.width, b.diff_pair_width or b.width, board.rules.get("min_track_width", 0))
+            # The gap never goes below the clearance plus the grid's keep-off margin (0.02 mm): a
+            # breakout must still find its own track inside the partner's keep-off band.
+            gap = max(a.diff_pair_gap, b.diff_pair_gap, clearance + 0.02 + max(0.0, (max(a.width, b.width) - width) / 2))
+            self.couples[pair] = (width, gap, clearance)
         tracks = sorted({(c.width, c.clearance) for c in classes.values()}
-                        | {(neck, c.clearance) for c in classes.values() if c.width > neck + 1e-9} or {(0.2, 0.2)})
+                        | {(neck, c.clearance) for c in classes.values() if c.width > neck + 1e-9}
+                        | {(2 * w + g, c) for w, g, c in self.couples.values()} or {(0.2, 0.2)})
+        # A pair's centreline is searched on a virtual class as wide as both tracks and their gap.
+        self.couples = {pair: (w, g, c, tracks.index((2 * w + g, c))) for pair, (w, g, c) in self.couples.items()}
         self.default_width = board.netclass("").width
         vias = sorted({(c.via_diameter, c.clearance) for c in classes.values()} or {(0.6, 0.2)})
         # One occupancy map per probe: (half extent, clearance). Tracks first, then vias.
@@ -446,39 +487,8 @@ class Router:
                 for key in self.pour:
                     if key[1] in zone.layers:
                         self.pour[key] = self.pour[key] & ~mask
-        hole_clearance = board.rules.get("min_hole_clearance", 0) or 0.25
         for index, pad in enumerate(board.pads):
-            reach = _pad_reach(pad)
-            iy0, iy1, ix0, ix1 = self._window_of(pad.x, pad.y, pad.x, pad.y, reach + self.reach)
-            X, Y = self.xs[None, ix0:ix1], self.ys[iy0:iy1, None]
-            d = _pad_sdf(pad, X, Y)
-            net = self.nets.get(pad.net)
-            layers = pad.layers if pad.plated and pad.layers else every
-            clearance = max(net.cls.clearance if net else 0.0, pad.clearance)
-            sharers = [name for name in (pad.net, *pad.tie) if name in self.nets] if pad.tie else []
-            owner = [[] for _ in self.maps] if sharers else own[pad.net] if net else None
-            if pad.plated and pad.layers:
-                self._block(d, iy0, ix0, layers, clearance, owner)
-            if pad.drill:
-                hole = np.hypot(X - pad.x, Y - pad.y) - pad.drill / 2
-                self._block(hole, iy0, ix0, every, max(hole_clearance, pad.clearance),
-                            owner if net and pad.plated else None, copper=False)
-            for m, parts in enumerate(owner if sharers else ()):
-                if parts:
-                    cells = np.unique(np.concatenate(parts))
-                    self.hardf[m][cells] += 1
-                    for name in sharers:
-                        self.tied.setdefault(name, []).append((m, cells))
-            if net:
-                # Route ends must sit well inside the pad, not on its rim.
-                depth = min(net.cls.width / 2, -0.5 * float(d.min())) if d.min() < 0 else None
-                iy, ix = np.nonzero(d < -depth) if depth is not None else (np.array([], int),) * 2
-                if not iy.size:
-                    iy, ix = np.unravel_index(np.argmin(d), d.shape)
-                    iy, ix = np.array([iy]), np.array([ix])
-                self.pad_cells[index] = (iy + iy0) * self.W + ix + ix0
-            if not pad.drill and pad.layers and float(d.min()) > -self.opt.via_in_pad_min / 2:
-                self.smd[iy0:iy1, ix0:ix1] |= d < 0   # too small for a via in the pad
+            self._static_pad(index, pad, own)
         for net, layer, x1, y1, x2, y2, width in board.tracks:
             iy0, iy1, ix0, ix1 = self._window_of(x1, y1, x2, y2, width / 2 + self.reach)
             d = _segment_sdf(x1, y1, x2, y2, self.xs[None, ix0:ix1], self.ys[iy0:iy1, None]) - width / 2
@@ -522,6 +532,42 @@ class Router:
                 for m in range(len(self.maps)):
                     self.hard[m][:, outside] += 1
         self._spokes()
+
+    def _static_pad(self, index, pad, own):
+        """Fixed copper of one pad: blocked for other nets (into ``own``), its route-end cells, no-via area."""
+        every = tuple(range(self.L))
+        hole_clearance = self.board.rules.get("min_hole_clearance", 0) or 0.25
+        reach = _pad_reach(pad)
+        iy0, iy1, ix0, ix1 = self._window_of(pad.x, pad.y, pad.x, pad.y, reach + self.reach)
+        X, Y = self.xs[None, ix0:ix1], self.ys[iy0:iy1, None]
+        d = _pad_sdf(pad, X, Y)
+        net = self.nets.get(pad.net)
+        layers = pad.layers if pad.plated and pad.layers else every
+        clearance = max(net.cls.clearance if net else 0.0, pad.clearance)
+        sharers = [name for name in (pad.net, *pad.tie) if name in self.nets] if pad.tie else []
+        owner = [[] for _ in self.maps] if sharers else own[pad.net] if net else None
+        if pad.plated and pad.layers:
+            self._block(d, iy0, ix0, layers, clearance, owner)
+        if pad.drill:
+            hole = np.hypot(X - pad.x, Y - pad.y) - pad.drill / 2
+            self._block(hole, iy0, ix0, every, max(hole_clearance, pad.clearance),
+                        owner if net and pad.plated else None, copper=False)
+        for m, parts in enumerate(owner if sharers else ()):
+            if parts:
+                cells = np.unique(np.concatenate(parts))
+                self.hardf[m][cells] += 1
+                for name in sharers:
+                    self.tied.setdefault(name, []).append((m, cells))
+        if net:
+            # Route ends must sit well inside the pad, not on its rim.
+            depth = min(net.cls.width / 2, -0.5 * float(d.min())) if d.min() < 0 else None
+            iy, ix = np.nonzero(d < -depth) if depth is not None else (np.array([], int),) * 2
+            if not iy.size:
+                iy, ix = np.unravel_index(np.argmin(d), d.shape)
+                iy, ix = np.array([iy]), np.array([ix])
+            self.pad_cells[index] = (iy + iy0) * self.W + ix + ix0
+        if not pad.drill and pad.layers and pad.number != "pair" and float(d.min()) > -self.opt.via_in_pad_min / 2:
+            self.smd[iy0:iy1, ix0:ix1] |= d < 0   # too small for a via in the pad
 
     def _spokes(self):
         """Thermal-spoke corridors of pads in their own pour: ``self.corridors`` [(pad, layer, gap, [(bands, axis)])].
@@ -638,7 +684,314 @@ class Router:
         fastest = min(d for i, d in enumerate(delay) if not self.plane[i])
         self.base = np.array([d / fastest for d in delay])
         self.via_delay_ps = homogeneous_delay_ps(board.thickness, sum(m.epsilon_r for m in self.models) / self.L)
-        self.pairs = differential_pairs(self.nets)
+
+    # ---- differential pairs --------------------------------------------------
+    def _couple(self):
+        """Coupled trunk of each differential pair (idea from KiCadRoutingTools: centreline plus offset).
+
+        The centreline is searched on one layer against the fixed copper, on the pair's virtual
+        class 2w + gap, then split into the two tracks at +-(w + gap)/2. Each track becomes fixed
+        copper of its net, a pad-like trunk; the nets' own routes then only join their pads to it
+        (the uncoupled breakout, vias allowed). The first trunk whose breakouts route on an empty
+        board is kept; a pair without one routes as two single nets.
+        """
+        self.virtual, self.coupled, self.trunks, self.tuning = set(), {}, {}, {}
+        for pair, (w, g, c, m) in self.couples.items():
+            nets, reason = [self.nets[name] for name in pair], "no candidate"
+            for found in self._trunk(pair, w, g, m):
+                if isinstance(found, str):
+                    reason = found
+                    continue
+                layer, lines, crossed = found
+                pads = {name: self._add_trunk(name, line, layer, w) for name, line in zip(pair, lines)}
+                if self._breakouts(nets):
+                    self.coupled[pair] = {"coupled": True, "layer": self.board.layers[layer], "width_mm": w,
+                                          "gap_mm": round(_gap(*lines, w), 4), "crossed": crossed, "pads": pads}
+                    break
+                for name, index in pads.items():
+                    self._drop_trunk(self.nets[name], index)
+                reason = "the breakouts cannot reach the trunk"
+            else:
+                self.coupled[pair] = {"coupled": False, "reason": reason}
+        if self.coupled:
+            self._say("pairs: " + "; ".join("/".join(pair) + (f" coupled on {info['layer']}" if info["coupled"]
+                                                              else f": {info['reason']}")
+                                            for pair, info in self.coupled.items()))
+
+    def _add_trunk(self, name, line, layer, width):
+        """One track of a trunk as fixed copper (a pad) of net ``name``; returns its pad index."""
+        ox, oy = line[len(line) // 2]
+        shapes = tuple(("line", x1 - ox, y1 - oy, x2 - ox, y2 - oy, width) for (x1, y1), (x2, y2) in zip(line, line[1:]))
+        index = len(self.board.pads)
+        self.board.pads.append(Pad("", "pair", name, ox, oy, 0.0, shapes, (layer,)))
+        own = {name: [[] for _ in self.maps]}
+        self._static_pad(index, self.board.pads[index], own)
+        self.trunks[index] = []
+        for k, parts in enumerate(own[name]):
+            cells = np.setdiff1d(np.unique(np.concatenate(parts)), self.own[name][k]) if parts else np.zeros(0, np.int64)
+            self.hardf[k][cells] += 1
+            self.own[name][k] = np.union1d(self.own[name][k], cells)
+            self.trunks[index].append(cells)
+        self.nets[name].pads.append(index)
+        self.virtual.add(index)
+        return index
+
+    def _drop_trunk(self, net, index):
+        net.pads.remove(index)
+        self.board.pads[index] = replace(self.board.pads[index], net="", shapes=(), layers=())   # no copper left
+        self.virtual.discard(index)
+        for k, cells in enumerate(self.trunks.pop(index)):
+            self.hardf[k][cells] -= 1
+            self.own[net.name][k] = np.setdiff1d(self.own[net.name][k], cells)
+
+    def _breakouts(self, nets):
+        """Whether both nets of a pair, alone on the board, join all their pads to their trunks (either first)."""
+        for order in (nets, nets[::-1]):
+            for net in order:
+                self._route(net, 0.0, strict=True)
+                self._stamp(net)
+            ok = not any(net.failed for net in nets)
+            for net in nets:
+                self._ripup(net)
+            if ok:
+                return True
+        return False
+
+    def _trunk(self, pair, w, g, m):
+        """Candidate (layer, (P line, N line), crossed) of a pair's coupled middle, shortest launch first;
+        a string says why there is none."""
+        pads, nets = self.board.pads, [self.nets[name] for name in pair]
+        ps, ns = ([i for i in net.pads if pads[i].ref] for net in nets)
+        close = [(i, j) for i in ps for j in ns if math.dist((pads[i].x, pads[i].y), (pads[j].x, pads[j].y)) <= 3.0]
+
+        def mid(e):
+            return (pads[e[0]].x + pads[e[1]].x) / 2, (pads[e[0]].y + pads[e[1]].y) / 2
+
+        def side(e, d):   # P pad on the +normal side of the travel direction d
+            return d[0] * (pads[e[0]].y - pads[e[1]].y) - d[1] * (pads[e[0]].x - pads[e[1]].x) > 0
+
+        def crossing(ea, eb):
+            d = (mid(eb)[0] - mid(ea)[0], mid(eb)[1] - mid(ea)[1])
+            return side(ea, d) != side(eb, d), math.dist(mid(ea), mid(eb))
+
+        def group(e0):   # the P/N pad pairs of one end, e.g. both rows of a USB-C connector
+            return [e for e in close if math.dist(mid(e), mid(e0)) <= 1.5]
+        if len(close) < 2:
+            yield "the nets do not sit side by side at two places"
+            return
+        ea, eb = max(((x, y) for k, x in enumerate(close) for y in close[k + 1:]),
+                     key=lambda e: math.dist(mid(e[0]), mid(e[1])))
+        a, b = min(((x, y) for x in group(ea) for y in group(eb)), key=lambda e: crossing(*e))
+        if math.dist(mid(a), mid(b)) < 2.0:
+            yield "too short to couple"
+            return
+        common = set.intersection(*(set(pads[i].layers) for i in (*a, *b)))
+        layers = [x for x in range(self.L) if not self.plane[x]]
+        yield "no room for the coupled pair on one layer"
+        # The pads' own layers first, at any launch radius; elsewhere the breakouts take vias.
+        for reach, group in ((reach, group) for group in ([x for x in layers if x in common],
+                                                          [x for x in layers if x not in common])
+                             for reach in (0.75, 1.25, 2.0, 3.0, 4.5)):   # launch radius, nearest first
+            found = sorted((len(path), layer, path) for layer in group
+                           if (path := self._centreline(m, layer, mid(a), mid(b), reach)))
+            for _, layer, path in found:
+                path = self._straighten(None, path, m)
+                verts = [path[0]] + [path[k] for k in range(1, len(path) - 1)
+                                     if path[k + 1] - path[k] != path[k] - path[k - 1]] + [path[-1]]
+                xy = [np.array(self._xy(cell)) for cell in verts]
+                start, end = side(a, xy[1] - xy[0]), side(b, xy[-1] - xy[-2])
+                lines = [_offset(xy, (w + g) / 2 * (1 if start == positive else -1)) for positive in (True, False)]
+                if all(line and all(self._link_clear(net, layer, p, q, w, routed=False) for p, q in zip(line, line[1:]))
+                       for net, line in zip(nets, lines)):
+                    yield layer, lines, bool(start != end)
+
+    def _centreline(self, m, layer, a, b, reach):
+        """Cells of a one-layer search on map ``m`` between free cells within ``reach`` mm of a and of b."""
+        free = self.hard[m][layer] == 0
+        (ay, ax), (by, bx) = ((round((y - self.y0) / self.p), round((x - self.x0) / self.p)) for x, y in (a, b))
+        r = reach / self.p
+        for grow in (1, 4):
+            pad = int(max(3.0 / self.p, 0.3 * max(abs(ay - by), abs(ax - bx))) * grow + r)
+            y0, y1 = max(0, min(ay, by) - pad), min(self.H, max(ay, by) + pad + 1)
+            x0, x1 = max(0, min(ax, bx) - pad), min(self.W, max(ax, bx) + pad + 1)
+            Y, X = np.mgrid[y0:y1, x0:x1]
+            win = free[y0:y1, x0:x1]
+            begin, goal = win & (np.hypot(Y - ay, X - ax) <= r), win & (np.hypot(Y - by, X - bx) <= r)
+            if not begin.any() or not goal.any():
+                return None
+            h, w = y1 - y0 + 2, x1 - x0 + 2
+            cost = np.full((h, w), -1.0)
+            cost[1:-1, 1:-1] = np.where(win, 1.0, -1.0)
+            flags = np.zeros((h, w), np.uint8)
+            flags[1:-1, 1:-1] = goal
+            gy, gx = np.nonzero(goal)
+            sy, sx = np.nonzero(begin)
+            path = _search(memoryview(cost.reshape(-1)), memoryview(np.full(h * w, -1.0)), w, h * w, 1,
+                           ((sy + 1) * w + sx + 1).tolist(), bytearray(flags.tobytes()),
+                           (int(gx.min()) + 1, int(gy.min()) + 1, int(gx.max()) + 1, int(gy.max()) + 1), self.weight)
+            if path:
+                return ([layer * self.HW + (cell // w - 1 + y0) * self.W + cell % w - 1 + x0 for cell in path]
+                        if len(path) > 2 else None)
+        return None
+
+    def _uncouple(self):
+        """A trunk that left its own pair unrouted gives way: both nets are routed singly instead."""
+        undone = False
+        for pair, info in list(self.coupled.items()):
+            nets = [self.nets[name] for name in pair]
+            if not info["coupled"] or not any(net.failed for net in nets):
+                continue
+            self.coupled[pair] = {"coupled": False, "reason": "the trunk left the pair unrouted; routed as two nets"}
+            for net in nets:
+                self._drop_trunk(net, info["pads"][net.name])
+                self._ripup(net)
+            for net in nets:
+                self._route(net, 0.0, strict=True)
+                self._stamp(net)
+            undone = True
+        return undone
+
+    def _flight(self, net):
+        """(delay ps, length mm) of a net as drawn, each segment at its own layer and width."""
+        segments, vias = self.geometry(net)
+        delay, length = len(vias) * self.via_delay_ps, 0.0
+        for layer, a, b, width in segments:
+            delay += math.dist(a, b) * self.models[layer].delay_ps_per_mm(width)
+            length += math.dist(a, b)
+        return delay, length
+
+    def tune(self):
+        """Delay matching per pair (idea from KiCadRoutingTools' trombone meanders, here on the grid).
+
+        The faster net gets square bumps on its straight runs, only in cells free of all other
+        copper, until it is within ``Options.skew_ps`` of its partner. A bump of height h adds
+        2h grid steps, so what is left is at most one step's delay (about 0.6 ps at 0.1 mm).
+        """
+        self.tuning = {}
+        for pair in self.pairs if self.opt.skew_ps else ():
+            nets = [self.nets[name] for name in pair]
+            if any(net.failed or not net.connections for net in nets):
+                continue
+            flights = [self._flight(net) for net in nets]
+            fast = int(flights[1][0] < flights[0][0])
+            self.tuning[pair] = {"skew_ps_before": round(abs(flights[0][0] - flights[1][0]), 2),
+                                 "skew_mm_before": round(abs(flights[0][1] - flights[1][1]), 3),
+                                 "meanders": self._meander(nets[fast], flights[1 - fast][0])}
+
+    def _meander(self, net, target):
+        """Bumps on ``net`` until its delay reaches ``target`` ps; returns how many were added."""
+        bumps = self._trunk_bump(net, target - self._flight(net)[0])
+        if bumps:
+            return bumps
+        paths, necks, failed, connections = self._state(net)
+        self._ripup(net)   # its own keep-off band leaves the maps while bumps are placed
+        net.paths, net.necks = [list(path) for path in paths], necks
+        bumps, tried = 0, set()
+        while True:
+            short = target - self._flight(net)[0]
+            runs = []
+            for k, path in enumerate(net.paths):
+                i = 0
+                while i < len(path) - 1:
+                    step, j = path[i + 1] - path[i], i + 1
+                    while j < len(path) - 1 and path[j + 1] - path[j] == step:
+                        j += 1
+                    if abs(step) < self.HW and not self.plane[path[i] // self.HW] and (k, path[i], step) not in tried:
+                        runs.append((j - i, k, i, step))
+                    i = j
+            if short <= self.opt.skew_ps / 2 or not runs:
+                break
+            n, k, i, step = max(runs)
+            tried.add((k, net.paths[k][i], step))
+            bumps += self._bumps(net, k, i, n, step, short)
+        self._restore(net, (net.paths, necks, failed, connections))
+        return bumps
+
+    def _trunk_bump(self, net, short):
+        """Exact bumps on the outer side of the net's coupled trunk worth ``short`` ps; returns how many.
+
+        Off the grid, so the match is exact; each new leg is checked against all other copper.
+        """
+        pair = next((pair for pair, info in self.coupled.items() if info["coupled"] and net.name in pair), None)
+        if pair is None or short <= self.opt.skew_ps / 2:
+            return 0
+        info = self.coupled[pair]
+        index, other = info["pads"][net.name], self.board.pads[info["pads"][pair[1 - pair.index(net.name)]]]
+        pad = self.board.pads[index]
+        layer, width = pad.layers[0], pad.shapes[0][5]
+        line = [(pad.x + q[1], pad.y + q[2]) for q in pad.shapes] + [(pad.x + pad.shapes[-1][3], pad.y + pad.shapes[-1][4])]
+        partner = np.array([(other.x + q[1], other.y + q[2]) for q in other.shapes])
+        height = short / self.models[layer].delay_ps_per_mm(width) / 2
+        count = math.ceil(height / self.opt.meander_mm)
+        height /= count
+        arm = width + net.cls.clearance
+        for k in sorted(range(len(line) - 1), key=lambda k: -math.dist(line[k], line[k + 1])):
+            a, b = np.array(line[k]), np.array(line[k + 1])
+            span = math.dist(a, b)
+            if span < (2 * count + 1) * arm:
+                break
+            u = (b - a) / span
+            normal = np.array((-u[1], u[0]))
+            middle = (a + b) / 2
+            if (np.hypot(*(partner - middle - normal).T).min() < np.hypot(*(partner - middle + normal).T).min()):
+                normal = -normal   # away from the partner
+            start = (span - (2 * count - 1) * arm) / 2
+            bump = []
+            for j in range(count):
+                foot = a + u * (start + 2 * j * arm)
+                bump += [foot, foot + normal * height, foot + normal * height + u * arm, foot + u * arm]
+            bump = [tuple(np.round(q, 6).tolist()) for q in bump]
+            legs = list(zip(bump, bump[1:]))
+            if all(self._link_clear(net, layer, q, r, width) for q, r in legs):
+                self._drop_trunk(net, index)
+                info["pads"][net.name] = self._add_trunk(net.name, line[:k + 1] + bump + line[k + 1:], layer, width)
+                return count
+        return 0
+
+    def _bumps(self, net, k, i, n, step, short):
+        """Trombone bumps on the straight run i..i+n of path k worth up to ``short`` ps; returns how many."""
+        path, W = net.paths[k], self.W
+        dy = (step + W // 2) // W
+        dx = step - dy * W
+        size = self.p * math.hypot(dx, dy)
+        width, t = (self.neck_width, net.neck) if k in net.necks else (net.cls.width, net.t)
+        need = round(short / (2 * size * self.models[path[i] // self.HW].delay_ps_per_mm(width)))
+        arm = math.ceil((width + net.cls.clearance) / size)   # spacing of the arms, in steps
+        if need < 1 or n < 5 * arm:
+            return 0
+        hard, soft = self.hardf[t], self.softf[t]
+        others = np.array([c for kk, other in enumerate(net.paths) for q, c in enumerate(other)
+                           if kk != k or not i < q < i + n], np.int64)   # run ends stay: they may be vias
+        reach = max(width, net.cls.via_diameter) / 2 + width / 2 + net.cls.clearance
+        mine = np.unique((others[:, None] + self._disk(reach)[None, :]).ravel()) if others.size else others
+
+        def free(cells):
+            cells = np.clip(cells, 0, hard.size - 1)
+            return (hard[cells] == 0) & (soft[cells] == 0) & ~np.isin(cells, mine)
+        best = (0, 0, [])
+        for normal in (dx * W - dy, dy - dx * W):
+            placed, left, pos = [], need, 2 * arm
+            while left and pos + 3 * arm <= n:
+                base = path[i + pos]
+                heights = np.arange(1, min(left, int(self.opt.meander_mm / size)) + 1)
+                ok = free(base + heights * normal) & free(base + heights * normal + arm * step)
+                h = int(np.argmin(ok)) if not ok.all() else len(heights)
+                while h and not free(base + h * normal + np.arange(arm + 1) * step).all():
+                    h -= 1
+                if h:
+                    placed.append((pos, h))
+                    left, pos = left - h, pos + 2 * arm
+                else:
+                    pos += 1
+            if need - left > best[0]:
+                best = (need - left, normal, placed)
+        _, normal, placed = best
+        for pos, h in reversed(placed):
+            base = path[i + pos]
+            path[i + pos:i + pos + arm + 1] = ([base + q * normal for q in range(h + 1)]
+                                               + [base + h * normal + q * step for q in range(1, arm + 1)]
+                                               + [base + q * normal + arm * step for q in range(h - 1, -1, -1)])
+        return len(placed)
 
     # ---- occupancy ---------------------------------------------------------
     def _disk(self, radius):
@@ -1050,7 +1403,9 @@ class Router:
                 i = root[i]
             return i
         where = {i: (self.board.pads[i].x, self.board.pads[i].y) for i in pads}
-        pairs = sorted((math.dist(where[a], where[b]), a, b) for n, a in enumerate(pads) for b in pads[n + 1:])
+        # A pair's trunk joins first, so the breakouts hang off it rather than bypass it.
+        pairs = sorted((0.0 if a in self.virtual or b in self.virtual else math.dist(where[a], where[b]), a, b)
+                       for n, a in enumerate(pads) for b in pads[n + 1:])
         tried, groups = set(), len(pads)
         if keep:
             owner = {cell: index for index in pads for cell in cells[index].tolist()}
@@ -1137,6 +1492,8 @@ class Router:
     def run(self):
         self.negotiate()
         self.legalize()
+        if self._uncouple():
+            self.legalize()
         for _ in range(self.opt.optimize_passes):
             self.optimize()
             self._mend_planes()
@@ -1146,6 +1503,7 @@ class Router:
             self.rescue()
             self._mend_planes()
         self.relieve()
+        self.tune()
         self._say(f"done: {sum(n.connections - n.failed for n in self.order)}/"
                   f"{sum(n.connections for n in self.order)} connections routed")
         return self
@@ -1609,7 +1967,7 @@ class Router:
         pads, island = self.board.pads, self._islands(net)[0]
         pa = pads[a]
         near = [b] if b is not None else sorted(
-            (i for i in net.pads if island[("pad", i)] != island[("pad", a)]),
+            (i for i in net.pads if island[("pad", i)] != island[("pad", a)] and i not in self.virtual),
             key=lambda i: math.dist((pa.x, pa.y), (pads[i].x, pads[i].y)))
         options = [(pads[c], layer, width) for c in near if math.dist((pa.x, pa.y), (pads[c].x, pads[c].y)) <= 2.0
                    for layer in pa.layers if layer in pads[c].layers and not self.plane[layer]
@@ -1751,6 +2109,11 @@ class Router:
                 previous = cell
         for layer, a, b, width in net.links:
             segments.add((layer, min(a, b), max(a, b), width))
+        for index in self.virtual.intersection(net.pads):   # a pair's coupled trunk
+            pad = self.board.pads[index]
+            for _, x1, y1, x2, y2, width in pad.shapes:
+                a, b = (round(pad.x + x1, 6), round(pad.y + y1, 6)), (round(pad.x + x2, 6), round(pad.y + y2, 6))
+                segments.add((pad.layers[0], min(a, b), max(a, b), width))
         return sorted(segments), sorted(vias)
 
     def copper(self):
@@ -1778,7 +2141,7 @@ class Router:
                 necked += math.dist(a, b) * (wide < net.cls.width)
             by_name = {m.name: m for m in self.models}
             width = net.cls.width
-            delay = sum(v * by_name[k].delay_ps_per_mm(width) for k, v in length.items()) + len(vias) * self.via_delay_ps
+            delay = self._flight(net)[0]
             impedance = {k: by_name[k].impedance_ohm(width) for k in length}
             nets[net.name] = {"connections": net.connections, "unrouted": net.failed, "vias": len(vias),
                               "length_mm": {k: round(v, 3) for k, v in length.items()},
@@ -1794,8 +2157,21 @@ class Router:
                     "delay_ps_per_mm": round(m.delay_ps_per_mm(width), 3),
                     "impedance_ohm": (z := m.impedance_ohm(width)) and round(z, 1),
                     "width_for_50_ohm_mm": m.width_for(50)} for m in self.models]
-        pairs = [{"nets": pair, "skew_ps": round(abs(nets[pair[0]]["delay_ps"] - nets[pair[1]]["delay_ps"]), 1),
-                  "coupled": False} for pair in self.pairs if pair[0] in nets and pair[1] in nets]
+        pairs = []
+        for pair in self.pairs:
+            if pair[0] not in nets or pair[1] not in nets:
+                continue
+            flights = [self._flight(self.nets[name]) for name in pair]
+            entry = {"nets": list(pair), "lengths_mm": [round(f[1], 3) for f in flights],
+                     "skew_ps": round(abs(flights[0][0] - flights[1][0]), 2),
+                     "skew_mm": round(abs(flights[0][1] - flights[1][1]), 3)}
+            info = dict(self.coupled.get(pair, {"coupled": False, "reason": "coupling off"}))
+            trunk = info.pop("pads", None)
+            if trunk:
+                coupled = sum(math.dist(s[1:3], s[3:5]) for name in pair for s in self.board.pads[trunk[name]].shapes)
+                info.update(coupled_mm=round(coupled / 2, 2),
+                            coupled_pct=round(100 * coupled / sum(f[1] for f in flights), 1))
+            pairs.append({**entry, **info, **self.tuning.get(pair, {})})
         return {"engine": "vela-native", "pitch_mm": round(self.p, 6), "grid": [self.W, self.H, self.L],
                 "reference_planes": planes,
                 "mixed_planes": [self.board.layers[i] for i in range(self.L) if self.mixed[i]],

@@ -61,6 +61,8 @@ class NetClass:
     clearance: float
     via_diameter: float
     via_drill: float
+    diff_pair_width: float = 0.0   # 0 = not set: the track width
+    diff_pair_gap: float = 0.0     # 0 = not set: the clearance
 
 
 @dataclass
@@ -345,7 +347,7 @@ def _read_project(board: Board, project: Path) -> None:
             max(float(item.get("clearance") or 0.2), r["min_clearance"]),
             max(float(item.get("via_diameter") or 0.6), r["min_via_diameter"],
                 drill + 2 * r["min_via_annular_width"]),
-            drill))
+            drill, float(item.get("diff_pair_width") or 0), float(item.get("diff_pair_gap") or 0)))
     if not any(item.name == "Default" for item in board.classes):
         board.classes.append(NetClass("Default", 0.2, 0.2, 0.6, 0.3))
     # Explicit per-net assignments win over patterns, as in KiCad.
