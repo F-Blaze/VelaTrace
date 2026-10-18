@@ -967,9 +967,12 @@ class Router:
 
     def _meander(self, net, target):
         """Bumps on ``net`` until its delay reaches ``target`` ps; returns how many were added."""
-        bumps = self._trunk_bump(net, target - self._flight(net)[0])
-        if bumps:
-            return bumps
+        bumps = 0
+        for _ in range(8):   # exact bumps on the trunk, as many as fit
+            added = self._trunk_bump(net, target - self._flight(net)[0])
+            if not added:
+                break
+            bumps += added
         paths, necks, failed, connections = self._state(net)
         self._ripup(net)   # its own keep-off band leaves the maps while bumps are placed
         net.paths, net.necks = [list(path) for path in paths], necks
@@ -1009,30 +1012,32 @@ class Router:
         line = [(pad.x + q[1], pad.y + q[2]) for q in pad.shapes] + [(pad.x + pad.shapes[-1][3], pad.y + pad.shapes[-1][4])]
         partner = np.array([(other.x + q[1], other.y + q[2]) for q in other.shapes])
         height = short / self.models[layer].delay_ps_per_mm(width) / 2
-        count = math.ceil(height / self.opt.meander_mm)
-        height /= count
-        arm = width + net.cls.clearance
-        for k in sorted(range(len(line) - 1), key=lambda k: -math.dist(line[k], line[k + 1])):
+        arm, cache = width + net.cls.clearance, {}
+        first = math.ceil(height / self.opt.meander_mm)
+        segments = sorted(range(len(line) - 1), key=lambda k: -math.dist(line[k], line[k + 1]))[:6]
+        # All of it in a few tall bumps first; then lower ones that buy only part of it (the caller repeats).
+        for count, part, k in ((count, part, k) for part in (1, 0.5, 0.25) for count in (first, 2 * first)
+                               for k in segments):
             a, b = np.array(line[k]), np.array(line[k + 1])
-            span = math.dist(a, b)
-            if span < (2 * count + 1) * arm:
-                break
+            span, need = math.dist(a, b), (2 * count - 1) * arm
             u = (b - a) / span
             normal = np.array((-u[1], u[0]))
             middle = (a + b) / 2
             if (np.hypot(*(partner - middle - normal).T).min() < np.hypot(*(partner - middle + normal).T).min()):
                 normal = -normal   # away from the partner
-            start = (span - (2 * count - 1) * arm) / 2
-            bump = []
-            for j in range(count):
-                foot = a + u * (start + 2 * j * arm)
-                bump += [foot, foot + normal * height, foot + normal * height + u * arm, foot + u * arm]
-            bump = [tuple(np.round(q, 6).tolist()) for q in bump]
-            legs = list(zip(bump, bump[1:]))
-            if all(self._link_clear(net, layer, q, r, width) for q, r in legs):
-                self._drop_trunk(net, index)
-                info["pads"][net.name] = self._add_trunk(net.name, line[:k + 1] + bump + line[k + 1:], layer, width)
-                return count
+            # Centred first, then slid along the leg in half-arm steps.
+            starts = sorted(np.arange(arm, span - need - arm + 1e-9, arm / 2), key=lambda x: abs(x - (span - need) / 2))
+            for start in starts[:12]:
+                bump = []
+                for j in range(count):
+                    foot = a + u * (start + 2 * j * arm)
+                    rise = normal * height * part / count
+                    bump += [foot, foot + rise, foot + rise + u * arm, foot + u * arm]
+                bump = [tuple(np.round(q, 6).tolist()) for q in bump]
+                if all(self._link_clear(net, layer, q, r, width, cache=cache) for q, r in zip(bump, bump[1:])):
+                    self._drop_trunk(net, index)
+                    info["pads"][net.name] = self._add_trunk(net.name, line[:k + 1] + bump + line[k + 1:], layer, width)
+                    return count
         return 0
 
     def _bumps(self, net, k, i, n, step, short):
@@ -2092,7 +2097,7 @@ class Router:
         iy = np.rint((np.linspace(a[1], b[1], n) - self.y0) / self.p).astype(np.int64)
         return np.unique(layer * self.HW + iy * self.W + ix)
 
-    def _link_clear(self, net, layer, a, b, width, routed=True):
+    def _link_clear(self, net, layer, a, b, width, routed=True, cache=None):
         """Exact clearance (5 um samples, 1 um spare) of a straight track to all copper not its own;
         without ``routed``, to the fixed copper only (pads, existing tracks, edges, keep-outs)."""
         n = int(math.dist(a, b) / 0.005) + 2
@@ -2111,16 +2116,23 @@ class Router:
             if pad.drill and np.hypot(X - pad.x, Y - pad.y).min() < half + pad.drill / 2 + board.rules.get(
                     "min_hole_clearance", 0):
                 return False
-        copper = [(other.name, *segment) for other in self.nets.values() if other is not net and routed
-                  for segment in self.geometry(other)[0]]
+        if cache is None or "copper" not in cache:   # ``cache``: dict kept by a caller that checks many legs
+            routed_copper = [(other, other.name, *segment) for other in self.nets.values() if routed
+                             for segment in self.geometry(other)[0]]
+            vias = [(other, x, y) for other in self.nets.values() if routed for x, y in self.geometry(other)[1]]
+            if cache is not None:
+                cache.update(copper=routed_copper, vias=vias)
+        else:
+            routed_copper, vias = cache["copper"], cache["vias"]
+        copper = [segment[1:] for segment in routed_copper if segment[0] is not net]
         copper += [(name, lay, (x1, y1), (x2, y2), w) for name, lay, x1, y1, x2, y2, w in board.tracks]
         for name, lay, (x1, y1), (x2, y2), w in copper:
             if name != net.name and lay == layer and near(x1, y1, math.dist((x1, y1), (x2, y2))):
                 rule = max(gap, board.netclass(name).clearance)
                 if _segment_sdf(x1, y1, x2, y2, X, Y).min() < half + w / 2 + rule:
                     return False
-        for other in self.nets.values():
-            for x, y in self.geometry(other)[1] if other is not net and routed else ():
+        for other, x, y in vias:
+            if other is not net:
                 rule = max(gap, other.cls.clearance)
                 if near(x, y, 0) and np.hypot(X - x, Y - y).min() < half + other.cls.via_diameter / 2 + rule:
                     return False
