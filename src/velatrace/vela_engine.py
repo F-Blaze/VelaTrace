@@ -976,7 +976,7 @@ class Router:
         paths, necks, failed, connections = self._state(net)
         self._ripup(net)   # its own keep-off band leaves the maps while bumps are placed
         net.paths, net.necks = [list(path) for path in paths], necks
-        bumps, tried = 0, set()
+        tried = set()
         while True:
             short = target - self._flight(net)[0]
             runs = []
