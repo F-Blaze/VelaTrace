@@ -803,6 +803,87 @@ def check_coverage(snapshot: DesignSnapshot) -> list[Finding]:
         fix="Name the ground and supply nets (GND, +3V3, …) with power symbols or labels, then re-run.")]
 
 
+# ================================================================ high-speed: pair timing
+# Read DesignSnapshot.copper (None for netlists and schematics: nothing is reported). Pairs come
+# from copper.find_high_speed, a name guess. The board never says how fast a pair runs or what
+# skew it can take, so every figure here is an estimate against a fixed, conservative limit.
+# No bus-skew check: net classes group nets by width/impedance (one "100ohm" class holds HDMI,
+# PCIe and Ethernet pairs together), not by timing group, so their spread means nothing.
+
+# Delay difference between the two lines of a pair worth a note. Most hobby USB is full-speed
+# (12 Mbit/s), which tolerates nanoseconds of skew, and the interface speed is unknown, so the
+# limit only catches clearly unmatched pairs: 100 ps is roughly 16 mm of outer-layer FR-4 track,
+# about four times the ~25 ps (≈4 mm) usually allowed inside a USB 2.0 high-speed pair.
+# ponytail: one limit for every interface; per-interface limits once data rates are known.
+PAIR_SKEW_PS = 100.0
+# Via counts must differ by this many (or the layer sets differ) to be reported. A USB-C
+# receptacle has D+ and D- twice, and tying the second pads usually takes one line through one
+# via; that single-via difference is normal and harmless.
+PAIR_VIA_DIFF = 2
+
+
+def _routed_pairs(snapshot: DesignSnapshot) -> list:
+    """(positive, negative, routing P, routing N, interface guess) for likely differential
+    pairs with routed track on both lines. Unrouted is not mismatched, so those are skipped."""
+    from .copper import find_high_speed, net_routing   # copper imports this module
+    copper = snapshot.copper
+    if copper is None:
+        return []
+    routing = net_routing(copper)
+    found = find_high_speed(routing, copper.net_classes)
+    return [(p, n, routing[p], routing[n], found.interfaces.get(p) or found.interfaces.get(n))
+            for p, n in found.pairs if routing[p].length_mm > 0 and routing[n].length_mm > 0]
+
+
+def _vias(count: int) -> str:
+    return f"{count} via" + ("" if count == 1 else "s")
+
+
+def _pair_caveat(guess: str | None, assumed: bool) -> str:
+    kind = (f" The names suggest {guess.upper().replace('ETHERNET', 'Ethernet').replace('CLOCK', 'a clock')}."
+            if guess else "")
+    stackup = (" The board file has no usable stackup, so a generic FR-4 stackup was assumed." if assumed else "")
+    return (f"{kind} Delays are estimates from track length, layer and a rough allowance per via.{stackup} "
+            "The board does not say how fast this pair runs: full-speed USB (12 Mbit/s) and other slow "
+            "links tolerate this; USB high-speed, Ethernet, HDMI and faster links may not.")
+
+
+def check_pair_skew(snapshot: DesignSnapshot) -> list[Finding]:
+    """Differential pairs whose two lines have clearly different estimated delays."""
+    findings = []
+    for p, n, a, b, guess in _routed_pairs(snapshot):
+        skew = abs(a.delay_ps - b.delay_ps)
+        if skew <= PAIR_SKEW_PS:
+            continue
+        longer = p if a.delay_ps > b.delay_ps else n
+        findings.append(Finding(
+            "hs.pair.skew", Severity.WARNING,
+            f"Pair {p} / {n}: one line is about {skew:.0f} ps slower than the other", (), (p, n),
+            f"Routed length {p} {a.length_mm:.1f} mm ({_vias(a.vias)}), {n} {b.length_mm:.1f} mm "
+            f"({_vias(b.vias)}): an estimated {skew:.0f} ps difference, above the {PAIR_SKEW_PS:.0f} ps "
+            f"this check allows." + _pair_caveat(guess, a.assumed or b.assumed),
+            f"Shorten {longer} or lengthen the other line (a small meander near the mismatch) so both "
+            "lines arrive together. If one line is not finished yet, finish routing it first."))
+    return findings
+
+
+def check_pair_vias(snapshot: DesignSnapshot) -> list[Finding]:
+    """Differential pairs whose two lines use different layers or clearly different via counts."""
+    findings = []
+    for p, n, a, b, guess in _routed_pairs(snapshot):
+        if abs(a.vias - b.vias) < PAIR_VIA_DIFF and a.layers == b.layers:
+            continue
+        findings.append(Finding(
+            "hs.pair.vias", Severity.WARNING,
+            f"Pair {p} / {n}: the two lines change layers differently", (), (p, n),
+            f"{p}: {_vias(a.vias)}, track on {', '.join(sorted(a.layers))}; {n}: {_vias(b.vias)}, track on "
+            f"{', '.join(sorted(b.layers))}. Each extra via or layer adds delay and a discontinuity to one "
+            "line only." + _pair_caveat(guess, a.assumed or b.assumed),
+            "Route both lines together on the same layers, with their vias side by side and the same "
+            "number on each line."))
+    return findings
+
+
 RULES: dict[str, Check] = {
     "decoupling": check_decoupling,
     "i2c": check_i2c_pullups,
@@ -813,6 +894,8 @@ RULES: dict[str, Check] = {
     "connector": check_connector_protection,
     "value": check_values,
     "coverage": check_coverage,
+    "hs.pair.skew": check_pair_skew,
+    "hs.pair.vias": check_pair_vias,
 }
 
 # Extra check providers: callables (snapshot) -> list[Finding], run after RULES.
@@ -835,7 +918,8 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 
 # Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
-BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating"})
+BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating",
+                        "hs.pair.skew", "hs.pair.vias"})   # high-speed pair timing: not measured yet
 
 
 def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
