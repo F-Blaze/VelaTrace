@@ -1130,7 +1130,7 @@ class MainWindow(QMainWindow):
             reader = safety = None
             if choice == 0:
                 reader = KiCadReader.connect()
-                snapshot = reader.read_board()
+                snapshot = reader.read_board(copper=True)
                 if snapshot.path:
                     safety = BoardSafety(reader.client.get_board(), snapshot.path, journal_dir=self.config_dir / "journals")
             elif choice == 1:
