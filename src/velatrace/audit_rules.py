@@ -884,6 +884,147 @@ def check_pair_vias(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+# ================================================================ high-speed return path (routed copper)
+# Read-only checks on DesignSnapshot.copper; silent for netlists/schematics (copper is None).
+# Fast nets are copper.find_high_speed name guesses plus likely differential pairs, minus
+# crystal/RTC nets (XTAL, XIN/XOUT, OSC, HSE/LSE, 32k): those are usually slow sine-ish
+# oscillator lines where a return-path note is noise. No data rate or edge rate is known,
+# so every finding is an estimate. Plane split/gap crossing is not checked.
+RETURN_VIA_MM = 3.0      # return via must sit this close to the signal via. Layout guides ask for
+#                          ~1 mm; 3 mm only catches clearly missing ones (rule of thumb, not measured).
+STITCH_CAP_MM = 5.0      # a capacitor between two different reference nets this close counts as the return
+VIA_TOUCH_MM = 0.25      # a track end this close to a via centre is connected to it
+_CRYSTAL = re.compile(r"XTAL|XIN|XOUT|OSC|HSE|LSE|32K|RTC")
+_STALE_FILL = ("Planes are judged from the zone fills saved in the board; if zones changed since the "
+               "last fill, refill them in KiCad (Edit > Fill All Zones) and re-run.")
+
+
+def _fast_nets(copper) -> dict[str, str]:
+    """net -> interface guess (or "differential pair") for nets the return-path checks cover."""
+    from .copper import find_high_speed   # copper imports this module
+    found = find_high_speed({seg.net for seg in copper.segments if seg.net}, copper.net_classes)
+    nets = {net: "differential pair" for pair in found.pairs for net in pair} | dict(found.interfaces)
+    return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net))}
+
+
+def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
+    """Fast nets routed on a layer with no reference plane anywhere in the stack."""
+    copper = snapshot.copper
+    if copper is None or not copper.models:
+        return []
+    nets = _fast_nets(copper)
+    lengths: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for seg in copper.segments:
+        model = copper.models.get(seg.layer)
+        if seg.net in nets and model is not None and model.kind == "unreferenced":
+            lengths[seg.net][seg.layer] += seg.length_mm
+    findings = []
+    for net, layers in sorted(lengths.items()):
+        shown = ", ".join(f"{layer} {length:.1f} mm" for layer, length in sorted(layers.items()))
+        findings.append(Finding(
+            "hs.return.no_plane", Severity.WARNING,
+            f"{net_label(net) or net} ({nets[net]}) has no reference plane under it",
+            nets=(net,),
+            evidence=f"Routed on {shown}. No layer of this board was judged a solid ground/supply plane "
+                     "(an inner power layer, or a ground/supply fill covering half the board), so the "
+                     f"return current has no defined path. {_STALE_FILL} Estimate from net names; "
+                     "the data rate is not known.",
+            fix="Give the line a solid ground reference: a ground pour on the adjacent layer under its "
+                "whole route (on a 2-layer board, the other side), or move it next to a plane layer."))
+    return findings
+
+
+def _references(copper, layer: str) -> frozenset[str]:
+    """Nearest plane layer(s) by layer order (ties keep both); a plane layer references itself."""
+    if layer in copper.planes:
+        return frozenset([layer])
+    index = copper.layers.index(layer)
+    gaps = {plane: abs(copper.layers.index(plane) - index) for plane in copper.planes}
+    return frozenset(plane for plane, gap in gaps.items() if gap == min(gaps.values()))
+
+
+def _fill_net(copper, layer: str, point, cache: dict) -> str | None:
+    """Ground/supply net of the stored fill nearest ``point`` on ``layer``; None when it has none.
+
+    A via's own antipad is a hole bridged into the fill outline, so the nearest fill edge is
+    the plane around it."""
+    import numpy as np
+    if layer not in cache:
+        cache[layer] = [(zone.net, np.array(zone.points, dtype=float)) for zone in copper.zones
+                        if zone.layer == layer and (is_ground(zone.net) or is_supply_name(zone.net))]
+    best, net = float("inf"), None
+    p = np.array(point, dtype=float)
+    for name, a in cache[layer]:
+        d = np.roll(a, -1, axis=0) - a
+        t = np.clip(((p - a) * d).sum(1) / np.maximum((d * d).sum(1), 1e-12), 0, 1)
+        gap = float(np.min(np.hypot(*(a + d * t[:, None] - p).T)))
+        if gap < best:
+            best, net = gap, name
+    return net
+
+
+def check_return_vias(snapshot: DesignSnapshot) -> list[Finding]:
+    """Fast-net vias between layers with different reference planes and no return path close by:
+    no via of the plane net (ground when unknown), or, when the two planes are different nets,
+    no capacitor between them. That last case needs pad positions, so netlist-only parts skip it."""
+    copper = snapshot.copper
+    if copper is None or not copper.planes:
+        return []
+    nets = _fast_nets(copper)
+    ends: dict[str, list] = defaultdict(list)
+    for seg in copper.segments:
+        if seg.net in nets:
+            ends[seg.net] += [(seg.start, seg.layer), (seg.end, seg.layer)]
+    caps = [(frozenset(pair), [pin.position_mm for pin in comp.pins if pin.position_mm])
+            for comp in snapshot.components
+            if part_kind(comp) == "capacitor" and (pair := two_terminal_nets(comp))]
+    positioned = any(points for _, points in caps)
+    cache: dict = {}
+    findings = []
+    for via in copper.vias:
+        if via.net not in nets:
+            continue
+        layers = {layer for point, layer in ends[via.net]
+                  if layer in via.layers and dist(point, via.position) <= VIA_TOUCH_MM}
+        refs = [_references(copper, layer) for layer in layers]
+        if len(layers) < 2 or not all(refs) or frozenset.intersection(*refs):
+            continue   # no layer change, no plane at all (hs.return.no_plane), or a shared plane
+        planes = sorted(frozenset.union(*refs), key=copper.layers.index)
+        plane_nets = {net for net in (_fill_net(copper, plane, via.position, cache) for plane in planes) if net}
+        at = f"{via.position[0]:.2f}, {via.position[1]:.2f} mm"
+        hops = " to ".join(sorted(layers, key=copper.layers.index))
+        label = net_label(via.net) or via.net
+        if len(plane_nets) > 1:
+            if not positioned or any(pair <= plane_nets and any(dist(p, via.position) <= STITCH_CAP_MM
+                                                                for p in points) for pair, points in caps):
+                continue
+            shown = " and ".join(sorted(plane_nets))
+            findings.append(Finding(
+                "hs.return.via", Severity.WARNING, f"{label} changes reference from {shown} at {at}",
+                nets=(via.net,),
+                evidence=f"Via {hops}: the layers reference {', '.join(planes)} ({shown}). A ground via "
+                         f"cannot carry the return between different nets, and no capacitor between {shown} "
+                         f"is within {STITCH_CAP_MM:g} mm. {_STALE_FILL} Estimate; the data rate is not known.",
+                fix=f"Add a stitching capacitor (e.g. 100 nF) between {shown} next to the via, or keep the "
+                    "line on layers that reference the same plane."))
+            continue
+        near = [other for other in copper.vias if other is not via and set(planes) <= set(other.layers)
+                and (other.net in plane_nets if plane_nets else is_ground(other.net))
+                and dist(other.position, via.position) <= RETURN_VIA_MM]
+        if near:
+            continue
+        shown = next(iter(plane_nets)) if plane_nets else "ground"
+        findings.append(Finding(
+            "hs.return.via", Severity.WARNING, f"{label} changes layers with no {shown} via nearby at {at}",
+            nets=(via.net,),
+            evidence=f"Via {hops}: the signal moves from a layer referenced to {planes[0]} to one referenced "
+                     f"to {planes[-1]}, and no {shown} via joining those planes is within {RETURN_VIA_MM:g} mm, "
+                     f"so the return current detours to the nearest one. {_STALE_FILL} "
+                     "Estimate; the data rate is not known.",
+            fix=f"Place a {shown} via right next to the signal via (one per via, or one shared by a pair)."))
+    return findings
+
+
 RULES: dict[str, Check] = {
     "decoupling": check_decoupling,
     "i2c": check_i2c_pullups,
@@ -896,6 +1037,8 @@ RULES: dict[str, Check] = {
     "coverage": check_coverage,
     "hs.pair.skew": check_pair_skew,
     "hs.pair.vias": check_pair_vias,
+    "hs.return.no_plane": check_return_plane,
+    "hs.return.via": check_return_vias,
 }
 
 # Extra check providers: callables (snapshot) -> list[Finding], run after RULES.
@@ -919,7 +1062,8 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 # Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
 BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating",
-                        "hs.pair.skew", "hs.pair.vias"})   # high-speed pair timing: not measured yet
+                        # High-speed checks: not yet measured on unseen boards.
+                        "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via"})
 
 
 def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
