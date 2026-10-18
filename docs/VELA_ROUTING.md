@@ -77,8 +77,9 @@ unrouted copy and `report.json` into the new folder.
   0.2 mm outer dielectric on 4+ layers, 35 um copper) and every affected figure
   is flagged `assumed`. This replaces "no guessed dielectric" for this engine
   only; nothing is written back to the board.
-- **Pairs.** Nets named like `USB_D+`/`USB_D-` are routed first and their delay
-  skew is reported. They are **not** routed as coupled pairs.
+- **Pairs.** Nets named like `USB_D+`/`USB_D-` (also KiCad's automatic
+  `Net-(U3-USB_DP)` names) are routed as a coupled pair where possible and
+  delay-matched afterwards; see "Differential pairs and delay matching" below.
 
 All figures are quasi-static estimates (the existing Hammerstad-Jensen
 microstrip and the IPC-2141 stripline approximation). They are not a field
@@ -313,11 +314,47 @@ reference runs, so times are noisy; open connections are KiCad's count.
   cheap (the backwards probe finds walled-in pads), and soleil gave identical
   results and times with and without it.
 
+### Differential pairs and delay matching, 2026-10-18
+
+Ideas from KiCadRoutingTools 0.23.1 (MIT, (c) 2026 drandyhaas): a pair routed as
+one centreline and offset to its two tracks (`diff_pair_routing.py`), and
+trombone meanders on the faster net matched in time per layer
+(`length_matching.py`, `impedance.py`). Re-implemented in Vela's own design; no
+KRT code is used and no design rule is loosened.
+
+- **Trunk.** Width `w` and gap `g` come from the net class's `diff_pair_width` /
+  `diff_pair_gap` (.kicad_pro; class width and clearance when unset; the gap is
+  never below clearance + 0.02 mm, the grid's keep-off margin). The pair's ends
+  are the two places farthest apart where a P and an N pad sit within 3 mm. A
+  one-layer A* on a virtual class `2w + g` (an extra occupancy map, open ground
+  cheaper than ground next to pins) joins free cells within a launch radius
+  (0.75 to 4.5 mm) of each end, the pads' own layer first. The centreline is
+  straightened, offset to +-(w + g)/2 with mitred 45/90-degree corners and each
+  track checked exactly against all fixed copper.
+- **Breakouts.** Each track becomes fixed copper of its net (a pad-like trunk,
+  `Router._add_trunk`); the nets' own searches then only join pads to it
+  (Kruskal takes trunk joins first). A candidate trunk is kept only if both nets,
+  alone on the board, route all their pads through it. After routing, a trunk
+  that left its pair unrouted or that the routes bypass gives way, and
+  `route_board` re-routes that order without it; trunk ends past the outermost
+  joins are cut (KiCad would report them dangling) and own vias stay off the
+  trunk (a track end inside a via must sit on its centre).
+- **Delay matching** (`Router.tune`, end of `run`). The faster net of each pair
+  (delay from the stackup model, per segment layer and width, plus via barrels)
+  gets exact bumps on the outer side of its trunk, or, uncoupled, square grid
+  bumps on its straight runs in cells free of all other copper (residue at most
+  one grid step's delay, about 0.6 ps at 0.1 mm), until skew <= `Options.skew_ps`
+  (1 ps). Bump height is capped by `Options.meander_mm` (1 mm).
+- **Report.** `electrical.pairs`: coupled, layer, width, achieved gap, coupled
+  length and % of the routed length, skew in ps and mm before and after tuning,
+  meander count, and the reason when a pair routes as two nets.
+
 ### Known limits
 
-- No coupled differential-pair routing, no length or delay tuning (serpentines),
-  no impedance-driven width changes: delay, impedance and skew are reported, and
-  delay steers layer choice, but nothing is tuned to a target.
+- Coupled pairs: one layer per trunk, no paired vias inside the trunk, no
+  polarity swap; pairs that cannot be coupled route as two nets (reported).
+  Delay matching covers name-detected pairs only (no length groups), and no
+  widths are changed for impedance.
 - Through vias only. No blind, buried or micro vias, no BGA fanout patterns.
 - Custom rule files (`.kicad_dru`), footprint copper text, teardrops and
   thermal-relief spokes are not modelled; KiCad DRC catches the misses. Starved
