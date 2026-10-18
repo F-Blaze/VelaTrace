@@ -258,7 +258,7 @@ on the unrouted board stop acceptance.
 
 ### Finishing dense boards: ideas from KiCadRoutingTools, 2026-10-16
 
-Three completion mechanisms re-implemented in Vela's own design from the ideas of
+Two completion mechanisms re-implemented in Vela's own design from the ideas of
 KiCadRoutingTools 0.23.1 (ideas from KiCadRoutingTools, MIT, (c) 2026 drandyhaas).
 No KRT code is used, and unlike KRT nothing rewrites the board's design rules:
 KiCad DRC stays the only judge.
@@ -285,11 +285,6 @@ KiCad DRC stays the only judge.
   final round instead of trading places (soleil seed 1 spent all its turns
   swapping +BATT and U7-STAT2). A turn that leaves more open than it found, or
   a conflict, is undone; the best state seen is kept as before.
-- **Search budget by closest approach** (`_search(tranche=)`). Strict
-  point-to-point searches get expansions in tranches of 25,000; another tranche
-  only while the closest approach to the goal improved by two cells or 2 %, with
-  one grace tranche. Negotiation searches stay uncapped (capping them left
-  connections blocked).
 
 Measured on the 13 boards, seeds 1, 4, 7, 600 s, three boards at a time
 (runs c1/c4/c7 against f1/f4/f7). The machine was busier than for the
@@ -313,10 +308,10 @@ reference runs, so times are noisy; open connections are KiCad's count.
   now ends inside the budget.
 - Same connections, KiCad-unconnected, new DRC and acceptance on every other
   board and seed (20 of 39 runs accepted, as before).
-- The search budget saved no measurable time: failing searches were already
-  cheap (the backwards probe finds walled-in pads), and on soleil results and
-  times were identical with and without it. On bitaxe single tries it left
-  4 and 1 open against 3 and 5 uncapped. Kept, but its value is unproven.
+- A third idea, a search budget extended in tranches only while the search
+  closes in on its goal, was tried and dropped: failing searches were already
+  cheap (the backwards probe finds walled-in pads), and soleil gave identical
+  results and times with and without it.
 
 ### Known limits
 

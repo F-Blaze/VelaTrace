@@ -56,7 +56,6 @@ class Options:
     defer_after: int = 3          # a net ripped this often in the rescue waits for its final round
     stall_rounds: int = 5         # stop negotiating after this many rounds without progress
     probe: int = 1500             # expansions of the cheap backwards probe before the real search
-    tranche: int = 25000          # search expansions granted per step of closer approach; 0 = no cap
     optimize_passes: int = 2
     neck_width: float = 0.15      # escape width for pads the class width cannot reach, mm
     seed: int | None = 1          # shuffles the re-route order each round to break ties; None = fixed
@@ -202,15 +201,11 @@ def _flood_outside(blocked):
     return np.frombuffer(bytes(state), np.uint8).reshape(h, w) == 2
 
 
-def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0, tranche=0, grace=1):
+def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0):
     """A* over the window. cost/vcost < 0 is blocked. Returns cells start..goal or None.
 
     With ``limit``, gives up after that many expansions and returns False (not None:
     None means the reachable area was exhausted, i.e. the starts are walled in).
-    With ``tranche``, the expansions come in tranches: each further one is granted only
-    while the closest approach to the goal (smallest heuristic popped) keeps improving,
-    by two weighted cells or 2 %, allowing ``grace`` tranches without progress. A search
-    that floods a dead end gives up (False) instead of exhausting the window.
     """
     inf = float("inf")
     g = [inf] * (layers * hw)
@@ -228,13 +223,12 @@ def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0, tran
         a, b = hx[r % w], hy[r // w]
         heap.append((a + b - 0.5857864 * (a if a < b else b), 0.0, s))
     heapq.heapify(heap)
-    budget, best_h, mark, idle = tranche, inf, (heap[0][0] if heap else inf), 0
     straight = ((1, 1, 0), (-1, -1, 0), (w, 0, 1), (-w, 0, -1))
     diagonal = ((w + 1, 1, 1), (w - 1, -1, 1), (-w + 1, 1, -1), (-w - 1, -1, -1))
     bases = tuple(range(0, layers * hw, hw))
     push, pop = heapq.heappush, heapq.heappop
     while heap:
-        f, gi, i = pop(heap)
+        _, gi, i = pop(heap)
         if g[i] < 0:
             continue
         # Expanded once, never again (g < 0 also fails every ``ng < g[j]`` below). Re-opening
@@ -245,18 +239,6 @@ def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0, tran
             limit -= 1
             if not limit:
                 return False
-        if tranche:
-            if f - gi < best_h:
-                best_h = f - gi
-            budget -= 1
-            if not budget:
-                if mark - best_h >= max(2 * weight, 0.02 * mark):
-                    mark, idle = best_h, 0
-                elif idle < grace:
-                    idle += 1
-                else:
-                    return False
-                budget = tranche
         if goal[i]:
             path = [i]
             while came[i] >= 0:
@@ -850,9 +832,8 @@ class Router:
                 if path is None:
                     continue
                 path = path and path[::-1]
-            if path is False:   # strict point to point: the budget follows the closest approach
-                path = _search(cost, vcost, w, hw, self.L, begin.tolist(), bytearray(flat.tobytes()), box, weight,
-                               tranche=self.opt.tranche if strict and not (to_plane or escape) else 0)
+            if path is False:
+                path = _search(cost, vcost, w, hw, self.L, begin.tolist(), bytearray(flat.tobytes()), box, weight)
             if path:
                 return [(cell // hw) * self.HW + ((cell % hw) // w - 1 + y0) * self.W + cell % w - 1 + x0
                         for cell in path]

@@ -160,22 +160,6 @@ def test_tracks_that_starve_a_thermal_relief_move_off_its_spokes(tmp_path):
     assert nearest(False) < 0.1 and nearest(True) >= 0.1 + 0.2 - 1e-6
 
 
-def test_search_budget_follows_the_closest_approach():
-    from velatrace.vela_engine import _search
-    w, h = 202, 202   # one layer, padded by a blocked border
-    cost = [1.0] * (w * h)
-    for i in range(w * h):
-        if i % w in (0, w - 1) or i // w in (0, h - 1) or (i % w == 100 and i // w < 200):
-            cost[i] = -1.0
-    goal = bytearray(w * h)
-    goal[1 * w + 150] = 1     # behind a wall that only opens at the far end
-    args = (cost, [-1.0] * (w * h), w, w * h, 1, [1 * w + 50], goal, (150, 1, 150, 1), 1.2)
-    assert _search(*args)                            # the full search goes round the wall
-    assert _search(*args, tranche=300) is False      # tranches stop once it no longer closes in
-    goal[1 * w + 150], goal[1 * w + 90] = 0, 1       # in the open: steady approach, no cap hit
-    assert _search(*args[:7], (90, 1, 90, 1), 1.2, tranche=30)
-
-
 def test_rescue_turn_is_undone_when_worse_and_victims_get_dearer(tmp_path):
     import numpy as np
     board = _board(tmp_path, _pad("A1", 3, 6, "A") + _pad("A2", 17, 6, "A")
