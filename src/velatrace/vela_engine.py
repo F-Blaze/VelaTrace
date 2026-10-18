@@ -738,11 +738,14 @@ class Router:
             if pair in self.opt.skip_pairs:
                 self.coupled[pair] = {"coupled": False, "reason": "its trunk gave way in a first try; routed as two nets"}
                 continue
-            nets, reason = [self.nets[name] for name in pair], "no candidate"
+            reason, tried = "no candidate", 0
             for found in self._trunk(pair, w, g, m):
                 if isinstance(found, str):
                     reason = found
                     continue
+                if tried == 4:   # each check routes both nets; more candidates rarely help
+                    break
+                tried += 1
                 layer, lines, crossed = found
                 pads = {name: self._add_trunk(name, line, layer, w) for name, line in zip(pair, lines)}
                 if self._breakouts(pair, pads):
@@ -1805,7 +1808,8 @@ class Router:
         size = lambda n: max(np.ptp([self.board.pads[i].x for i in n.pads]),  # noqa: E731
                              np.ptp([self.board.pads[i].y for i in n.pads]))
         # Plane drops first (they need the via sites next to their pads), then short nets.
-        paired = {name for pair in self.pairs for name in pair}
+        # A pair whose trunk gave way in a first try is routed in the plain order, as two nets.
+        paired = {name for pair in self.pairs if pair not in self.opt.skip_pairs for name in pair}
         order = self.order = sorted((n for n in self.nets.values() if len(n.pads) > 1 or n.plane_layers),
                                     key=lambda n: (not n.plane_layers, n.name not in paired, size(n)))
         pres, todo, rounds, best, stale = opt.pres0, order, 0, None, 0
