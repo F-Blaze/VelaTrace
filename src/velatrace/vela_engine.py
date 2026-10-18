@@ -149,6 +149,40 @@ def _offset(points, distance):
     return out
 
 
+def _along(line, point, reach):
+    """Arc length along a polyline to the foot of ``point``, if the point lies within ``reach`` of it."""
+    best, walked = None, 0.0
+    for p, q in zip(line, line[1:]):
+        (px, py), (qx, qy), span = p, q, math.dist(p, q)
+        t = max(0.0, min(1.0, ((point[0] - px) * (qx - px) + (point[1] - py) * (qy - py)) / (span * span or 1)))
+        d = math.dist(point, (px + t * (qx - px), py + t * (qy - py)))
+        if d <= reach and (best is None or d < best[0]):
+            best = (d, walked + t * span)
+        walked += span
+    return best and best[1]
+
+
+def _cut(line, start, end):
+    """The part of a polyline between arc lengths ``start`` and ``end``."""
+    out, walked = [], 0.0
+
+    def add(point):
+        if not out or math.dist(out[-1], point) > 1e-6:
+            out.append(point)
+    for p, q in zip(line, line[1:]):
+        span = math.dist(p, q)
+        for at in (start, end):
+            if walked - 1e-9 <= at <= walked + span + 1e-9 and (at == end or not out):
+                t = (at - walked) / (span or 1)
+                add((round(p[0] + t * (q[0] - p[0]), 6), round(p[1] + t * (q[1] - p[1]), 6)))
+                if at == end:
+                    return out
+        if out:
+            add(tuple(q))
+        walked += span
+    return out
+
+
 def _gap(a, b, width):
     """Smallest copper gap between two polylines of tracks ``width`` wide (exact for disjoint legs)."""
     def nearest(points, line):
@@ -385,8 +419,11 @@ class Router:
             self.nets[name] = _Net(name, c, tracks.index((c.width, c.clearance)),
                                    len(tracks) + vias.index((c.via_diameter, c.clearance)), pads,
                                    neck=tracks.index((neck, c.clearance)) if c.width > neck + 1e-9 else None)
-        self.max_clearance = max(c for _, c in self.maps)
-        self.max_extent = max(e for e, _ in self.maps)
+        # Reach and grid border as without pairs; a trunk is checked exactly (_link_clear) anyway.
+        plain = [(e, c) for m, (e, c) in enumerate(self.maps) if m not in {k[3] for k in self.couples.values()}
+                 or (2 * e, c) in {(n.cls.width, n.cls.clearance) for n in self.nets.values()}]
+        self.max_clearance = max(c for _, c in plain)
+        self.max_extent = max(e for e, _ in plain)
 
     def _grid(self):
         board, opt = self.board, self.opt
@@ -704,7 +741,7 @@ class Router:
                     continue
                 layer, lines, crossed = found
                 pads = {name: self._add_trunk(name, line, layer, w) for name, line in zip(pair, lines)}
-                if self._breakouts(nets):
+                if self._breakouts(pair, pads):
                     self.coupled[pair] = {"coupled": True, "layer": self.board.layers[layer], "width_mm": w,
                                           "gap_mm": round(_gap(*lines, w), 4), "crossed": crossed, "pads": pads}
                     break
@@ -744,13 +781,14 @@ class Router:
             self.hardf[k][cells] -= 1
             self.own[net.name][k] = np.setdiff1d(self.own[net.name][k], cells)
 
-    def _breakouts(self, nets):
-        """Whether both nets of a pair, alone on the board, join all their pads to their trunks (either first)."""
+    def _breakouts(self, pair, pads):
+        """Whether both nets of a pair, alone on the board, join all their pads by their trunks (either first)."""
+        nets = [self.nets[name] for name in pair]
         for order in (nets, nets[::-1]):
             for net in order:
                 self._route(net, 0.0, strict=True)
                 self._stamp(net)
-            ok = not any(net.failed for net in nets)
+            ok = not any(net.failed for net in nets) and self._used(pair, pads)
             for net in nets:
                 self._ripup(net)
             if ok:
@@ -834,14 +872,36 @@ class Router:
                         if len(path) > 2 else None)
         return None
 
+    def _joins(self, net, index):
+        """Arc lengths along a trunk where the net's routes end on it."""
+        pad = self.board.pads[index]
+        line = self._trunk_line(index)
+        return [found for path in net.paths for cell in (path[0], path[-1]) if cell // self.HW == pad.layers[0]
+                if (found := _along(line, self._xy(cell), pad.shapes[0][5] / 2 + 1e-6)) is not None]
+
+    def _used(self, pair, pads):
+        """Whether each net's routes join its trunk near both trunk ends, not bypass it."""
+        for name in pair:
+            at, line = self._joins(self.nets[name], pads[name]), self._trunk_line(pads[name])
+            if len(at) < 2 or max(at) - min(at) < 0.5 * sum(math.dist(a, b) for a, b in zip(line, line[1:])):
+                return False
+        return True
+
     def _uncouple(self):
-        """A trunk that left its own pair unrouted gives way: both nets are routed singly instead."""
+        """A trunk that left its own pair unrouted, or that its routes bypass, gives way: both
+        nets are routed singly instead. Returns whether any did."""
         undone = False
         for pair, info in list(self.coupled.items()):
             nets = [self.nets[name] for name in pair]
-            if not info["coupled"] or not any(net.failed for net in nets):
+            if not info["coupled"]:
                 continue
-            self.coupled[pair] = {"coupled": False, "reason": "the trunk left the pair unrouted; routed as two nets"}
+            if any(net.failed for net in nets):
+                reason = "the trunk left the pair unrouted; routed as two nets"
+            elif not self._used(pair, info["pads"]):
+                reason = "the routes bypassed the trunk; routed as two nets"
+            else:
+                continue
+            self.coupled[pair] = {"coupled": False, "reason": reason}
             for net in nets:
                 self._drop_trunk(net, info["pads"][net.name])
                 self._ripup(net)
@@ -850,6 +910,23 @@ class Router:
                 self._stamp(net)
             undone = True
         return undone
+
+    def _trunk_line(self, index):
+        pad = self.board.pads[index]
+        return [(pad.x + q[1], pad.y + q[2]) for q in pad.shapes] + [(pad.x + pad.shapes[-1][3], pad.y + pad.shapes[-1][4])]
+
+    def _trim(self):
+        """Cut each trunk back to its outermost joins: a trunk end past them dangles (KiCad warns)."""
+        if self._uncouple():
+            self.legalize()
+        for pair, info in self.coupled.items():
+            for name in pair if info["coupled"] else ():
+                index = info["pads"][name]
+                pad, line, at = self.board.pads[index], self._trunk_line(index), self._joins(self.nets[name], index)
+                cut = _cut(line, min(at), max(at)) if len(at) > 1 else line
+                if len(cut) > 1 and cut != line:
+                    self._drop_trunk(self.nets[name], index)
+                    info["pads"][name] = self._add_trunk(name, cut, pad.layers[0], pad.shapes[0][5])
 
     def _flight(self, net):
         """(delay ps, length mm) of a net as drawn, each segment at its own layer and width."""
@@ -1320,6 +1397,9 @@ class Router:
         for m, cells in (*enumerate(self.own[net.name]), *self.tied.get(net.name, ())):
             self.hardf[m][cells] -= 1
         self.vown = np.zeros((self.H, self.W), bool)
+        for index in self.virtual.intersection(net.pads):   # nor on its trunk: KiCad wants vias centred on track ends
+            cells = self.pad_cells[index]
+            self.vown.reshape(-1)[np.unique((cells[:, None] + self._disk(net.cls.via_diameter / 2 + self.p)).ravel())] = True
         for index in net.pads:   # no via too close to the net's own drilled pads
             pad = self.board.pads[index]
             if pad.drill:
@@ -1503,6 +1583,7 @@ class Router:
             self.rescue()
             self._mend_planes()
         self.relieve()
+        self._trim()
         self.tune()
         self._say(f"done: {sum(n.connections - n.failed for n in self.order)}/"
                   f"{sum(n.connections for n in self.order)} connections routed")
