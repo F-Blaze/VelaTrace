@@ -158,3 +158,64 @@ def test_tracks_that_starve_a_thermal_relief_move_off_its_spokes(tmp_path):
         return min(_gap(p, q, (10, 6.3), (10, 5.675)) for _, p, q, _ in router.geometry(router.nets["SIG"])[0])
     # The straight line clears the pads but cuts that spoke: one left, KiCad reports a starved thermal.
     assert nearest(False) < 0.1 and nearest(True) >= 0.1 + 0.2 - 1e-6
+
+
+def test_search_budget_follows_the_closest_approach():
+    from velatrace.vela_engine import _search
+    w, h = 202, 202   # one layer, padded by a blocked border
+    cost = [1.0] * (w * h)
+    for i in range(w * h):
+        if i % w in (0, w - 1) or i // w in (0, h - 1) or (i % w == 100 and i // w < 200):
+            cost[i] = -1.0
+    goal = bytearray(w * h)
+    goal[1 * w + 150] = 1     # behind a wall that only opens at the far end
+    args = (cost, [-1.0] * (w * h), w, w * h, 1, [1 * w + 50], goal, (150, 1, 150, 1), 1.2)
+    assert _search(*args)                            # the full search goes round the wall
+    assert _search(*args, tranche=300) is False      # tranches stop once it no longer closes in
+    goal[1 * w + 150], goal[1 * w + 90] = 0, 1       # in the open: steady approach, no cap hit
+    assert _search(*args[:7], (90, 1, 90, 1), 1.2, tranche=30)
+
+
+def test_rescue_turn_is_undone_when_worse_and_victims_get_dearer(tmp_path):
+    import numpy as np
+    board = _board(tmp_path, _pad("A1", 3, 6, "A") + _pad("A2", 17, 6, "A")
+                   + _pad("B1", 10, 2, "B") + _pad("B2", 10, 10, "B"))
+    router = route_board(board, Options())
+    a, b = router.nets["A"], router.nets["B"]
+    saved = router._state(a)
+
+    def worse(price):   # a turn that only breaks things
+        router._ripup(a)
+        a.failed = 1
+        return 0
+    assert router._turn(a, worse, 8.0) is None
+    assert router._state(a)[0] is saved[0] and a.failed == 0 and not router._in_conflict(a)
+    args = (a, a.t, 0, router.H, 0, router.W, 1.0, False, router.via_cost, False)
+    plain = np.asarray(router._costs(*args)[0])
+    router.surcharge = {"B": 5.0}   # B was ripped before: crossing it costs more
+    dear = np.asarray(router._costs(*args)[0])
+    assert np.isclose((dear - plain).max(), 5.0) and (dear >= plain).all() and b.stamps is not None
+
+
+def test_reconnect_routes_what_kicad_reports_open(tmp_path):
+    from velatrace.kicad_cli import DrcResult
+    from velatrace.vela_engine import kicad_check
+    board = _board(tmp_path, _pad("A1", 3, 6, "A") + _pad("A2", 17, 6, "A")
+                   + _pad("C1", 3, 2, "C") + _pad("C2", 4.6, 2, "C"))
+    router = route_board(board, Options())
+    for name in "AC":   # pretend both were left open
+        router._restore(router.nets[name], ([], set(), 1, 1))
+    missing = (("Pad 1 [A] of A1 on F.Cu", 3, 6), ("Pad 1 [A] of A2 on F.Cu", 17, 6)), \
+              (("Pad 1 [C] of C1 on F.Cu", 3, 2), ("Zone 'C' [C] on F.Cu", 0.5, 0.5))
+
+    class Cli:   # KiCad: first two open connections, then none
+        results = [DrcResult(0, 2, 0, (), missing), DrcResult(0, 0, 0)]
+
+        def drc(self, path):
+            assert "(segment" in path.read_text(encoding="utf-8") or self.results[0].unconnected
+            return self.results.pop(0)
+    result, text = kicad_check(router, Cli(), "board.kicad_pcb")
+    a, c = router.nets["A"], router.nets["C"]
+    assert result.unconnected == 0 and not a.failed and not c.failed and a.paths
+    assert c.links and c.links[0][1:3] == ((3.0, 2.0), (4.6, 2.0))   # off-grid straight link, pad to pad
+    assert not router._in_conflict(a) and "(segment" in text

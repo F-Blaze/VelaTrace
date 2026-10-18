@@ -13,9 +13,11 @@ ponytail: pure-Python search loop, roughly 1e5 expansions/s. Move the inner loop
 to a compiled kernel if boards beyond a few hundred nets matter.
 """
 from collections import deque
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 import heapq
 import math
+import re
 import time
 import uuid
 
@@ -51,8 +53,10 @@ class Options:
     rescue_turns: int = 12        # rip-up turns per dropped connection before giving up
     partial_rounds: bool = True   # negotiation re-routes only the paths in conflict, not whole nets
     rip_cost: float = 8.0         # price per grid step of pushing through another net in the rescue
+    defer_after: int = 3          # a net ripped this often in the rescue waits for its final round
     stall_rounds: int = 5         # stop negotiating after this many rounds without progress
     probe: int = 1500             # expansions of the cheap backwards probe before the real search
+    tranche: int = 25000          # search expansions granted per step of closer approach; 0 = no cap
     optimize_passes: int = 2
     neck_width: float = 0.15      # escape width for pads the class width cannot reach, mm
     seed: int | None = 1          # shuffles the re-route order each round to break ties; None = fixed
@@ -77,6 +81,7 @@ class _Net:
     stamps: list | None = None
     failed: int = 0
     connections: int = 0
+    links: list = field(default_factory=list)   # off-grid straight tracks (layer, a, b, width), mm; kept
 
 
 def _pad_sdf(pad, X, Y):
@@ -197,11 +202,15 @@ def _flood_outside(blocked):
     return np.frombuffer(bytes(state), np.uint8).reshape(h, w) == 2
 
 
-def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0):
+def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0, tranche=0, grace=1):
     """A* over the window. cost/vcost < 0 is blocked. Returns cells start..goal or None.
 
     With ``limit``, gives up after that many expansions and returns False (not None:
     None means the reachable area was exhausted, i.e. the starts are walled in).
+    With ``tranche``, the expansions come in tranches: each further one is granted only
+    while the closest approach to the goal (smallest heuristic popped) keeps improving,
+    by two weighted cells or 2 %, allowing ``grace`` tranches without progress. A search
+    that floods a dead end gives up (False) instead of exhausting the window.
     """
     inf = float("inf")
     g = [inf] * (layers * hw)
@@ -219,12 +228,13 @@ def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0):
         a, b = hx[r % w], hy[r // w]
         heap.append((a + b - 0.5857864 * (a if a < b else b), 0.0, s))
     heapq.heapify(heap)
+    budget, best_h, mark, idle = tranche, inf, (heap[0][0] if heap else inf), 0
     straight = ((1, 1, 0), (-1, -1, 0), (w, 0, 1), (-w, 0, -1))
     diagonal = ((w + 1, 1, 1), (w - 1, -1, 1), (-w + 1, 1, -1), (-w - 1, -1, -1))
     bases = tuple(range(0, layers * hw, hw))
     push, pop = heapq.heappush, heapq.heappop
     while heap:
-        _, gi, i = pop(heap)
+        f, gi, i = pop(heap)
         if g[i] < 0:
             continue
         # Expanded once, never again (g < 0 also fails every ``ng < g[j]`` below). Re-opening
@@ -235,6 +245,18 @@ def _search(cost, vcost, w, hw, layers, starts, goal, box, weight, limit=0):
             limit -= 1
             if not limit:
                 return False
+        if tranche:
+            if f - gi < best_h:
+                best_h = f - gi
+            budget -= 1
+            if not budget:
+                if mark - best_h >= max(2 * weight, 0.02 * mark):
+                    mark, idle = best_h, 0
+                elif idle < grace:
+                    idle += 1
+                else:
+                    return False
+                budget = tranche
         if goal[i]:
             path = [i]
             while came[i] >= 0:
@@ -291,6 +313,9 @@ class Router:
         """``obstacles``: extra copper boxes (copper_obstacles.CopperObstacle), e.g. copper text."""
         self.board, self.opt = board, options or Options()
         self.started = time.monotonic()
+        self.obstacles, self.kicad_s = tuple(obstacles), 0.0   # kicad_s: time spent in KiCad's checks
+        self.rips = {}        # rescue: how often each net lost a connection as a rip victim
+        self.surcharge = {}   # net name -> extra price per step of pushing through its copper
         self._classes()
         self._grid()
         self._statics()
@@ -646,6 +671,8 @@ class Router:
     def _split(self, net):
         """Full-width track cells, escape-width track cells and via cells (2D) of a net."""
         tracks, narrow, vias = set(), set(), set()
+        for layer, a, b, width in net.links:
+            (narrow if width < net.cls.width else tracks).update(self._link_cells(layer, a, b).tolist())
         for index, path in enumerate(net.paths):
             (narrow if index in net.necks else tracks).update(path)
             for a, b in zip(path, path[1:]):
@@ -669,6 +696,8 @@ class Router:
                 disk = self._disk(c.via_diameter / 2 + gap)
                 for layer in range(self.L):
                     parts.append((layer * self.HW + vias[:, None] + disk[None, :]).ravel())
+            for layer, a, b, width in net.links:   # off-grid: one more pitch for the rounding
+                parts.append((self._link_cells(layer, a, b)[:, None] + self._disk(width / 2 + gap + self.p)[None, :]).ravel())
             cells = np.unique(np.concatenate(parts)) if parts else np.zeros(0, np.int64)
             self.softf[m][cells] += 1
             net.stamps.append(cells)
@@ -702,6 +731,13 @@ class Router:
         cost = self.base[:, None, None] + pres * soft
         if not strict:   # history only steers the negotiation; the hard pass wants the shortest path
             cost = cost + self.hist[sl]
+        vextra = np.zeros((y1 - y0, x1 - x0))
+        for name, extra in self.surcharge.items():   # dearer victims: the rescue's churn control
+            other = self.nets[name]
+            if other is not net and other.stamps is not None:
+                layer, iy, ix = self._in_window(other.stamps[t], y0, y1, x0, x1)
+                cost[layer, iy, ix] += extra
+                np.add.at(vextra, self._in_window(other.stamps[net.v], y0, y1, x0, x1)[1:], extra)
         cost[blocked] = -1
         goal = np.zeros(cost.shape, bool)
         for layer in range(self.L):
@@ -718,7 +754,7 @@ class Router:
         via_blocked = (self.hard[net.v][sl] > 0).any(0) | self.smd[y0:y1, x0:x1] | self.vown[y0:y1, x0:x1]
         if strict:
             via_blocked |= via_soft > 0
-        vcost = via_cost + pres * via_soft + (0 if strict else self.vhist[y0:y1, x0:x1])
+        vcost = via_cost + pres * via_soft + vextra + (0 if strict else self.vhist[y0:y1, x0:x1])
         vcost[via_blocked] = -1
         h, w = y1 - y0 + 2, x1 - x0 + 2
         padded = np.full((self.L, h, w), -1.0)
@@ -729,6 +765,13 @@ class Router:
         gpadded[:, 1:-1, 1:-1] = goal
         # memoryviews: indexed as fast as lists by the search, without converting whole windows
         return memoryview(padded.reshape(-1)), memoryview(vpadded.reshape(-1)), gpadded, h, w
+
+    def _in_window(self, cells, y0, y1, x0, x1):
+        """Global flat cells -> (layer, row, column) inside the window, dropping the rest."""
+        layer, rest = np.divmod(cells, self.HW)
+        iy, ix = np.divmod(rest, self.W)
+        keep = (iy >= y0) & (iy < y1) & (ix >= x0) & (ix < x1)
+        return layer[keep], iy[keep] - y0, ix[keep] - x0
 
     def _local(self, cells, y0, y1, x0, x1, w, hw):
         """Global flat cells -> window flat cells (dropping any outside the window)."""
@@ -807,8 +850,9 @@ class Router:
                 if path is None:
                     continue
                 path = path and path[::-1]
-            if path is False:
-                path = _search(cost, vcost, w, hw, self.L, begin.tolist(), bytearray(flat.tobytes()), box, weight)
+            if path is False:   # strict point to point: the budget follows the closest approach
+                path = _search(cost, vcost, w, hw, self.L, begin.tolist(), bytearray(flat.tobytes()), box, weight,
+                               tranche=self.opt.tranche if strict and not (to_plane or escape) else 0)
             if path:
                 return [(cell // hw) * self.HW + ((cell % hw) // w - 1 + y0) * self.W + cell % w - 1 + x0
                         for cell in path]
@@ -930,6 +974,15 @@ class Router:
 
         ``thin`` draws the new connections at the escape width from end to end.
         """
+        with self._owned(net):
+            if net.plane_layers:
+                self._route_to_plane(net, pres, strict, keep or ())
+            elif len(net.pads) > 1:
+                self._route_tree(net, pres, strict, planes_ok, keep or (), thin)
+
+    @contextmanager
+    def _owned(self, net):
+        """While routing ``net``: its own pads are free, its drilled pads keep vias off."""
         for m, cells in (*enumerate(self.own[net.name]), *self.tied.get(net.name, ())):
             self.hardf[m][cells] -= 1
         self.vown = np.zeros((self.H, self.W), bool)
@@ -940,10 +993,7 @@ class Router:
                 reach = pad.drill / 2 + net.cls.via_drill / 2 + self.hole_to_hole + self.margin
                 self.vown.reshape(-1)[centre + self._disk(reach)] = True
         try:
-            if net.plane_layers:
-                self._route_to_plane(net, pres, strict, keep or ())
-            elif len(net.pads) > 1:
-                self._route_tree(net, pres, strict, planes_ok, keep or (), thin)
+            yield
         finally:
             for m, cells in (*enumerate(self.own[net.name]), *self.tied.get(net.name, ())):
                 self.hardf[m][cells] += 1
@@ -1381,6 +1431,43 @@ class Router:
         net.paths, net.necks, net.failed, net.connections = saved
         self._stamp(net)
 
+    def _dropped(self):
+        return sum(n.failed for n in self.order)
+
+    def _turn(self, net, push, price, keep_equal=True, check=None):
+        """One rip-up turn: ``push(price)`` routes ``net`` through other copper at ``price`` per
+        step and returns connections gained beyond ``failed``; the nets it crossed re-route
+        their crossed paths strictly, least ripped first. A turn that leaves the board worse
+        (or, without ``keep_equal``, no better, or failing ``check()``) is undone: returns None.
+        Otherwise the victims that lost a connection."""
+        before, touched = self._dropped(), {net.name: self._state(net)}
+        # A net already open loses nothing more when crossed again: no surcharge for it.
+        self.surcharge = {name: price * count for name, count in self.rips.items() if not self.nets[name].failed}
+        try:
+            gained = push(price)
+        finally:
+            self.surcharge = {}
+        tracks, vias = self._conflicts(net)
+        through = np.concatenate([layer * self.HW + vias for layer in range(self.L)])
+        blockers = [] if not tracks.size and not vias.size else [
+            other for other in self.order if other is not net and other.stamps is not None
+            and (np.isin(tracks, other.stamps[net.t]).any()
+                 or (net.neck is not None and np.isin(tracks, other.stamps[net.neck]).any())
+                 or np.isin(through, other.stamps[net.v]).any())]
+        ripped = []
+        for other in sorted(blockers, key=lambda o: (self.rips.get(o.name, 0), len(o.pads))):
+            touched[other.name], failed = self._state(other), other.failed
+            self._reroute(other, 0.0, strict=True)   # they give way: only their crossed paths move
+            if other.failed > failed:
+                self.rips[other.name] = self.rips.get(other.name, 0) + 1
+                ripped.append(other)
+        if (self._dropped() - gained > before - (0 if keep_equal else 1) or self._in_conflict(net)
+                or (check and not check())):
+            for name, saved in touched.items():
+                self._restore(self.nets[name], saved)
+            return None
+        return ripped
+
     def rescue(self):
         """Finish what the hard pass dropped, keeping the board free of conflicts throughout.
 
@@ -1389,35 +1476,39 @@ class Router:
         those that no longer fit take their turn in the queue. The best state seen is the
         one that stays. Last resort for what is still open: a short run on a reference
         plane layer, reported as such.
-        """
-        opt = self.opt
 
-        def dropped():
-            return sum(n.failed for n in self.order)
+        Churn control (ideas from KiCadRoutingTools): a net that lost a connection as a
+        victim costs more to push through each time (a per-net surcharge in the search), so
+        the rescued net picks victims that have not been torn up yet; victims re-route least
+        ripped first; a net ripped ``defer_after`` times waits for a final round instead of
+        trading places; a turn that leaves more connections open than it found is undone.
+        """
+        opt, rips, dropped = self.opt, self.rips, self._dropped
         best, kept = dropped(), {n.name: self._state(n) for n in self.order}
         queue = deque(sorted((n for n in self.order if n.failed), key=lambda n: n.failed))
+        deferred, undone = [], set()
         turns = opt.rescue_turns * len(queue)
         rng = np.random.default_rng(opt.seed)
-        while queue and turns > 0 and not self._late():
+        while (queue or deferred) and turns > 0 and not self._late():
+            if not queue:   # the final round: the deferred nets, once the others have settled
+                queue.extend(deferred)
+                deferred = []
             turns -= 1
             net = queue.popleft()
             if not net.failed:
                 continue
             # Jitter keeps two nets from trading places forever. A signal that was dropped at
             # its class width comes back at the escape width.
-            self._reroute(net, opt.rip_cost * (0.5 + rng.random()), thin=(
-                net.neck is not None and not net.plane_layers and net.cls.width <= 2 * self.neck_width + 1e-9))
-            tracks, vias = self._conflicts(net)
-            through = np.concatenate([layer * self.HW + vias for layer in range(self.L)])
-            blockers = [] if not tracks.size and not vias.size else [
-                other for other in self.order if other is not net and other.stamps is not None
-                and (np.isin(tracks, other.stamps[net.t]).any()
-                     or (net.neck is not None and np.isin(tracks, other.stamps[net.neck]).any())
-                     or np.isin(through, other.stamps[net.v]).any())]
-            for other in blockers:   # they give way: only their crossed paths are re-routed
-                self._reroute(other, 0.0, strict=True)
-                if other.failed:
-                    queue.append(other)
+            thin = net.neck is not None and not net.plane_layers and net.cls.width <= 2 * self.neck_width + 1e-9
+            ripped = self._turn(net, lambda price: self._reroute(net, price, thin=thin) or 0,
+                                opt.rip_cost * (0.5 + rng.random()))
+            if ripped is None:
+                if net.name not in undone:   # once more in the final round, against the new prices
+                    undone.add(net.name)
+                    deferred.append(net)
+                continue
+            for other in ripped:
+                (deferred if rips[other.name] >= opt.defer_after else queue).append(other)
             if dropped() < best:
                 best, kept = dropped(), {n.name: self._state(n) for n in self.order}
         for net in self.order:   # back to the best state seen
@@ -1443,6 +1534,217 @@ class Router:
                     self._restore(net, saved)
         self._say(f"rescue: {dropped()} connections unrouted")
 
+    # ---- KiCad's verdict ---------------------------------------------------
+    def reconnect(self, missing):
+        """Route the connections KiCad's DRC reports open on the zone-refilled candidate.
+
+        ``missing``: pairs of KiCad items, each (description, x, y) as in ``DrcResult.missing``.
+        Each item maps back to the net's copper: a pad by its position, a track or via by
+        the nearest copper drawn, a zone by the rest of the net. First a straight off-grid
+        link between two pads of the net within reach (fine-pitch neighbours the grid phase
+        walls off), then a strict search between the two copper islands, then one rip-up
+        turn of the rescue that is kept only if it closes more than it opens. Returns the
+        number of connections added; KiCad judges them on its next check.
+        """
+        added, rng = 0, np.random.default_rng(self.opt.seed)
+        for pair in missing:
+            items = [item for item in (_kicad_item(*raw) for raw in pair) if item]
+            if len(items) != 2 or items[0][1] != items[1][1] or items[0][1] not in self.nets or self._late():
+                continue
+            net = self.nets[items[0][1]]
+            if self._link(net, items, rng) or self._bridge(net, items, rng):
+                added += 1
+        return added
+
+    def _pad_at(self, net, item):
+        kind, _, _, x, y = item
+        return next((i for i in net.pads if kind == "pad" and abs(self.board.pads[i].x - x) < 0.01
+                     and abs(self.board.pads[i].y - y) < 0.01), None)
+
+    def _islands(self, net):
+        """Copper islands of a net as drawn; planes do not join (KiCad said they did not).
+
+        Returns (node -> island, island -> cells), nodes being ("pad", index) and ("path", k).
+        """
+        cells = {}
+        for index in net.pads:
+            cells[("pad", index)] = self._pad_global(index)
+        for k, path in enumerate(net.paths):   # where a new path may land: own vias on their centres only
+            cells[("path", k)] = self._joinable(net, path)
+        root = {node: node for node in cells}
+
+        def find(node):
+            while root[node] != node:
+                node = root[node]
+            return node
+        owner = {}
+        for node, here in cells.items():
+            for cell in here.tolist():
+                root[find(owner.setdefault(cell, node))] = find(node)
+        for _, a, b, _ in net.links:
+            ends = [("pad", i) for i in net.pads if (self.board.pads[i].x, self.board.pads[i].y) in (a, b)]
+            for node in ends[1:]:
+                root[find(node)] = find(ends[0])
+        island, joined = {node: find(node) for node in cells}, {}
+        for node, here in cells.items():
+            joined.setdefault(island[node], []).append(here)
+        return island, {key: np.unique(np.concatenate(parts)) for key, parts in joined.items()}
+
+    def _node_at(self, net, item):
+        kind, _, layer, x, y = item
+        if kind == "pad":
+            index = self._pad_at(net, item)
+            return None if index is None else ("pad", index)
+        if kind not in ("track", "via"):
+            return None
+        best = None
+        for k, path in enumerate(net.paths):
+            cells = np.array(path, np.int64)
+            if kind == "track" and layer in self.board.layers:
+                cells = cells[cells // self.HW == self.board.layers.index(layer)]
+            if cells.size:
+                rest = cells % self.HW
+                d = float(np.hypot(self.x0 + rest % self.W * self.p - x, self.y0 + rest // self.W * self.p - y).min())
+                best = min(best or (d, k), (d, k))
+        return ("path", best[1]) if best and best[0] < 0.5 else None
+
+    def _add_path(self, net, path, narrow):
+        """Add a connection to a routed net; returns 1 if it was not counted as missing."""
+        paths, necks, failed, connections = self._state(net)
+        self._restore(net, (paths + [path], necks | ({len(paths)} if narrow else set()), max(0, failed - 1),
+                            connections))
+        return 0 if failed else 1
+
+    def _link(self, net, items, rng):
+        """A straight track between two pads of the net, checked exactly against all other copper.
+
+        Where only routed copper of other nets is in the way, one rip-up turn moves it.
+        """
+        a, b = (self._pad_at(net, item) for item in items)
+        if a is None:
+            a, b = b, a
+        if a is None:
+            return False
+        pads, island = self.board.pads, self._islands(net)[0]
+        pa = pads[a]
+        near = [b] if b is not None else sorted(
+            (i for i in net.pads if island[("pad", i)] != island[("pad", a)]),
+            key=lambda i: math.dist((pa.x, pa.y), (pads[i].x, pads[i].y)))
+        options = [(pads[c], layer, width) for c in near if math.dist((pa.x, pa.y), (pads[c].x, pads[c].y)) <= 2.0
+                   for layer in pa.layers if layer in pads[c].layers and not self.plane[layer]
+                   for width in sorted({net.cls.width, self.neck_width}, reverse=True)]
+
+        def add(link):
+            net.links.append(link)
+            paths, necks, failed, connections = self._state(net)
+            self._restore(net, (paths, necks, max(0, failed - 1), connections))
+            return 0 if failed else 1
+        for routed in (True, False):
+            for pc, layer, width in options:
+                link = (layer, (pa.x, pa.y), (pc.x, pc.y), width)
+                if not self._link_clear(net, *link, routed=routed):
+                    continue
+                if routed:
+                    add(link)
+                elif self._turn(net, lambda price: add(link), self.opt.rip_cost * (0.5 + rng.random()),
+                                keep_equal=False, check=lambda: self._link_clear(net, *link)) is None:
+                    net.links.remove(link)
+                    self._restore(net, self._state(net))
+                    continue
+                self._say(f"KiCad reconnect: {net.name} {pa.ref}.{pa.number}-{pc.ref}.{pc.number} "
+                          f"linked at {width:g} mm" + ("" if routed else " after a rip-up"))
+                return True
+        return False
+
+    def _link_cells(self, layer, a, b):
+        n = int(math.dist(a, b) / (self.p / 2)) + 2
+        ix = np.rint((np.linspace(a[0], b[0], n) - self.x0) / self.p).astype(np.int64)
+        iy = np.rint((np.linspace(a[1], b[1], n) - self.y0) / self.p).astype(np.int64)
+        return np.unique(layer * self.HW + iy * self.W + ix)
+
+    def _link_clear(self, net, layer, a, b, width, routed=True):
+        """Exact clearance (5 um samples, 1 um spare) of a straight track to all copper not its own;
+        without ``routed``, to the fixed copper only (pads, existing tracks, edges, keep-outs)."""
+        n = int(math.dist(a, b) / 0.005) + 2
+        X, Y = np.linspace(a[0], b[0], n), np.linspace(a[1], b[1], n)
+        half, gap, board = width / 2 + 0.001, net.cls.clearance, self.board
+
+        def near(x, y, reach):
+            return float(_segment_sdf(*a, *b, np.array(x), np.array(y))) < reach + 3.0
+        for pad in board.pads:
+            if pad.net == net.name or not near(pad.x, pad.y, 0):
+                continue
+            if layer in pad.layers:
+                rule = max(gap, pad.clearance or (board.netclass(pad.net).clearance if pad.net else gap))
+                if _pad_sdf(pad, X, Y).min() < half + rule:
+                    return False
+            if pad.drill and np.hypot(X - pad.x, Y - pad.y).min() < half + pad.drill / 2 + board.rules.get(
+                    "min_hole_clearance", 0):
+                return False
+        copper = [(other.name, *segment) for other in self.nets.values() if other is not net and routed
+                  for segment in self.geometry(other)[0]]
+        copper += [(name, lay, (x1, y1), (x2, y2), w) for name, lay, x1, y1, x2, y2, w in board.tracks]
+        for name, lay, (x1, y1), (x2, y2), w in copper:
+            if name != net.name and lay == layer and near(x1, y1, math.dist((x1, y1), (x2, y2))):
+                rule = max(gap, board.netclass(name).clearance)
+                if _segment_sdf(x1, y1, x2, y2, X, Y).min() < half + w / 2 + rule:
+                    return False
+        for other in self.nets.values():
+            for x, y in self.geometry(other)[1] if other is not net and routed else ():
+                rule = max(gap, other.cls.clearance)
+                if near(x, y, 0) and np.hypot(X - x, Y - y).min() < half + other.cls.via_diameter / 2 + rule:
+                    return False
+        for x1, y1, x2, y2 in board.edges:
+            if _segment_sdf(x1, y1, x2, y2, X, Y).min() < half + self.edge_clearance:
+                return False
+        for zone in board.zones:   # rule areas that keep tracks out
+            if not zone.net and zone.no_tracks and layer in zone.layers and _poly_sdf(zone.points, X, Y).min() < half:
+                return False
+        for box in self.obstacles:
+            if box.layer == board.layers[layer] and (np.maximum(np.maximum(box.xmin_mm - X, X - box.xmax_mm),
+                                                                np.maximum(box.ymin_mm - Y, Y - box.ymax_mm))
+                                                     < half + gap).any():
+                return False
+        return True
+
+    def _bridge(self, net, items, rng):
+        """Route between the two islands KiCad names: strict first, then one rip-up turn."""
+        island, cells_of = self._islands(net)
+        ids = [island.get(self._node_at(net, item)) for item in items]
+        if ids[0] is None:
+            ids.reverse()
+            items = items[::-1]
+        targets = [ids[1]] if ids[1] is not None else [key for key in cells_of if key != ids[0]]
+        if ids[0] is None or ids[1] == ids[0] or not targets:
+            return False   # unknown copper, or one island already: nothing the grid can add
+        starts, target = cells_of[ids[0]], np.concatenate([cells_of[key] for key in targets])
+        x, y = items[0][3:]
+        here = int(round((y - self.y0) / self.p)) * self.W + int(round((x - self.x0) / self.p))
+        rest = target % self.HW
+        focus = np.array([here, rest[np.argmin(np.hypot(rest % self.W - here % self.W,
+                                                        rest // self.W - here // self.W))]], np.int64)
+
+        def attempt(price, strict):
+            path = None
+            with self._owned(net):
+                for drawn in net.paths:
+                    self._joinable(net, drawn)   # the net's own via keep-outs
+                    # and no new via may swallow a corner (a track end) of it off-centre
+                    corners = np.array([b for a, b, c in zip(drawn, drawn[1:], drawn[2:]) if b - a != c - b],
+                                       np.int64) % self.HW
+                    ring = (corners[:, None] + self._disk(net.cls.via_diameter / 2 + self.p)[None, :]).ravel()
+                    self.vown.reshape(-1)[ring[~np.isin(ring, corners)]] = True
+                for t in (net.t,) + (() if net.neck is None else (net.neck,)):
+                    path = self._connect(net, starts, target, price, strict, focus=focus, t=t)
+                    if path:
+                        break
+            return self._add_path(net, self._straighten(net, path, t), t != net.t) if path else 0
+        before = self._dropped()
+        if attempt(0.0, True) or self._dropped() < before:
+            return True
+        return self._turn(net, lambda price: attempt(price, False), self.opt.rip_cost * (0.5 + rng.random()),
+                          keep_equal=False) is not None
+
     # ---- output ------------------------------------------------------------
     def _xy(self, cell):
         rest = cell % self.HW
@@ -1466,6 +1768,8 @@ class Router:
                     vias.add(self._xy(cell))
                     run_start, direction = cell, None
                 previous = cell
+        for layer, a, b, width in net.links:
+            segments.add((layer, min(a, b), max(a, b), width))
         return sorted(segments), sorted(vias)
 
     def copper(self):
@@ -1521,7 +1825,8 @@ class Router:
                                "necked_mm": round(sum(n["necked_mm"] for n in nets.values()), 2),
                                "signal_on_plane_mm": round(sum(v for n in nets.values() for k, v in
                                                                n["length_mm"].items() if k in planes and not n["to_plane"]), 2)},
-                "rounds": self.rounds, "seconds": round(time.monotonic() - self.started, 1),
+                "rounds": self.rounds, "seconds": round(time.monotonic() - self.started - self.kicad_s, 1),
+                "kicad_check_s": round(self.kicad_s, 1),
                 "connections": total, "unrouted": failed,
                 "completion_pct": round(100 * (total - failed) / total, 1) if total else 100.0,
                 "vias": sum(n["vias"] for n in nets.values()),
@@ -1529,27 +1834,81 @@ class Router:
                 "nets": nets}
 
 
+def _kicad_item(description, x, y):
+    """(kind, net, layer name or None, x, y) of a KiCad DRC item such as 'Pad 4 [GND] of U14 on B.Cu'."""
+    found = re.match(r"(\w+)[^\[]*\[(.*?)\](?= of | on |,|$)(.*)", description)
+    if not found:
+        return None
+    layer = re.search(r" on ([^\s,]+)", found.group(3))
+    return found.group(1).lower(), found.group(2), layer and layer.group(1), x, y
+
+
+def kicad_check(router, cli, board_name, context=(), rounds=2):
+    """KiCad-oracle loop (idea from KiCadRoutingTools): KiCad DRC with zones refilled on the
+    routed copy, then ``Router.reconnect`` of exactly the connections it reports open, at
+    most ``rounds`` times. Copper that KiCad counts no better (open plus violations) than
+    the round before is rolled back. ``context``: project files (.kicad_pro, .kicad_dru)
+    copied next to the candidate. Returns (DrcResult, board text) of the copper kept.
+    """
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from .candidate import candidate_text
+    best = None
+    with tempfile.TemporaryDirectory(prefix="vela-kicad-check-", ignore_cleanup_errors=True) as folder:
+        path = Path(folder) / board_name
+        for source in map(Path, context):
+            if source.is_file():
+                shutil.copy(source, path.with_suffix(source.suffix))
+        for check in range(rounds + 1):
+            text = candidate_text(router.board.text, router.copper())
+            path.write_text(text, encoding="utf-8")
+            started = time.monotonic()
+            result = cli.drc(path)
+            router.kicad_s += time.monotonic() - started
+            score = (result.unconnected + result.violations, result.unconnected)
+            if best and score >= best[0]:
+                router._say(f"KiCad check: {result.unconnected} open, {result.violations} violations, "
+                            "no better: rolled back")
+                for net in router.nets.values():
+                    saved, links = best[3][net.name]
+                    if router._state(net)[0] is not saved[0] or net.links != links:
+                        net.links = list(links)
+                        router._restore(net, saved)
+                break
+            best = (score, result, text, {n.name: (router._state(n), list(n.links)) for n in router.nets.values()})
+            router._say(f"KiCad check: {result.unconnected} connections open")
+            if not result.unconnected or check == rounds or not router.reconnect(result.missing):
+                break
+    return best[1], best[2]
+
+
 def route_board(board: Board, options: Options | None = None, obstacles=()) -> Router:
     """Best of up to ``options.tries`` runs that differ only in re-route order.
 
     ponytail: restarts on top of the negotiation; the order still matters on dense boards.
     A finer grid was tried instead (tracks pack 14 % tighter): 7x slower, no gain.
+    A try is only started if the last one would fit in what is left: a cut-short try
+    has not won on the bench, and the time is better spent on ``kicad_check``.
     """
     options = options or Options()
-    started, best = time.monotonic(), None
+    started, best, last = time.monotonic(), None, 0.0
     tries = max(1, options.tries)
     for attempt in range(tries):
         left = options.budget_s - (time.monotonic() - started)
-        if best and left < 10:
+        if best and left < max(10, 1.2 * last + 30):   # 30 s: room for the KiCad check
             break
+        last = time.monotonic()
         seed = None if options.seed is None else options.seed + attempt
         router = Router(board, replace(options, seed=seed, budget_s=max(left, 10)), obstacles).run()
+        last = time.monotonic() - last
         score = (sum(n.failed for n in router.order), sum(router._score(n)[1] for n in router.order))
         if best is None or score < best[0]:
             best = (score, router)
         if not score[0] or options.seed is None:
             break
-    best[1].started = started
+    best[1].started, best[1].opt = started, replace(best[1].opt, budget_s=options.budget_s)
     return best[1]
 
 
@@ -1573,6 +1932,8 @@ def main(argv=None):
     parser.add_argument("--pitch", type=float, default=Options.pitch)
     parser.add_argument("--budget", type=float, default=Options.budget_s, help="seconds")
     parser.add_argument("--seed", type=int, default=Options.seed, help="first re-route order; later tries use the next seeds")
+    parser.add_argument("--kicad-rounds", type=int, default=2,
+                        help="with --kicad-cli: rounds of reconnecting what KiCad DRC reports open; 0 = judge only")
     args = parser.parse_args(argv)
     board = load_board(args.board)
     cli = KiCadCli(args.kicad_cli) if args.kicad_cli else None
@@ -1583,6 +1944,10 @@ def main(argv=None):
         except (CapabilityError, ValidationError) as exc:
             notes.append(f"copper text not modelled: {exc}")
     router = route_board(board, Options(pitch=args.pitch, budget_s=args.budget, seed=args.seed, log=lambda text: print(text, flush=True)), obstacles)
+    routed = text = None
+    if cli:
+        routed, text = kicad_check(router, cli, args.board.name, [args.board.with_suffix(suffix) for suffix in
+                                                                 (".kicad_pro", ".kicad_dru")], args.kicad_rounds)
     report = router.report()
     report["notes"] = notes
     folders = {name: args.out / name for name in ("routed", "baseline")}
@@ -1591,10 +1956,10 @@ def main(argv=None):
         for suffix in (".kicad_pro", ".kicad_dru"):
             if args.board.with_suffix(suffix).is_file():
                 shutil.copy(args.board.with_suffix(suffix), folder / (args.board.stem + suffix))
-        text = candidate_text(board.text, router.copper()) if name == "routed" else board.text
-        (folder / args.board.name).write_text(text, encoding="utf-8")
+        (folder / args.board.name).write_text(board.text if name == "baseline" else text or candidate_text(
+            board.text, router.copper()), encoding="utf-8")
     if cli:
-        baseline, routed = (cli.drc(folders[name] / args.board.name) for name in ("baseline", "routed"))
+        baseline = cli.drc(folders["baseline"] / args.board.name)
         blocking, _ = route_issues(baseline, routed)
         report["drc"] = {"unconnected_before": baseline.unconnected, "unconnected": routed.unconnected,
                          "blocking": blocking, "reasons": list(blocking_reasons(baseline, routed)),

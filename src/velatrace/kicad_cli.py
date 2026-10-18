@@ -149,6 +149,9 @@ class DrcResult:
     # (type, severity, item uuids) per violation/parity issue, to tell pre-existing
     # issues from ones a route introduced. Empty means identities are unknown.
     issues: tuple = ()
+    # Each missing connection as KiCad reports it: ((description, x_mm, y_mm), ...) per
+    # pair, for a router that reconnects exactly what KiCad finds open.
+    missing: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -191,6 +194,14 @@ def _issue(row) -> tuple | None:
     return kind, severity, tuple(sorted(uuids))
 
 
+def _located(item) -> tuple | None:
+    """(description, x, y) of a DRC item; None without a usable position (it only informs)."""
+    try:
+        return str(item.get("description", "")), float(item["pos"]["x"]), float(item["pos"]["y"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def parse_drc_report(path: Path) -> DrcResult:
     if path.stat().st_size > 32_000_000:
         raise ValidationError("KiCad DRC report exceeds 32 MB.")
@@ -218,9 +229,10 @@ def parse_drc_report(path: Path) -> DrcResult:
         # findings, which route_issues() treats as blocking; known carried warnings
         # need not become blockers just because another row omitted its UUID.
         issues = tuple(sorted(issue for issue in identities if issue is not None))
+        missing = tuple(tuple(_located(item) for item in row.get("items", []) if _located(item)) for row in rows[1])
     except (ValueError, KeyError, TypeError) as exc:
         raise ValidationError("KiCad DRC report is incomplete or malformed; approval is unavailable.") from exc
-    return DrcResult(*(len(items) for items in rows), issues)
+    return DrcResult(*(len(items) for items in rows), issues, missing)
 
 
 class KiCadCli:

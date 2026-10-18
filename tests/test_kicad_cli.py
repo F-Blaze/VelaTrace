@@ -31,6 +31,11 @@ class KiCadCliTests(unittest.TestCase):
                                        "unconnected_items": [{}, {}], "schematic_parity": []}))
             report = parse_drc_report(path)
             self.assertEqual((report.violations, report.unconnected, report.schematic_parity), (1, 2, 0))
+            self.assertEqual(report.missing, ((), ()))
+            pad = {"description": "Pad 4 [GND] of U14 on B.Cu", "pos": {"x": 108.528, "y": 114.311}}
+            path.write_text(json.dumps({"violations": [], "schematic_parity": [], "unconnected_items": [
+                {"items": [pad, {"description": "Zone [GND]", "pos": {"x": "?"}}]}]}))
+            self.assertEqual(parse_drc_report(path).missing, ((("Pad 4 [GND] of U14 on B.Cu", 108.528, 114.311),),))
             path.write_text('{"violations":[]}')
             with self.assertRaises(ValidationError):
                 parse_drc_report(path)

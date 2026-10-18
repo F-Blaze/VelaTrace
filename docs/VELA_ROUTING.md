@@ -256,6 +256,68 @@ On 11 of 13 boards Vela connects every pad in every order and adds no DRC
 error beyond warnings; on mikoto, usb-i2c and bms only errors that were already
 on the unrouted board stop acceptance.
 
+### Finishing dense boards: ideas from KiCadRoutingTools, 2026-10-16
+
+Three completion mechanisms re-implemented in Vela's own design from the ideas of
+KiCadRoutingTools 0.23.1 (ideas from KiCadRoutingTools, MIT, (c) 2026 drandyhaas).
+No KRT code is used, and unlike KRT nothing rewrites the board's design rules:
+KiCad DRC stays the only judge.
+
+- **KiCad check and reconnect** (`kicad_check`, `Router.reconnect`). With a
+  kicad-cli (the runner's `--kicad-cli`, or the plugin's KiCad), the routed copy
+  goes through `kicad-cli pcb drc --refill-zones`. Each pair KiCad reports open
+  (`DrcResult.missing`: item descriptions with positions) is mapped back to the
+  net's copper: a pad by its position, a track or via by the nearest copper Vela
+  drew, a zone by the rest of the net. Vela then tries, in order: a straight
+  off-grid track between two pads of the net within 2 mm, checked exactly
+  against all other copper (fine-pitch neighbours the grid phase walls off; if
+  only routed copper is in the way, one rip-up turn moves it); a strict search
+  between the two copper islands; one rip-up turn of the rescue. KiCad checks
+  again, at most two rounds. A round KiCad counts no better (open connections
+  plus violations) is rolled back. `--kicad-rounds 0` only judges. Time in
+  KiCad is reported as `kicad_check_s` and left out of `seconds`. A new restart
+  is only begun if the last one fits in what is left plus 30 s, so the check
+  has time (a cut-short restart never won on the bench).
+- **Rip-up churn control** (`Router._turn`, `rescue`). A net that loses a
+  connection as a rip victim costs more to push through each later turn (a
+  per-net surcharge in the search window; none while it is open anyway).
+  Victims re-route least ripped first. A net ripped three times waits for a
+  final round instead of trading places (soleil seed 1 spent all its turns
+  swapping +BATT and U7-STAT2). A turn that leaves more open than it found, or
+  a conflict, is undone; the best state seen is kept as before.
+- **Search budget by closest approach** (`_search(tranche=)`). Strict
+  point-to-point searches get expansions in tranches of 25,000; another tranche
+  only while the closest approach to the goal improved by two cells or 2 %, with
+  one grace tranche. Negotiation searches stay uncapped (capping them left
+  connections blocked).
+
+Measured on the 13 boards, seeds 1, 4, 7, 600 s, three boards at a time
+(runs c1/c4/c7 against f1/f4/f7). The machine was busier than for the
+reference runs, so times are noisy; open connections are KiCad's count.
+
+| Board | Open before (1/4/7) | Open after | Router s after (before) |
+|---|---|---|---|
+| soleil | 2/1/2 | 1/1/1 | 264/214/247 (229/188/212) |
+| bitaxe-ultra | 4/3/2 | 4/4/3 | 580/607/513 (613/627/601) |
+| other 11 boards | unchanged | unchanged | mostly lower; mtb-led and zereader 20-50 % higher in this run only |
+
+- soleil: the KiCad check closed one connection on seed 1 (V_CHARGE, by a
+  rip-up turn). What stays open is GND ball B2 in the middle of the 0.5 mm
+  DSBGA U9: the only way out is a 0.15 mm track to ball C1 between B1 and C2
+  with 6 um to spare. U9 sits 0.7 cell off the grid phase, and B1's 0.3 mm
+  track end swells past its pad; moving it in a rip-up turn leaves B1 and C2
+  unreachable, so the link is refused.
+- bitaxe: the check closed one connection on seed 1 (5 to 4 open). Two runs of
+  the final code gave 4/4/3; an earlier full run of nearly the same code gave
+  4/1/2. The difference to the reference is within run-to-run noise. Routing
+  now ends inside the budget.
+- Same connections, KiCad-unconnected, new DRC and acceptance on every other
+  board and seed (20 of 39 runs accepted, as before).
+- The search budget saved no measurable time: failing searches were already
+  cheap (the backwards probe finds walled-in pads), and on soleil results and
+  times were identical with and without it. On bitaxe single tries it left
+  4 and 1 open against 3 and 5 uncapped. Kept, but its value is unproven.
+
 ### Known limits
 
 - No coupled differential-pair routing, no length or delay tuning (serpentines),
