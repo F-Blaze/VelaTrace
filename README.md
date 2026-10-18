@@ -76,8 +76,8 @@ Expect false positives and missed problems; treat findings as hints, not a sign-
 **Requirements:** KiCad 10 (Windows is the only tested OS). Routing also needs a `kicad-cli` that matches the running editor exactly, patch version included; VelaTrace looks for it on `PATH` and next to KiCad's own Python.
 
 1. **Install.** In KiCad open the **Plugin and Content Manager**, search for **VelaTrace**, click **Install**, then **Apply Pending Changes**. Until the listing is approved: download `VelaTrace-v0.1.0-alpha.2-pcm.zip` from the [latest release](https://github.com/F-Blaze/VelaTrace/releases) and use **Install from File…** in the Plugin and Content Manager. If you installed earlier with `git clone`, delete that `plugins/VelaTrace` folder first so KiCad does not load two copies. Read the code first if you like: it writes to your board.
-2. **Enable the API.** **Preferences → Plugins**, tick **Enable KiCad API**. KiCad uses its own bundled Python on Windows; there is nothing else to choose.
-3. **Open the PCB Editor.** First start only: KiCad installs about 240 MB of Python packages (`kicad-python`, `PySide6`, `numpy`), then the VelaTrace button appears; this can take a few minutes. Click it, then **Check design**. Try it on the demo board first (`velatrace-demo-v0.1.0-alpha.2.zip` from the release).
+2. **Allow the KiCad API.** During the install KiCad asks to enable the KiCad API: click **Yes**. (Missed it? **Preferences → Plugins**, tick **Enable KiCad API**.) KiCad uses its own bundled Python on Windows; there is nothing else to choose.
+3. **Open the PCB Editor.** First start only: KiCad installs about 300 MB of Python packages (`kicad-python`, `PySide6`, `numpy`), then the VelaTrace button appears; this took about 4 minutes in our test. Click it, then **Check design**. Try it on the demo board first (`velatrace-demo-v0.1.0-alpha.2.zip` from the release).
 
 No button? **Preferences → Plugins**, right-click VelaTrace, **Recreate Plugin Environment**. More help and a manual install: [docs/install.md](docs/install.md).
 

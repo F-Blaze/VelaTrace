@@ -10,8 +10,8 @@ The [README quickstart](../README.md#quickstart) is the short version.
 2. In KiCad open the **Plugin and Content Manager**, search for **VelaTrace**, click **Install**, then **Apply Pending Changes**.
    Until the listing is approved: download `VelaTrace-v0.1.0-alpha.2-pcm.zip` from the [latest release](https://github.com/F-Blaze/VelaTrace/releases) and use **Install from File…**. To check the download, compare its SHA-256 (`Get-FileHash .\VelaTrace-v0.1.0-alpha.2-pcm.zip` in PowerShell) with the one in the release notes.
    If you installed earlier with `git clone` (path B), delete that `Documents/KiCad/10.0/plugins/VelaTrace` folder first so KiCad does not load two copies.
-3. In **Preferences → Plugins**, tick **Enable KiCad API**.
-4. Open the PCB Editor. First start only: KiCad creates a separate Python environment and installs `requirements.txt` (**kicad-python 0.8.0**, **PySide6-Essentials 6.10.2**, **numpy 2.3.5**; about 240 MB). The VelaTrace button appears when that is done, which can take a few minutes. [Official IPC installation notes](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
+3. During the install KiCad 10.0.6 asks "This plugin requires the KiCad API, which is currently disabled in preferences. Would you like to enable it?": click **Yes**. If you clicked No, tick **Enable KiCad API** in **Preferences → Plugins**.
+4. Open the PCB Editor. First start only: KiCad creates a separate Python environment and installs `requirements.txt` (**kicad-python 0.8.0**, **PySide6-Essentials 6.10.2**, **numpy 2.3.5**; about 300 MB on disk). The VelaTrace button appears when that is done; this took about 4 minutes on our Windows test PC. [Official IPC installation notes](https://dev-docs.kicad.org/en/apis-and-binding/ipc-api/for-addon-developers/).
 
 ### Troubleshooting
 
