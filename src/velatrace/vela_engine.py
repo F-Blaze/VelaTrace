@@ -63,6 +63,7 @@ class Options:
     hist_spread: float = 0.4      # mm around a conflict that gets the history penalty
     relieve: bool = True          # re-route tracks that starve a pad's thermal relief
     couple: bool = True           # route name-detected differential pairs as one coupled trunk
+    skip_pairs: tuple = ()        # pairs routed as two nets anyway (route_board: their trunk gave way)
     skew_ps: float = 1.0          # delay matching target within each pair, ps; 0 = no tuning
     meander_mm: float = 1.0       # tallest trombone bump of the delay matching, mm
     log: object = None            # callable(str) for progress
@@ -734,6 +735,9 @@ class Router:
         """
         self.virtual, self.coupled, self.trunks, self.tuning = set(), {}, {}, {}
         for pair, (w, g, c, m) in self.couples.items():
+            if pair in self.opt.skip_pairs:
+                self.coupled[pair] = {"coupled": False, "reason": "its trunk gave way in a first try; routed as two nets"}
+                continue
             nets, reason = [self.nets[name] for name in pair], "no candidate"
             for found in self._trunk(pair, w, g, m):
                 if isinstance(found, str):
@@ -823,6 +827,11 @@ class Router:
         if math.dist(mid(a), mid(b)) < 2.0:
             yield "too short to couple"
             return
+        span = max(math.dist((pads[i].x, pads[i].y), (pads[j].x, pads[j].y)) for net in nets
+                   for i in net.pads for j in net.pads if pads[i].ref and pads[j].ref)
+        if math.dist(mid(a), mid(b)) < 0.5 * span:   # e.g. a bus whose wires only meet at one transceiver
+            yield "the nets run side by side over less than half their span"
+            return
         common = set.intersection(*(set(pads[i].layers) for i in (*a, *b)))
         layers = [x for x in range(self.L) if not self.plane[x]]
         yield "no room for the coupled pair on one layer"
@@ -859,7 +868,8 @@ class Router:
                 return None
             h, w = y1 - y0 + 2, x1 - x0 + 2
             cost = np.full((h, w), -1.0)
-            cost[1:-1, 1:-1] = np.where(win, 1.0, -1.0)
+            # Open ground is cheaper: a trunk hugging pins would wall in other parts' escapes.
+            cost[1:-1, 1:-1] = np.where(win, np.where(_erode(win, int(0.5 / self.p)), 1.0, 2.0), -1.0)
             flags = np.zeros((h, w), np.uint8)
             flags[1:-1, 1:-1] = goal
             gy, gx = np.nonzero(goal)
@@ -901,7 +911,7 @@ class Router:
                 reason = "the routes bypassed the trunk; routed as two nets"
             else:
                 continue
-            self.coupled[pair] = {"coupled": False, "reason": reason}
+            self.coupled[pair] = {"coupled": False, "reason": reason, "late": True}
             for net in nets:
                 self._drop_trunk(net, info["pads"][net.name])
                 self._ripup(net)
@@ -2248,6 +2258,7 @@ class Router:
                      "skew_mm": round(abs(flights[0][1] - flights[1][1]), 3)}
             info = dict(self.coupled.get(pair, {"coupled": False, "reason": "coupling off"}))
             trunk = info.pop("pads", None)
+            info.pop("late", None)
             if trunk:
                 coupled = sum(math.dist(s[1:3], s[3:5]) for name in pair for s in self.board.pads[trunk[name]].shapes)
                 info.update(coupled_mm=round(coupled / 2, 2),
@@ -2333,14 +2344,20 @@ def route_board(board: Board, options: Options | None = None, obstacles=()) -> R
     options = options or Options()
     started, best, last = time.monotonic(), None, 0.0
     tries = max(1, options.tries)
-    for attempt in range(tries):
+    attempt, skip = 0, tuple(options.skip_pairs)
+    while attempt < tries:
         left = options.budget_s - (time.monotonic() - started)
         if best and left < max(10, 1.2 * last + 30):   # 30 s: room for the KiCad check
             break
         last = time.monotonic()
         seed = None if options.seed is None else options.seed + attempt
-        router = Router(board, replace(options, seed=seed, budget_s=max(left, 10)), obstacles).run()
+        router = Router(board, replace(options, seed=seed, budget_s=max(left, 10), skip_pairs=skip), obstacles).run()
         last = time.monotonic() - last
+        late = tuple(pair for pair, info in router.coupled.items() if info.get("late"))
+        if late and options.budget_s - (time.monotonic() - started) > 1.2 * last + 30:
+            skip += late   # the board was routed around a trunk that then gave way: route it again without
+            continue
+        attempt += 1
         score = (sum(n.failed for n in router.order), sum(router._score(n)[1] for n in router.order))
         if best is None or score < best[0]:
             best = (score, router)
