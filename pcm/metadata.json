@@ -1,0 +1,37 @@
+{
+  "$schema": "https://go.kicad.org/pcm/schemas/v1",
+  "name": "VelaTrace",
+  "description": "Checks a KiCad 10 board for small mistakes before you order it. Offline. Also routes small boards with preview, DRC check and undo. Alpha.",
+  "description_full": "VelaTrace is a free companion window for KiCad 10's PCB Editor. It is an alpha, tested on Windows only with KiCad 10.0.4 and 10.0.6. Try it on a copy of your board first.\n\nCheck design: a fast first pass over your board for small mistakes before you order it, such as an LED without a series resistor, I2C pull-up problems, duplicated ICs, 0 ohm shorts and unset values. Each finding comes with the evidence and a suggested fix. It is not a design review: on 12 boards it had never seen, 44% of the design-rule findings were judged correct, and the reviewers were LLM agents, not human engineers. It finds only a minority of the issues a reviewer would raise, so treat findings as hints.\n\nJLCPCB window (opt-in): checks LCSC part numbers against the part's value, flags out-of-stock parts and exports JLCPCB BOM, placement and Gerber files. It has been tried on three boards so far.\n\nRoute board: routes the board with Vela-routing, VelaTrace's own router (Python and numpy, running inside the plugin; no Java or extra download). The result is previewed on User.9, then KiCad DRC checks it in the background. Approve writes the copper as one undoable commit after a backup. It routes only placed, unrouted small boards, with one track width and clearance for all nets. There are no differential pairs, length tuning or BGA fanout. Approve anyway applies a route that failed DRC, after a confirmation that lists the findings.\n\nFree (MIT) and offline by default: network use is opt-in and listed in docs/privacy.md in the repository (optional AI provider calls with your own key, an optional JLCPCB parts download and live stock lookup, optional Groq search via Tavily).\n\nAfter installing: Preferences > Plugins > tick Enable KiCad API. First start: KiCad installs about 240 MB of Python packages (kicad-python, PySide6, numpy); the VelaTrace button appears when that is done, which can take a few minutes. No button? Preferences > Plugins, right-click VelaTrace, Recreate Plugin Environment.\n\nFor dense or high-speed routing see KiCadRoutingTools; for datasheet-aware design review see kicad-happy; for a mature JLCPCB part-assignment workflow see kicad-jlcpcb-tools.",
+  "identifier": "com.github.f-blaze.velatrace",
+  "type": "plugin",
+  "author": {
+    "name": "F-Blaze",
+    "contact": {
+      "web": "https://github.com/F-Blaze"
+    }
+  },
+  "license": "MIT",
+  "resources": {
+    "homepage": "https://github.com/F-Blaze/VelaTrace",
+    "github": "https://github.com/F-Blaze/VelaTrace"
+  },
+  "tags": [
+    "audit",
+    "bom",
+    "drc",
+    "jlcpcb",
+    "routing"
+  ],
+  "versions": [
+    {
+      "version": "0.1.0",
+      "status": "testing",
+      "kicad_version": "10.0",
+      "runtime": "ipc",
+      "platforms": [
+        "windows"
+      ]
+    }
+  ]
+}

@@ -42,4 +42,6 @@ Tests should target observable behavior and meaningful failure cases. Include bu
 
 Follow the maintainer notes in [docs/internal](docs/internal/) (repository security setup and build status). Scan the entire reachable history and release contents for secrets, review dependency changes, verify package license/probe contents and complete live editor/provider acceptance. Only create a signed annotated release tag after all changes have been merged through reviewed PRs. Publish the signing identity through a trusted channel; never fabricate a tag, fingerprint or successful check. A failed or pending gate blocks release.
 
+The Plugin and Content Manager zip and the demo-board zip are built from committed files with `python scripts/build_pcm_zip.py --tag <tag> --pcm-version <version>` (standard library only; writes `dist/` including `metadata-repo.json` with the download URL, SHA-256 and sizes filled in; repeated builds are byte-identical). `pcm/metadata.json` is the source of the listing text. Put the zip's SHA-256 in the release notes.
+
 Do not put security-sensitive details in public issues. Use GitHub's enabled private vulnerability reporting, as described in [SECURITY.md](SECURITY.md).
