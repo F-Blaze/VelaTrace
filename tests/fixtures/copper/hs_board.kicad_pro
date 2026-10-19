@@ -1,0 +1,9 @@
+{
+  "net_settings": {
+    "classes": [
+      {"name": "Default", "track_width": 0.2, "clearance": 0.2, "diff_pair_width": 0.2, "diff_pair_gap": 0.25},
+      {"name": "USB", "track_width": 0.2, "clearance": 0.15, "diff_pair_width": 0.15, "diff_pair_gap": 0.2}
+    ],
+    "netclass_patterns": [{"netclass": "USB", "pattern": "/USB_*"}]
+  }
+}

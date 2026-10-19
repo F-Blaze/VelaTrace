@@ -1,7 +1,10 @@
 """Immutable design facts; all design-origin strings are untrusted data."""
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
+
+if TYPE_CHECKING:
+    from .copper import BoardCopper
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,9 @@ class DesignSnapshot:
     path: Path | None = None
     copper_layers: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
+    # Routed copper (tracks, vias, zone fills, layer models, net classes); None for
+    # sources without copper (netlists, schematics) - copper checks then skip.
+    copper: "BoardCopper | None" = None
 
     def connectivity(self) -> dict[str, tuple[tuple[str, str], ...]]:
         graph: dict[str, list[tuple[str, str]]] = {}

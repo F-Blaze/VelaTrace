@@ -32,8 +32,9 @@ def local_tool_environment() -> dict[str, str]:
 def find_tool(tool: str | Path, *, forbidden=()) -> Path | None:
     """Absolute path of an external program, or None when it is not installed.
 
-    A bare name is searched in the absolute PATH folders only: never in the working
-    directory (where shutil.which and Windows itself look first) and never in a
+    A bare name is searched in the absolute PATH folders, then next to the Python that
+    started this one (KiCad's bundled python.exe sits beside kicad-cli.exe and the plugin
+    venv inherits it): never in the working directory (where shutil.which and Windows itself look first) and never in a
     `forbidden` folder (the project being opened), so a downloaded project cannot
     supply the program. For the same reason a configured path must be absolute.
     On Windows a bare name means the native .exe; callers refuse scripts."""
@@ -44,8 +45,9 @@ def find_tool(tool: str | Path, *, forbidden=()) -> Path | None:
         if os.name == "nt" and not text.lower().endswith(".exe"):
             text += ".exe"
         banned = {Path(folder).resolve() for folder in (Path.cwd(), *forbidden)}
-        candidates = [Path(folder) / text for folder in os.environ.get("PATH", "").split(os.pathsep)
-                      if folder and Path(folder).is_absolute()]
+        folders = [*os.environ.get("PATH", "").split(os.pathsep),
+                   os.path.dirname(getattr(sys, "_base_executable", None) or sys.executable)]
+        candidates = [Path(folder) / text for folder in folders if folder and Path(folder).is_absolute()]
     for candidate in candidates:
         try:
             found = candidate.resolve(strict=True)

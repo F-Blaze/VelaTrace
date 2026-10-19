@@ -5,6 +5,7 @@ All board mutations belong to the separately reviewed write-safety boundary.
 from pathlib import Path
 from typing import Any
 
+from .copper import read_copper_ipc
 from .errors import CapabilityError
 from .models import Component, DesignSnapshot, Pin
 
@@ -31,7 +32,9 @@ class KiCadReader:
                 "Cannot connect to KiCad. Open PCB Editor and enable Preferences > Plugins > IPC API."
             ) from exc
 
-    def read_board(self) -> DesignSnapshot:
+    def read_board(self, copper: bool = False) -> DesignSnapshot:
+        """Footprints, pads and copper layers of the open board; with ``copper`` also its
+        routed copper (live text, unsaved edits included) for the high-speed checks."""
         from kipy.board_types import Field
         from kipy.util.board_layer import canonical_name, is_copper_layer
 
@@ -72,9 +75,15 @@ class KiCadReader:
             else:
                 board_path = None
                 warnings.append("KiCad did not provide an absolute board path; routing is unavailable.")
+        routed = None
+        if copper:
+            try:
+                routed = read_copper_ipc(board)
+            except Exception:
+                warnings.append("Could not read the board copper; high-speed checks are skipped.")
         # Net names, not internal net codes, identify connectivity.
         return DesignSnapshot(tuple(components), "ipc-pcb", board_path,
-                              copper_layers=copper_layers, warnings=tuple(warnings))
+                              copper_layers=copper_layers, warnings=tuple(warnings), copper=routed)
 
     def export_dsn(self, destination: Path) -> None:
         raise CapabilityError(

@@ -1,13 +1,14 @@
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 import threading
 import unittest
 from unittest.mock import patch
 
 from velatrace.errors import CapabilityError, ValidationError
-from velatrace.kicad_cli import (KiCadCli, footprint_libraries, local_tool_environment, parse_drc_report,
+from velatrace.kicad_cli import (KiCadCli, find_tool, footprint_libraries, local_tool_environment, parse_drc_report,
                                  trimmed_library_table)
 
 
@@ -78,6 +79,17 @@ class KiCadCliTests(unittest.TestCase):
         with patch.dict(os.environ, {"PATH": ""}):
             with self.assertRaisesRegex(CapabilityError, "Install KiCad 9"):
                 KiCadCli()
+
+    def test_cli_is_found_next_to_the_base_python(self):
+        # The Windows installer does not use PATH; kicad-cli sits beside KiCad's python.exe.
+        with tempfile.TemporaryDirectory() as directory:
+            tool = Path(directory).resolve() / ("kicad-cli.exe" if os.name == "nt" else "kicad-cli")
+            tool.write_text("")
+            tool.chmod(0o755)
+            with patch.dict(os.environ, {"PATH": ""}), \
+                    patch.object(sys, "_base_executable", str(tool.with_name("python.exe")), create=True):
+                self.assertEqual(find_tool("kicad-cli"), tool)
+                self.assertIsNone(find_tool("kicad-cli", forbidden=[directory]))
 
     def test_incomplete_issue_identity_cannot_exempt_a_candidate_warning(self):
         from velatrace.candidate import route_issues
