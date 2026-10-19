@@ -404,8 +404,9 @@ class Router:
             # breakout must still find its own track inside the partner's keep-off band.
             gap = max(a.diff_pair_gap, b.diff_pair_gap, clearance + 0.02 + max(0.0, (max(a.width, b.width) - width) / 2))
             self.couples[pair] = (width, gap, clearance)
+        necked = [c for c in classes.values() if c.width > neck + 1e-9 and c.min_width <= neck + 1e-9]
         tracks = sorted({(c.width, c.clearance) for c in classes.values()}
-                        | {(neck, c.clearance) for c in classes.values() if c.width > neck + 1e-9}
+                        | {(neck, c.clearance) for c in necked}
                         | {(2 * w + g, c) for w, g, c in self.couples.values()} or {(0.2, 0.2)})
         # A pair's centreline is searched on a virtual class as wide as both tracks and their gap.
         self.couples = {pair: (w, g, c, tracks.index((2 * w + g, c))) for pair, (w, g, c) in self.couples.items()}
@@ -419,7 +420,7 @@ class Router:
             c = classes[name]
             self.nets[name] = _Net(name, c, tracks.index((c.width, c.clearance)),
                                    len(tracks) + vias.index((c.via_diameter, c.clearance)), pads,
-                                   neck=tracks.index((neck, c.clearance)) if c.width > neck + 1e-9 else None)
+                                   neck=tracks.index((neck, c.clearance)) if c in necked else None)
         # Reach and grid border as without pairs; a trunk is checked exactly (_link_clear) anyway.
         plain = [(e, c) for m, (e, c) in enumerate(self.maps) if m not in {k[3] for k in self.couples.values()}
                  or (2 * e, c) in {(n.cls.width, n.cls.clearance) for n in self.nets.values()}]
@@ -2071,7 +2072,7 @@ class Router:
             key=lambda i: math.dist((pa.x, pa.y), (pads[i].x, pads[i].y)))
         options = [(pads[c], layer, width) for c in near if math.dist((pa.x, pa.y), (pads[c].x, pads[c].y)) <= 2.0
                    for layer in pa.layers if layer in pads[c].layers and not self.plane[layer]
-                   for width in sorted({net.cls.width, self.neck_width}, reverse=True)]
+                   for width in sorted({net.cls.width, max(self.neck_width, net.cls.min_width)}, reverse=True)]
 
         def add(link):
             net.links.append(link)
@@ -2296,7 +2297,7 @@ class Router:
                 "completion_pct": round(100 * (total - failed) / total, 1) if total else 100.0,
                 "vias": sum(n["vias"] for n in nets.values()),
                 "length_mm": round(sum(sum(n["length_mm"].values()) for n in nets.values()), 1),
-                "nets": nets}
+                "nets": nets, "notes": list(self.board.notes)}
 
 
 def _kicad_item(description, x, y):
@@ -2420,7 +2421,7 @@ def main(argv=None):
         routed, text = kicad_check(router, cli, args.board.name, [args.board.with_suffix(suffix) for suffix in
                                                                  (".kicad_pro", ".kicad_dru")], args.kicad_rounds)
     report = router.report()
-    report["notes"] = notes
+    report["notes"] += notes
     folders = {name: args.out / name for name in ("routed", "baseline")}
     for name, folder in folders.items():
         folder.mkdir(parents=True, exist_ok=False)

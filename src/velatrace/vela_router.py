@@ -52,6 +52,8 @@ def constrained(board, constraints):
     width = max((c.minimum_mm for c in constraints if c.kind == "trace-width"), default=0)
     gap = max((c.minimum_mm for c in constraints if c.kind == "clearance"), default=0)
     board.classes = [replace(c, width=max(c.width, width), clearance=max(c.clearance, gap)) for c in board.classes]
+    board.overrides = {net: replace(c, width=max(c.width, width), clearance=max(c.clearance, gap))
+                       for net, c in board.overrides.items()}
     board.rules["min_track_width"] = max(board.rules.get("min_track_width", 0), width)  # also the neck width
     return board
 
