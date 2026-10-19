@@ -274,3 +274,19 @@ def test_custom_rules_resolve_in_kicad_order_and_list_what_is_not_modelled(tmp_p
     vias += router.geometry(router.nets["SIG"])[1]
     assert router.report()["unrouted"] == 0 and {s[3] for s in segments} == {0.35}
     assert vias and not any(8 < x < 12 for x, _ in vias)
+
+
+def test_walled_in_ball_escapes_by_an_exact_track_to_a_same_net_ball(tmp_path):
+    # 3x3 array at 0.57 mm: the centre ball fits a 0.15 mm track past its neighbours by 5 um,
+    # less than the grid's keep-off margin, so only the exactly checked escape gets it out.
+    p, nets = 0.57, ["N1", "N2", "N3", "N4", "G", "N5", "G", "N6", "N7"]
+    balls = "".join(f'(pad "{"ABC"[k // 3]}{k % 3 + 1}" smd circle (at {(k % 3 - 1) * p:g} {(k // 3 - 1) * p:g}) '
+                    f'(size 0.245 0.245) (layers "F.Cu") (net "{net}"))' for k, net in enumerate(nets))
+    board = _board(tmp_path, f'(footprint "BGA" (layer "F.Cu") (at 6 6) (property "Reference" "U1") {balls})'
+                   + _pad("J1", 15, 6, "G"))
+    router = route_board(board, Options())
+    report = router.report()
+    assert report["notes"] == ["escape U1.B2: 0.15 mm track to U1.C1"] and report["unrouted"] == 0
+    segments, _ = router.geometry(router.nets["G"])
+    assert (0, (6 - p, 6 + p), (6.0, 6.0), 0.15) in [(s[0], tuple(map(lambda v: round(v, 6), s[1])), s[2], s[3])
+                                                     for s in segments]
