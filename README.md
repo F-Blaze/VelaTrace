@@ -25,7 +25,7 @@ Small mistakes are easy to skim past before ordering, and each one costs a re-or
 
 **What it has found.** With the optional JLCPCB parts list loaded, it found 48 capacitors labelled "10u" that all carried the part number of a 1 µF part on one open-source board, and seven resistors of four different values sharing one 1 k part number on another. The parts check has been tried on three boards so far.
 
-**Try it on the demo board.** [examples/velatrace-demo](examples/velatrace-demo) has mistakes planted in it. Do the first two [Quickstart](#quickstart) steps (the check needs no router setup), open the demo board and click **Check design**.
+**Try it on the demo board.** [examples/velatrace-demo](examples/velatrace-demo) has mistakes planted in it. Do the [Quickstart](#quickstart) install steps (the check needs no router setup), open the demo board and click **Check design**.
 
 **How far to trust it.** It is a first pass, not a design review. On 12 boards it had never seen, 44% of the design-rule findings were judged correct, and the reviewers were LLM agents, not human engineers. See [Audit accuracy](#audit-accuracy).
 
@@ -71,23 +71,19 @@ Expect false positives and missed problems; treat findings as hints, not a sign-
 
 ## Quickstart
 
-> **Status: 0.1.0a1, development alpha.** Latest release: [v0.1.0-alpha.1](https://github.com/F-Blaze/VelaTrace/releases/tag/v0.1.0-alpha.1) (signed tag). Install that tag; cloning `main` is for testers. See the [full install checklist](docs/install.md). Verified only on a handful of small boards, on Windows with KiCad 10.0.4 / 10.0.6.
+> **Status: 0.1.0a2, alpha.** See the [latest release](https://github.com/F-Blaze/VelaTrace/releases/latest). Verified only on a handful of small boards, on Windows with KiCad 10.0.4 / 10.0.6.
 
-**Requirements:** KiCad 10 (tested on 10.0.4 / 10.0.6; KiCad 9 is untested and may not work) with the IPC API enabled, and Python 3.11+. For routing also: a `kicad-cli` that matches the running editor exactly, patch version included. Windows is the only tested OS.
+**Requirements:** KiCad 10 (Windows is the only tested OS). Routing also needs a `kicad-cli` that matches the running editor exactly, patch version included; VelaTrace looks for it on `PATH` and next to KiCad's own Python.
 
-1. **Install the plugin.** Clone the release tag into KiCad's plugin folder so `plugin.json` sits directly inside `VelaTrace` (the [install checklist](docs/install.md) shows how to verify the tag's signature first). Read the code first: it writes to your board.
+1. **Install.** In KiCad open the **Plugin and Content Manager**, search for **VelaTrace**, click **Install**, then **Apply Pending Changes**. Until the listing is approved: download `VelaTrace-v0.1.0-alpha.2-pcm.zip` from the [latest release](https://github.com/F-Blaze/VelaTrace/releases) and use **Install from File…** in the Plugin and Content Manager. If you installed earlier with `git clone`, delete that `plugins/VelaTrace` folder first so KiCad does not load two copies. Read the code first if you like: it writes to your board.
+2. **Allow the KiCad API.** During the install KiCad asks to enable the KiCad API: click **Yes**. (Missed it? **Preferences → Plugins**, tick **Enable KiCad API**.) KiCad uses its own bundled Python on Windows; there is nothing else to choose.
+3. **Open the PCB Editor.** First start only: KiCad installs about 300 MB of Python packages (`kicad-python`, `PySide6`, `numpy`), then the VelaTrace button appears; this took about 4 minutes in our test. Click it, then **Check design**. Try it on the demo board first (`velatrace-demo-v0.1.0-alpha.2.zip` from the release).
 
-   ```sh
-   # Windows (the only tested OS): Documents/KiCad/10.0/plugins
-   git clone --branch v0.1.0-alpha.1 --depth 1 https://github.com/F-Blaze/VelaTrace.git VelaTrace
-   ```
+No button? **Preferences → Plugins**, right-click VelaTrace, **Recreate Plugin Environment**. More help and a manual install: [docs/install.md](docs/install.md).
 
-   KiCad creates a Python environment (about 240 MB) and installs `kicad-python 0.8.0`, `PySide6-Essentials 6.10.2` and `numpy` (from `requirements.txt`) itself; the first launch takes a few minutes. Linux and macOS are untested (reports welcome).
-2. **Enable the API.** In KiCad **Preferences → Plugins**, tick **Enable KiCad API** and pick a Python 3.11+ interpreter. Open the PCB Editor and click **Open VelaTrace**.
-3. **Optional: add an AI key.** The audit's checks need none. For **Explain with AI**, choose a provider and model in **Setup** and enter your key (kept in memory only).
-   Gemini: protocol `gemini`, `https://generativelanguage.googleapis.com/v1beta`. Groq: protocol `openai`, `https://api.groq.com/openai/v1`.
-4. **For routing only:** enter a `kicad-cli` path in **Setup** if it is not found on its own. It must match the running editor exactly, patch version included. The router itself needs no setup.
-5. **Before routing:** save the board and project once (later edits need no save), enable **User.9** for previews, and set every DRC check to at least *Warning* (VelaTrace refuses to route while any is set to *Ignore*; KiCad's defaults ignore five). Try it on a disposable copy first.
+- **Routing** needs no Java. Before routing: save the board and project once (later edits need no save), enable **User.9** for previews, and set every DRC check to at least *Warning* (VelaTrace refuses to route while any is set to *Ignore*; KiCad's defaults ignore five). Try it on a disposable copy first. If `kicad-cli` is not found on its own, enter its path in **Setup**.
+- **Optional AI key.** The audit's checks need none. For **Explain with AI**, choose a provider and model in **Setup** and enter your key (kept in memory only). Gemini: protocol `gemini`, `https://generativelanguage.googleapis.com/v1beta`. Groq: protocol `openai`, `https://api.groq.com/openai/v1`.
+- **Tested on Windows with KiCad 10.0.4 / 10.0.6 only.** Linux and macOS are untested.
 
 Want to look around first? `pip install -e '.[dev]'` then `python -m velatrace --demo` runs the UI on synthetic data.
 

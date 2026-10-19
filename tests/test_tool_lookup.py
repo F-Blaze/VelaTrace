@@ -34,6 +34,13 @@ class ToolLookupTests(unittest.TestCase):
         self.project.mkdir()
         self.addCleanup(os.chdir, os.getcwd())
         os.chdir(self.project)  # VelaTrace started from inside an untrusted project.
+        # find_tool also looks beside the running Python; keep that folder empty here.
+        interpreter = self.root / "interpreter" / "python"
+        interpreter.parent.mkdir()
+        for name in ("_base_executable", "executable"):
+            patcher = patch.object(sys, name, str(interpreter))
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def path(self, *folders):
         return patch.dict(os.environ, {"PATH": os.pathsep.join(map(str, folders))})
