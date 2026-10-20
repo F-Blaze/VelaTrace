@@ -549,6 +549,7 @@ class Router:
             d = _poly_sdf(zone.points, self.xs[None, ix0:ix1], self.ys[iy0:iy1, None])
             if zone.no_tracks:
                 self._block(d, iy0, ix0, zone.layers, 0.0, None, copper=False, maps=range(self.track_maps))
+                self._teardrops(zone, d, iy0, iy1, ix0, ix1)
             if zone.no_vias:
                 self._block(d, iy0, ix0, every, 0.0, None, copper=False,
                             maps=range(self.track_maps, len(self.maps)))
@@ -573,6 +574,26 @@ class Router:
                 for m in range(len(self.maps)):
                     self.hard[m][:, outside] += 1
         self._spokes()
+
+    def _teardrops(self, zone, d, iy0, iy1, ix0, ix1):
+        """KiCad widens a track to a teardrop where it leaves a pad that has them, and checks the
+        teardrop against keep-outs: within a teardrop's length of such a pad, a track's centre
+        stays a teardrop half width off a no-tracks area (``d``: its distance field)."""
+        X, Y = self.xs[None, ix0:ix1], self.ys[iy0:iy1, None]
+        for pad in self.board.pads:
+            on = [layer for layer in zone.layers if layer in pad.layers]
+            if not (pad.teardrop and on):
+                continue
+            half, length = pad.teardrop
+            reach = _pad_reach(pad) + length
+            if not (X[0, 0] - reach < pad.x < X[0, -1] + reach and Y[0, 0] - reach < pad.y < Y[-1, 0] + reach):
+                continue
+            rim = _pad_sdf(pad, X, Y)
+            iy, ix = np.nonzero((d < half + self.margin) & (rim >= 0) & (rim < length))
+            flat = (iy + iy0) * self.W + ix + ix0
+            for m in range(self.track_maps):
+                for layer in on:
+                    self.hardf[m][layer * self.HW + flat] += 1
 
     def _static_pad(self, index, pad, own):
         """Fixed copper of one pad: blocked for other nets (into ``own``), its route-end cells, no-via area."""
@@ -1757,8 +1778,18 @@ class Router:
         return False
 
     def _occupancy(self):
-        """Per map: flat array of 1 + the index (in ``self.order``) of the net whose centre line is there."""
+        """Per map: flat array of 1 + the index (in ``self.order``) of the net whose centre line is there;
+        negative on map 0 where a smallest probe fits in copper the engine fixed (trunks, escape vias)."""
         occ = [np.zeros(self.L * self.HW, np.int16) for _ in self.maps]
+        rank = {net.name: i for i, net in enumerate(self.order, 1)}
+        for k in self.virtual:
+            pad = self.board.pads[k]
+            for shape in pad.shapes if pad.net in rank else ():
+                a, b, width = (((pad.x + shape[1], pad.y + shape[2]), (pad.x + shape[3], pad.y + shape[4]), shape[5])
+                               if shape[0] == "line" else ((pad.x, pad.y), (pad.x, pad.y), shape[3]))
+                disk = self._disk(max(width / 2 - self.maps[0][0], 1e-6))
+                for layer in pad.layers:
+                    occ[0][(self._link_cells(layer, a, b)[:, None] + disk[None, :]).ravel()] = -rank[pad.net]
         for i, net in enumerate(self.order, 1):
             for index, path in enumerate(net.paths):
                 occ[net.neck if index in net.necks else net.t][path] = i
@@ -1824,8 +1855,9 @@ class Router:
                 occ, drawn, index = self._occupancy(), {}, {net.name: i for i, net in enumerate(self.order, 1)}
                 cuts, whole = [], {}
                 for other, at, _, corridors in self.corridors:
+                    mine = index.get(other.net, 0)
                     cuts.append([{int(i) for m, band in enumerate(bands) for i in np.unique(occ[m][band])}
-                                 - {0, index.get(other.net)} for bands, _ in corridors])
+                                 - {0, mine, -mine} for bands, _ in corridors])
                     whole.setdefault((other.net, at), []).extend(
                         axis for (_, axis), c in zip(corridors, cuts[-1]) if not c)
             name, cut = pad.net, cuts[k]
@@ -1837,7 +1869,10 @@ class Router:
                 drawn[(name, layer)] = [(a, b) for at, a, b, _ in self.geometry(self.nets[name])[0] if at == layer]
             if uncut + self._own_spokes(pad, layer, gap, drawn[(name, layer)], whole[(name, layer)]) >= need:
                 continue
-            chosen = sorted(range(len(group)), key=lambda i: len(cut[i]))[:need]
+            # A corridor that fixed copper (a pair's trunk) cuts stays cut: no re-route clears it.
+            chosen = sorted(range(len(group)), key=lambda i: (min(cut[i], default=0) < 0, len(cut[i])))[:need]
+            if any(min(cut[i], default=0) < 0 for i in chosen):
+                continue
             nets = [self.order[i - 1] for i in sorted(set().union(*(cut[i] for i in chosen)))]
             reserved = [(m, band) for i in chosen for m, band in enumerate(group[i][0])]
             saved, before, jogs = [self._state(net) for net in nets], sum(n.failed for n in self.order), self._jogs(nets)

@@ -290,3 +290,22 @@ def test_walled_in_ball_escapes_by_an_exact_track_to_a_same_net_ball(tmp_path):
     segments, _ = router.geometry(router.nets["G"])
     assert (0, (6 - p, 6 + p), (6.0, 6.0), 0.15) in [(s[0], tuple(map(lambda v: round(v, 6), s[1])), s[2], s[3])
                                                      for s in segments]
+
+
+def test_track_leaves_a_teardrop_pad_a_teardrop_half_width_off_a_keepout(tmp_path):
+    keepout = ('(zone (layers "F.Cu") (keepout (tracks not_allowed) (vias allowed) (copperpour allowed)) '
+               '(polygon (pts (xy 3 6.7) (xy 7 6.7) (xy 7 11) (xy 3 11))))')
+    teardrop = '(teardrops (best_length_ratio 0.5) (max_length 1) (best_width_ratio 1) (max_width 2) (enabled yes))'
+    pad = ('(footprint "T" (layer "F.Cu") (at 5 6) (property "Reference" "T1") '
+           f'(pad "1" smd rect (at 0 0) (size 1.2 1.2) (layers "F.Cu") (net "A") {teardrop}))')
+    board = _board(tmp_path, keepout + pad + _pad("A2", 15, 8, "A"))
+    assert board.pads[0].teardrop == (0.6, 0.6) and board.pads[1].teardrop == ()
+    router = route_board(board, Options())
+    assert router.report()["unrouted"] == 0
+    # KiCad grows a 1.2 mm wide teardrop where the track leaves T1 and checks it against the keep-out:
+    # within its 0.6 mm length the centre line keeps about 0.6 mm off (the bare track would hug it).
+    for _, p, q, _ in router.geometry(router.nets["A"])[0]:
+        for t in (i / 50 for i in range(51)):
+            x, y = p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])
+            rim = math.hypot(max(abs(x - 5) - 0.6, 0), max(abs(y - 6) - 0.6, 0))
+            assert not 0 < rim < 0.6 or 6.7 - y >= 0.5
