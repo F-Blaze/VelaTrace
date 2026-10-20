@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import unittest
 
-from velatrace.audit_rules import check_return_plane, check_return_vias, run_rules
+from velatrace.audit_rules import check_return_plane, check_return_vias, run_heavy
 from velatrace.copper import BoardCopper, FilledZone, Segment, Via, read_copper_file
 from velatrace.findings import Severity
 from velatrace.models import Component, DesignSnapshot, Pin
@@ -95,10 +95,10 @@ class ReturnViaTests(unittest.TestCase):
         self.assertEqual(check_return_plane(snapshot) + check_return_vias(snapshot), [])
 
     def test_rules_run_as_info(self):
-        findings = run_rules(snap(four_layer()), providers=())
+        findings = run_heavy(snap(four_layer()), providers=())
         rules = {f.rule: f.severity for f in findings if f.rule.startswith("hs.return")}
         self.assertEqual(rules, {"hs.return.via": Severity.INFO})
-        findings = run_rules(snap(two_layer("unreferenced")), providers=())
+        findings = run_heavy(snap(two_layer("unreferenced")), providers=())
         self.assertIn(("hs.return.no_plane", Severity.INFO), {(f.rule, f.severity) for f in findings})
 
 

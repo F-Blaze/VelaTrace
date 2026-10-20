@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from .audit import AuditSession, AuditStage, require_connectivity
-from .audit_rules import run_rules, summarize
+from .audit_rules import run_heavy, run_rules, summarize
 from .bom import bom_findings
 from .candidate import SafeCandidateValidator, canonical, project_context, trusted_via_catalog
 from .constraints import Constraint, ConstraintStore, Scope, propose_constraint
@@ -592,6 +592,7 @@ class MainWindow(QMainWindow):
         # The audit's own design read; self.snapshot belongs to routing.
         self.audit_snapshot: DesignSnapshot | None = None
         self.findings: list[Finding] = []
+        self.heavy_findings: list[Finding] | None = None  # None until "Run heavy checks" has run
         self.worker = None
         self.executor = Worker(self)
         self.executor.usage.connect(self.update_usage)
@@ -679,6 +680,10 @@ class MainWindow(QMainWindow):
         self.load_button.setObjectName("primary")
         self.load_button.clicked.connect(self.load_design)
         source.addWidget(self.load_button)
+        self.heavy_button = tip(QPushButton("Run heavy checks"), "Slower checks: high-speed signals (and part "
+                                "footprints, coming). Reads the routed copper.")
+        self.heavy_button.clicked.connect(self.run_heavy_checks)
+        source.addWidget(self.heavy_button)
         self.restart_button = tip(QPushButton("Reset"), "Clear findings, annotations and the AI review")
         self.restart_button.clicked.connect(self.restart_audit)
         source.addWidget(self.restart_button)
@@ -909,6 +914,8 @@ class MainWindow(QMainWindow):
              "Finish the AI review first." if stage != AuditStage.CLASSIFIED else
              "No flagged parts." if not self.audit.flags else "")
         gate(self.report_button, "Check a design first." if self.audit_snapshot is None else "")
+        gate(self.heavy_button, "Not available in the demo." if self.demo else "Busy." if busy else
+             "Check the open PCB first." if self.audit_snapshot is None or self.reader is None else "")
         gate(self.annotations, "Not available in the demo." if self.demo else
              "Finish the AI review first." if stage != AuditStage.CLASSIFIED else
              "Needs the open PCB." if self.safety is None else "")
@@ -946,7 +953,8 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            save_report(path, render_report(self.audit_snapshot, list(self.findings), version=__version__))
+            save_report(path, render_report(self.audit_snapshot, list(self.findings), version=__version__,
+                                                  heavy=self.heavy_findings))
         except OSError as exc:
             self.show_error(f"Could not save report: {exc}")
             return
@@ -1111,7 +1119,7 @@ class MainWindow(QMainWindow):
         self.render_cards()
 
     def show_findings_summary(self):
-        self.totals.setText(summarize(self.findings) if self.audit_snapshot else "")
+        self.totals.setText(summarize(self.findings + (self.heavy_findings or [])) if self.audit_snapshot else "")
         self.totals.setVisible(self.audit_snapshot is not None)
 
     def load_design(self):
@@ -1130,7 +1138,7 @@ class MainWindow(QMainWindow):
             reader = safety = None
             if choice == 0:
                 reader = KiCadReader.connect()
-                snapshot = reader.read_board(copper=True)
+                snapshot = reader.read_board()  # light: no routed copper (see run_heavy_checks)
                 if snapshot.path:
                     safety = BoardSafety(reader.client.get_board(), snapshot.path, journal_dir=self.config_dir / "journals")
             elif choice == 1:
@@ -1145,6 +1153,7 @@ class MainWindow(QMainWindow):
             return snapshot, self.check_design(snapshot), reader, safety
         def success(value):
             self.audit_snapshot, self.findings, self.reader, self.safety = value
+            self.heavy_findings = None
             self.apply_theme(self.theme.currentText())
             self.pricing = self.routing = None
             self.ticket = None
@@ -1155,12 +1164,25 @@ class MainWindow(QMainWindow):
             self.reset_ai()
         self.run_work("Checking design", operation, success)
 
+    def run_heavy_checks(self):
+        """Re-read the open board with its routed copper and run the slower checks."""
+        def operation(_):
+            snapshot = KiCadReader.connect().read_board(copper=True)
+            if snapshot.path != self.audit_snapshot.path:
+                raise ValidationError("The open board changed. Run Check design again.")
+            return run_heavy(replace(snapshot, components=tuple(c for c in snapshot.components if c.nets)))
+        def success(value):
+            self.heavy_findings = value
+            self.show_findings_summary()
+            self.render_cards()
+        self.run_work("Running heavy checks", operation, success)
+
     def restart_audit(self):
         def operation(_):
             if self.safety:
                 self.safety.clear_preview()
         def done(_):
-            self.audit_snapshot, self.findings = None, []
+            self.audit_snapshot, self.findings, self.heavy_findings = None, [], None
             self.audit_step.setText(READY_STEP)
             self.audit_step.setToolTip("")
             self.reset_ai()
@@ -1282,21 +1304,24 @@ class MainWindow(QMainWindow):
         self.finding_cards = []
 
     def render_findings(self):
-        if not self.findings:
-            self.card_layout.addWidget(label("No issues found.", muted=True))
-            return
         locate = self.zoom_to_part if self.can_zoom() else None
-        for severity, heading in SEVERITY_GROUPS:
-            rows = [item for item in self.findings if item.severity == severity]
-            if not rows:
+        for title, findings in (("Light checks", self.findings), ("Heavy checks", self.heavy_findings)):
+            if findings is None:
                 continue
-            header = label(f"{heading} · {len(rows)}")
-            header.setStyleSheet(f"color:{SEVERITY_COLORS[severity]}; font-weight:600")
-            self.card_layout.addWidget(header)
-            for finding in rows:
-                card = FindingCard(finding, locate)
-                self.finding_cards.append(card)
-                self.card_layout.addWidget(card)
+            self.card_layout.addWidget(label(title, muted=True))
+            if not findings:
+                self.card_layout.addWidget(label("No issues found.", muted=True))
+            for severity, heading in SEVERITY_GROUPS:
+                rows = [item for item in findings if item.severity == severity]
+                if not rows:
+                    continue
+                header = label(f"{heading} · {len(rows)}")
+                header.setStyleSheet(f"color:{SEVERITY_COLORS[severity]}; font-weight:600")
+                self.card_layout.addWidget(header)
+                for finding in rows:
+                    card = FindingCard(finding, locate)
+                    self.finding_cards.append(card)
+                    self.card_layout.addWidget(card)
 
     def render_cards(self):
         classified = bool(self.audit and self.audit.stage == AuditStage.CLASSIFIED)

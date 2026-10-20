@@ -758,6 +758,60 @@ class SetupUsabilityTests(unittest.TestCase):
         self.assertTrue(window.next_button.isEnabled())
         self.assertFalse(window.price_button.isVisibleTo(window))
 
+    def open_board_audit(self, window):
+        """Check design against a fake open board; returns the recorded read_board(copper=...) calls."""
+        from velatrace import ui
+        from velatrace.models import DesignSnapshot, Pin
+        parts = (Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"))),)
+        calls = []
+        def read_board(copper=False):
+            calls.append(copper)
+            return DesignSnapshot(parts, "board")
+        reader = SimpleNamespace(read_board=read_board, version=(10, 0, 6))
+        window.source.setCurrentIndex(0)
+        with patch.object(ui.KiCadReader, "connect", return_value=reader):
+            window.load_design()
+            self.settle(window)
+        return calls, reader
+
+    def heading_texts(self, window):
+        from PySide6.QtWidgets import QLabel
+        return [item.text() for item in window.card_container.findChildren(QLabel)]
+
+    def test_check_design_reads_light_and_heavy_button_needs_a_board_audit(self):
+        window = self.launch()
+        self.assertFalse(window.heavy_button.isEnabled())
+        self.read_fixture(window)  # netlist source
+        self.assertFalse(window.heavy_button.isEnabled())
+        calls, _ = self.open_board_audit(window)
+        self.assertEqual(calls, [False])
+        self.assertTrue(window.heavy_button.isEnabled())
+        self.assertIsNone(window.heavy_findings)
+        self.assertIn("Light checks", self.heading_texts(window))
+        self.assertNotIn("Heavy checks", self.heading_texts(window))
+
+    def test_heavy_checks_render_under_their_own_heading_and_reset_on_recheck(self):
+        from velatrace import ui
+        from velatrace.findings import Finding, Severity
+        window = self.launch()
+        calls, reader = self.open_board_audit(window)
+        window.audit_snapshot = replace(window.audit_snapshot, path=None)
+        for found, expected in (([Finding("hs.pair.skew", Severity.INFO, "Pair skew", ("U1",))], "Pair skew"),
+                                ([], "No issues found.")):
+            with patch.object(ui.KiCadReader, "connect", return_value=reader),                     patch("velatrace.ui.run_heavy", return_value=found):
+                window.heavy_button.click()
+                self.settle(window)
+            self.assertEqual(calls[-1], True)
+            texts = self.heading_texts(window)
+            self.assertEqual(window.heavy_findings, found)
+            self.assertLess(texts.index("Light checks"), texts.index("Heavy checks"))
+            self.assertIn(expected, texts[texts.index("Heavy checks"):] + [card.finding.title for card in window.finding_cards])
+        with patch.object(ui.KiCadReader, "connect", return_value=reader):
+            window.load_design()
+            self.settle(window)
+        self.assertIsNone(window.heavy_findings)
+        self.assertNotIn("Heavy checks", self.heading_texts(window))
+
     def test_logos_with_duplicate_refs_do_not_block_the_checks(self):
         from velatrace.models import DesignSnapshot, Pin
         parts = (Component("REF**", "LOGO", "Symbol:Logo", ()), Component("REF**", "LOGO", "Symbol:Logo", ()),
