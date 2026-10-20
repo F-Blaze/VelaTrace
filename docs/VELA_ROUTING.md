@@ -399,6 +399,19 @@ the budget now), as do the shorter times (2603 s vs 4913 s in total; A-only
 2872 s). bms seed 7 leaves 1 open with the step-2 engine too. Smoke (demo,
 practice, Prod_v2): all accepted.
 
+Step 4 (measured 2026-10-19, 13 boards x seeds 1/4/7, 600 s, same harness):
+tracks leaving a teardrop pad keep a teardrop half width off no-track keep-outs
+(KiCad checks the teardrop, not the track), and thermal relief counts spokes a
+fixed pair trunk cuts as cut. zereader-pico: "items not allowed" gone on all
+seeds; blocking 4/2/3 -> 4/1/1. Its remaining starved thermals are U2 pad 9
+(already on the unrouted board) and J3 SH2 on seed 1, where routing fences the
+spokes' fill into an island (not fixed: a gate/pocket model was tried and
+reverted, its fill estimate gave false pockets). Totals: accepted 21 vs 21,
+unconnected 10 vs 9 (soleil seed 1: the KiCad reconnect round was rolled back),
+blocking 401 vs 406, 2539 s vs 2603 s. bitaxe-ultra stays at 2-3 open: its
+BM1366 QFN pins are walled in by neighbours' jogs; reserved escape lanes were
+tried (4/4 open, regressions elsewhere) and reverted.
+
 ### Known limits
 
 - Coupled pairs: one layer per trunk, no paired vias inside the trunk, no
