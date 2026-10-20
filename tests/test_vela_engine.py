@@ -247,3 +247,46 @@ def test_meander_matches_delay_without_breaking_clearance(tmp_path):
     assert pair["skew_ps_before"] > 20 and pair["meanders"] > 0 and pair["skew_ps"] <= 1.0
     assert not any(router._in_conflict(net) for net in router.order)
     _clear(router, ("D+", "D-", "N"), 0.2)
+
+
+def test_custom_rules_resolve_in_kicad_order_and_list_what_is_not_modelled(tmp_path):
+    (tmp_path / "board.kicad_dru").write_text(
+        '(version 1)\n# a comment\n'
+        '(rule "hv" (constraint clearance (min 0.5mm)) (constraint track_width (min 0.3mm) (opt 0.4mm))\n'
+        '  (condition "A.NetClass == \'Default\' && A.NetName == \'H*\'"))\n'
+        '(rule "later wins" (constraint track_width (min 0.25mm) (opt 0.35mm)) (condition "A.NetName == \'HV\'"))\n'
+        '(rule "pair" (constraint clearance (min 0.8mm)) (condition "A.NetName == \'HV\' && B.NetName == \'SIG\'"))\n'
+        '(rule "area" (constraint disallow via) (condition "A.intersectsArea(\'NOVIA\')"))\n'
+        '(rule "plated" (constraint clearance (min 1mm)) (condition "A.isPlated()"))\n', encoding="utf-8")
+    area = ('(zone (name "NOVIA") (layers "F.Cu" "B.Cu") (keepout (tracks allowed) (vias allowed) (copperpour allowed)) '
+            '(polygon (pts (xy 8 0) (xy 12 0) (xy 12 12) (xy 8 12))))')
+    board = _board(tmp_path, area + _pad("H1", 3, 6, "HV") + _pad("H2", 17, 6, "HV")
+                   + _pad("S1", 10, 2, "SIG") + _pad("S2", 10, 10, "SIG"))
+    hv, sig = board.netclass("HV"), board.netclass("SIG")
+    # Later rule wins on width; the pair rule is only known for one side, so it is kept net-wide.
+    assert (hv.width, hv.min_width, hv.clearance) == (0.35, 0.25, 0.8) and (sig.width, sig.clearance) == (0.2, 0.2)
+    keepout = board.zones[-1]
+    assert keepout.no_vias and not keepout.no_tracks and keepout.points == board.zones[0].points
+    assert any("'plated'" in note and "not applied" in note for note in board.notes)
+    assert any("'pair'" in note for note in board.notes)
+    router = route_board(board, Options())
+    segments, vias = router.geometry(router.nets["HV"])
+    vias += router.geometry(router.nets["SIG"])[1]
+    assert router.report()["unrouted"] == 0 and {s[3] for s in segments} == {0.35}
+    assert vias and not any(8 < x < 12 for x, _ in vias)
+
+
+def test_walled_in_ball_escapes_by_an_exact_track_to_a_same_net_ball(tmp_path):
+    # 3x3 array at 0.57 mm: the centre ball fits a 0.15 mm track past its neighbours by 5 um,
+    # less than the grid's keep-off margin, so only the exactly checked escape gets it out.
+    p, nets = 0.57, ["N1", "N2", "N3", "N4", "G", "N5", "G", "N6", "N7"]
+    balls = "".join(f'(pad "{"ABC"[k // 3]}{k % 3 + 1}" smd circle (at {(k % 3 - 1) * p:g} {(k // 3 - 1) * p:g}) '
+                    f'(size 0.245 0.245) (layers "F.Cu") (net "{net}"))' for k, net in enumerate(nets))
+    board = _board(tmp_path, f'(footprint "BGA" (layer "F.Cu") (at 6 6) (property "Reference" "U1") {balls})'
+                   + _pad("J1", 15, 6, "G"))
+    router = route_board(board, Options())
+    report = router.report()
+    assert report["notes"] == ["escape U1.B2: 0.15 mm track to U1.C1"] and report["unrouted"] == 0
+    segments, _ = router.geometry(router.nets["G"])
+    assert (0, (6 - p, 6 + p), (6.0, 6.0), 0.15) in [(s[0], tuple(map(lambda v: round(v, 6), s[1])), s[2], s[3])
+                                                     for s in segments]

@@ -26,7 +26,7 @@ import numpy as np
 from .candidate import CopperItem
 from .errors import RoutingCancelled
 from .stackup import homogeneous_delay_ps
-from .vela_board import Board, Pad
+from .vela_board import Board, Pad, _rot
 from .vela_electrical import differential_pairs, layer_models
 
 _SQRT2 = math.sqrt(2)
@@ -374,6 +374,8 @@ class Router:
                 self._block(d, iy0, ix0, (board.layers.index(box.layer),), 0.0, None)
         self._planes()
         self._electrical()
+        self.virtual, self.trunks, self.escapes = set(), {}, []   # fixed copper the engine adds
+        self._escape()
         self._couple()
 
     def _stop_if_cancelled(self):
@@ -404,8 +406,9 @@ class Router:
             # breakout must still find its own track inside the partner's keep-off band.
             gap = max(a.diff_pair_gap, b.diff_pair_gap, clearance + 0.02 + max(0.0, (max(a.width, b.width) - width) / 2))
             self.couples[pair] = (width, gap, clearance)
+        necked = [c for c in classes.values() if c.width > neck + 1e-9 and c.min_width <= neck + 1e-9]
         tracks = sorted({(c.width, c.clearance) for c in classes.values()}
-                        | {(neck, c.clearance) for c in classes.values() if c.width > neck + 1e-9}
+                        | {(neck, c.clearance) for c in necked}
                         | {(2 * w + g, c) for w, g, c in self.couples.values()} or {(0.2, 0.2)})
         # A pair's centreline is searched on a virtual class as wide as both tracks and their gap.
         self.couples = {pair: (w, g, c, tracks.index((2 * w + g, c))) for pair, (w, g, c) in self.couples.items()}
@@ -419,7 +422,7 @@ class Router:
             c = classes[name]
             self.nets[name] = _Net(name, c, tracks.index((c.width, c.clearance)),
                                    len(tracks) + vias.index((c.via_diameter, c.clearance)), pads,
-                                   neck=tracks.index((neck, c.clearance)) if c.width > neck + 1e-9 else None)
+                                   neck=tracks.index((neck, c.clearance)) if c in necked else None)
         # Reach and grid border as without pairs; a trunk is checked exactly (_link_clear) anyway.
         plain = [(e, c) for m, (e, c) in enumerate(self.maps) if m not in {k[3] for k in self.couples.values()}
                  or (2 * e, c) in {(n.cls.width, n.cls.clearance) for n in self.nets.values()}]
@@ -723,6 +726,122 @@ class Router:
         self.base = np.array([d / fastest for d in delay])
         self.via_delay_ps = homogeneous_delay_ps(board.thickness, sum(m.epsilon_r for m in self.models) / self.L)
 
+    # ---- area-array escape ---------------------------------------------------
+    def _escape(self):
+        """Under-pad escape of ball arrays (idea from KiCadRoutingTools' BGA under-pad fanout).
+
+        An inner ball that the grid cannot lead out on its own layer, neither past the outer
+        balls nor to room for a via, gets fixed copper before routing, each piece checked
+        exactly: a straight track to a same-net ball that is not walled in, else a via in the
+        pad, else a dog-bone via on a diagonal between balls. The grid's keep-off margin walls
+        off gaps that are legal by a few microns; these escapes still use them.
+
+        ponytail: arrays on a plain square pitch only, and straight escapes; staggered arrays
+        and lane planning (which ball takes which channel) would need the full fanout.
+        """
+        board, by_ref = self.board, {}
+        for index, pad in enumerate(board.pads):
+            if pad.ref and pad.net in self.nets and not pad.drill and len(pad.layers) == 1:
+                by_ref.setdefault(pad.ref, []).append(index)
+        for ref, indexes in by_ref.items():
+            if len(indexes) < 8:
+                continue
+            angle = board.pads[indexes[0]].angle
+            local = np.array([_rot(board.pads[i].x, board.pads[i].y, -angle) for i in indexes])
+            gaps = np.hypot(*(local[:, None, :] - local[None, :, :]).transpose(2, 0, 1))
+            np.fill_diagonal(gaps, np.inf)
+            pitch = float(gaps.min())
+            spots = (local - local.min(0)) / max(pitch, 0.3)
+            cols, rows = np.rint(spots).max(0) + 1
+            if (pitch < 0.3 or np.abs(spots - np.rint(spots)).max() > 0.05 or min(rows, cols) < 3
+                    or len(indexes) < 0.5 * rows * cols):
+                continue   # not an area array: a QFN, a connector, an odd pattern
+            xs, ys = [board.pads[i].x for i in indexes], [board.pads[i].y for i in indexes]
+            box = self._window_of(min(xs), min(ys), max(xs), max(ys), pitch)
+            spot = {i: tuple(np.rint(xy).astype(int)) for i, xy in zip(indexes, spots)}
+            inner = [i for i in indexes if 0 < spot[i][0] < cols - 1 and 0 < spot[i][1] < rows - 1]
+            walled = {i for i in inner if len(self.nets[board.pads[i].net].pads) > 1 and self._walled_in(i, box)}
+            u, v = _rot(pitch / 2, 0, angle), _rot(0, pitch / 2, angle)
+            for i in sorted(walled):
+                pad, net = board.pads[i], self.nets[board.pads[i].net]
+                found = self._escape_ball(net, pad, [j for j in indexes if j not in walled and board.pads[j].net == pad.net
+                                                     and math.dist(spot[i], spot[j]) < 1.5], u, v)
+                self.escapes.append(f"escape {ref}.{pad.number}: {found or 'none fits'}")
+                self._say(self.escapes[-1])
+
+    def _walled_in(self, index, box):
+        """Whether the grid can lead a pad neither out of ``box`` (y0, y1, x0, x1) on its own
+        layer nor to a cell where a via of its net fits."""
+        net, layer, (y0, y1, x0, x1) = self.nets[self.board.pads[index].net], self.board.pads[index].layers[0], box
+
+        def free(k):
+            hard = self.hard[k][:, y0:y1, x0:x1].astype(np.int32)
+            ls, iy, ix = np.unravel_index(self.own[net.name][k], (self.L, self.H, self.W))
+            keep = (iy >= y0) & (iy < y1) & (ix >= x0) & (ix < x1)
+            np.subtract.at(hard, (ls[keep], iy[keep] - y0, ix[keep] - x0), 1)   # the net's own copper is free
+            return hard <= 0
+        track = free(net.t if net.neck is None else net.neck)[layer]
+        via = free(net.v).all(0) & ~self.smd[y0:y1, x0:x1]
+        reach = np.zeros_like(track)
+        iy, ix = np.divmod(self.pad_cells[index], self.W)
+        reach[iy - y0, ix - x0] = True
+        while not (reach[[0, -1]].any() or reach[:, [0, -1]].any() or (reach & via).any()):
+            grown = reach.copy()   # one step in all eight directions
+            grown[1:] |= reach[:-1]
+            grown[:-1] |= reach[1:]
+            grown[:, 1:] |= grown[:, :-1].copy()
+            grown[:, :-1] |= grown[:, 1:].copy()
+            grown &= track
+            if (grown == reach).all():
+                return True
+            reach = grown
+        return False
+
+    def _escape_ball(self, net, pad, mates, u, v):
+        """Fixed copper that leads a walled-in ball out; returns what was laid, or None."""
+        layer, centre = pad.layers[0], (pad.x, pad.y)
+        widths = sorted({net.cls.width, max(self.neck_width, net.cls.min_width)}, reverse=True)
+        for j in sorted(mates, key=lambda j: math.dist(centre, (self.board.pads[j].x, self.board.pads[j].y))):
+            mate = self.board.pads[j]
+            for width in widths:
+                if self._link_clear(net, layer, centre, (mate.x, mate.y), width, routed=False):
+                    self._add_trunk(net.name, [centre, (mate.x, mate.y)], layer, width)
+                    return f"{width:g} mm track to {mate.ref}.{mate.number}"
+        size = net.cls.via_diameter
+        if self._via_clear(net, *centre):
+            self._add_via(net, *centre)
+            return f"{size:g} mm via in pad"
+        for sx, sy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+            site = (pad.x + sx * u[0] + sy * v[0], pad.y + sx * u[1] + sy * v[1])
+            for width in widths:
+                if self._via_clear(net, *site) and self._link_clear(net, layer, centre, site, width, routed=False):
+                    self._add_via(net, *site)
+                    self._add_trunk(net.name, [centre, site], layer, width)
+                    return f"{size:g} mm dog-bone via, {width:g} mm track"
+        return None
+
+    def _add_via(self, net, x, y):
+        size = net.cls.via_diameter
+        self._fix(Pad("", "escape", net.name, x, y, 0.0, (("rrect", 0.0, 0.0, size, size, size / 2),),
+                      tuple(range(self.L)), net.cls.via_drill))
+
+    def _via_clear(self, net, x, y):
+        """Exact check of a via of the net's class at (x, y): copper, hole and keep-out rules."""
+        board, size, drill = self.board, net.cls.via_diameter, net.cls.via_drill
+        if not all(self._link_clear(net, layer, (x, y), (x, y), size, routed=False) for layer in range(self.L)):
+            return False
+        hole = board.rules.get("min_hole_clearance", 0) or 0.25   # as _static_pad
+        for pad in board.pads:
+            far = math.hypot(pad.x - x, pad.y - y)
+            if far > _pad_reach(pad) + size + 1.0:
+                continue
+            if pad.drill and far < (pad.drill + drill) / 2 + self.hole_to_hole:
+                return False
+            if pad.net != net.name and pad.layers and float(_pad_sdf(pad, np.array(x), np.array(y))) < drill / 2 + hole:
+                return False
+        return not any(not zone.net and zone.no_vias and float(_poly_sdf(zone.points, np.array(x), np.array(y))) < size / 2
+                       for zone in board.zones)
+
     # ---- differential pairs --------------------------------------------------
     def _couple(self):
         """Coupled trunk of each differential pair (idea from KiCadRoutingTools: centreline plus offset).
@@ -733,7 +852,7 @@ class Router:
         (the uncoupled breakout, vias allowed). The first trunk whose breakouts route on an empty
         board is kept; a pair without one routes as two single nets.
         """
-        self.virtual, self.coupled, self.trunks, self.tuning = set(), {}, {}, {}
+        self.coupled, self.tuning = {}, {}
         for pair, (w, g, c, m) in self.couples.items():
             if pair in self.opt.skip_pairs:
                 self.coupled[pair] = {"coupled": False, "reason": "its trunk gave way in a first try; routed as two nets"}
@@ -766,8 +885,12 @@ class Router:
         """One track of a trunk as fixed copper (a pad) of net ``name``; returns its pad index."""
         ox, oy = line[len(line) // 2]
         shapes = tuple(("line", x1 - ox, y1 - oy, x2 - ox, y2 - oy, width) for (x1, y1), (x2, y2) in zip(line, line[1:]))
-        index = len(self.board.pads)
-        self.board.pads.append(Pad("", "pair", name, ox, oy, 0.0, shapes, (layer,)))
+        return self._fix(Pad("", "pair", name, ox, oy, 0.0, shapes, (layer,)))
+
+    def _fix(self, pad):
+        """Copper the engine lays down before routing (a trunk track or an escape via) as a pad of its net."""
+        name, index = pad.net, len(self.board.pads)
+        self.board.pads.append(pad)
         own = {name: [[] for _ in self.maps]}
         self._static_pad(index, self.board.pads[index], own)
         self.trunks[index] = []
@@ -2071,7 +2194,7 @@ class Router:
             key=lambda i: math.dist((pa.x, pa.y), (pads[i].x, pads[i].y)))
         options = [(pads[c], layer, width) for c in near if math.dist((pa.x, pa.y), (pads[c].x, pads[c].y)) <= 2.0
                    for layer in pa.layers if layer in pads[c].layers and not self.plane[layer]
-                   for width in sorted({net.cls.width, self.neck_width}, reverse=True)]
+                   for width in sorted({net.cls.width, max(self.neck_width, net.cls.min_width)}, reverse=True)]
 
         def add(link):
             net.links.append(link)
@@ -2216,8 +2339,11 @@ class Router:
                 previous = cell
         for layer, a, b, width in net.links:
             segments.add((layer, min(a, b), max(a, b), width))
-        for index in self.virtual.intersection(net.pads):   # a pair's coupled trunk
+        for index in self.virtual.intersection(net.pads):   # a pair's coupled trunk, an escape
             pad = self.board.pads[index]
+            if pad.drill:
+                vias.add((round(pad.x, 6), round(pad.y, 6)))
+                continue
             for _, x1, y1, x2, y2, width in pad.shapes:
                 a, b = (round(pad.x + x1, 6), round(pad.y + y1, 6)), (round(pad.x + x2, 6), round(pad.y + y2, 6))
                 segments.add((pad.layers[0], min(a, b), max(a, b), width))
@@ -2296,7 +2422,7 @@ class Router:
                 "completion_pct": round(100 * (total - failed) / total, 1) if total else 100.0,
                 "vias": sum(n["vias"] for n in nets.values()),
                 "length_mm": round(sum(sum(n["length_mm"].values()) for n in nets.values()), 1),
-                "nets": nets}
+                "nets": nets, "notes": list(self.board.notes) + self.escapes}
 
 
 def _kicad_item(description, x, y):
@@ -2420,7 +2546,7 @@ def main(argv=None):
         routed, text = kicad_check(router, cli, args.board.name, [args.board.with_suffix(suffix) for suffix in
                                                                  (".kicad_pro", ".kicad_dru")], args.kicad_rounds)
     report = router.report()
-    report["notes"] = notes
+    report["notes"] += notes
     folders = {name: args.out / name for name in ("routed", "baseline")}
     for name, folder in folders.items():
         folder.mkdir(parents=True, exist_ok=False)

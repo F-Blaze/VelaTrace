@@ -349,14 +349,67 @@ KRT code is used and no design rule is loosened.
   length and % of the routed length, skew in ps and mm before and after tuning,
   meander count, and the reason when a pair routes as two nets.
 
+### Custom rules and BGA escape, 2026-10-19
+
+Ideas from KiCadRoutingTools 0.23.1 (MIT, (c) 2026 drandyhaas): reading the
+routing subset of `.kicad_dru` in KiCad's order and listing what is not modelled
+(`kicad_dru.py`, `design_rules.py`), and under-pad escape of dense ball arrays
+(`bga_fanout/underpad.py`). Re-implemented in Vela's own design; no KRT code is
+used.
+
+- **Custom rules** (`vela_board._custom_rules`). Constraints `clearance`,
+  `track_width`, `via_diameter`, `hole_size`, `hole_clearance`, `edge_clearance`
+  and `disallow` (track, via, through_via). Conditions: `NetClass`, `NetName`
+  (case-blind, `*`/`?` wildcards), `hasNetclass()`, `Type`, `Pad_Type`,
+  `Via_Type`, `&&`, `||`, `!`, A/B, the `(layer ...)` clause and
+  `intersectsArea`/`insideArea`/`enclosedByArea` on named rule areas. As in
+  KiCad the last matching rule wins; a pad or footprint clearance still applies
+  on top. A condition is evaluated per net as true, false or "depends" (on the
+  layer, an area or the other item B); a "depends" rule is applied net-wide on
+  the safe side (higher clearance, width clamped to its min/max) and noted.
+  Clearances are only ever raised, because VelaTrace also proves a route under
+  Board Setup rules alone. `disallow` becomes a keep-out over the named rule
+  areas (or the whole board). A per-net minimum width turns off that net's
+  neck-down. Every rule, constraint or condition not modelled (`assertion`,
+  `isPlated()`, net-specific `disallow`, ...) is listed in report.json `notes`.
+  On the bench only soleil and zereader-pico carry a `.kicad_dru` (AISLER's
+  rules); neither changes routing (PTH hole size, no blind/micro vias, a
+  solder-mask `assertion`, which is noted).
+- **BGA escape** (`Router._escape`, before routing). Footprints whose SMD pads
+  sit on a square pitch, at least 3x3 and half filled, are ball arrays. An inner
+  ball is walled in when the grid, flooding its free cells from the ball, gets
+  neither past the outer balls nor to a cell where a via of its net fits. Such a
+  ball gets fixed copper (a pad-like trunk, as for pairs), each piece checked
+  exactly: a straight track to a same-net ball that is not walled in, else a via
+  in the pad, else a dog-bone via on a diagonal between four balls. soleil's
+  0.5 mm DSBGA centre ball (GND) clears its neighbours by 6 um with a 0.15 mm
+  track to the GND corner ball, less than the grid's keep-off margin; it now
+  escapes that way.
+
+Measured with seeds 1, 4 and 7 on all 13 boards, budget 600 s, against the step-2
+engine (runs d1/d4/d7; d1 where a seed was not run). Only soleil changed
+because of this step: 1 open connection on every seed before, 0 after, and one
+`connection width` warning fewer (blocking 16/16/15; all other blockers are
+courtyard and silk errors already on the unrouted board, so soleil is still not
+accepted). Totals over 39 runs: accepted 21 vs 21, unconnected 9 vs 20,
+blocking 406 vs 407. The rest of the unconnected drop is bitaxe-ultra (8 vs 17),
+which an A-only run with identical inputs also reached (12 in total): it comes
+from the baseline having been run on a busier machine (more re-route tries fit
+the budget now), as do the shorter times (2603 s vs 4913 s in total; A-only
+2872 s). bms seed 7 leaves 1 open with the step-2 engine too. Smoke (demo,
+practice, Prod_v2): all accepted.
+
 ### Known limits
 
 - Coupled pairs: one layer per trunk, no paired vias inside the trunk, no
   polarity swap; pairs that cannot be coupled route as two nets (reported).
   Delay matching covers name-detected pairs only (no length groups), and no
   widths are changed for impedance.
-- Through vias only. No blind, buried or micro vias, no BGA fanout patterns.
-- Custom rule files (`.kicad_dru`), footprint copper text, teardrops and
+- Through vias only. No blind, buried or micro vias. BGA escape covers walled-in
+  inner balls of square-pitch arrays only (no staggered arrays, no channel or
+  lane planning, escape vias at the class size).
+- Custom rules beyond the subset above (area-specific or pairwise values are
+  applied net-wide on the safe side), footprint copper text, teardrops and
   thermal-relief spokes are not modelled; KiCad DRC catches the misses. Starved
   thermals are the most common new DRC error.
 - A plane that belongs to a net with no second plane never carries signals, which

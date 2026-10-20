@@ -4,8 +4,9 @@ Research input for the native Vela-routing engine (vela_engine). Coordinates are
 KiCad's own: millimetres, Y down. Nothing here writes a board.
 
 Not modelled (KiCad DRC stays the judge): copper text (the runner asks KiCad to
-render it), custom-rule files (.kicad_dru), blind/buried vias, trapezoid/chamfer
-corners (treated as their full rectangle). Existing tracks are obstacles only;
+render it), custom rules beyond the routing subset ``_custom_rules`` reads (each rule
+left out is listed in ``Board.notes``), blind/buried vias, trapezoid/chamfer corners
+(treated as their full rectangle). Existing tracks are obstacles only;
 existing vias are treated as pads of their net, so they get connected.
 """
 from dataclasses import dataclass, field, replace
@@ -13,10 +14,11 @@ from fnmatch import fnmatchcase
 import json
 import math
 from pathlib import Path
+import re
 
 from .candidate import read_board
 from .errors import ValidationError
-from .sexpr import children
+from .sexpr import children, parse
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,7 @@ class Zone:
     connect: str = "thermal"     # how pads join it: thermal, yes (solid), no, thru_hole_only
     thermal_gap: float = 0.5
     spoke_width: float = 0.5
+    name: str = ""               # a rule area's name, for custom-rule conditions
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,7 @@ class NetClass:
     via_drill: float
     diff_pair_width: float = 0.0   # 0 = not set: the track width
     diff_pair_gap: float = 0.0     # 0 = not set: the clearance
+    min_width: float = 0.0         # custom-rule minimum width: no narrower escape (neck)
 
 
 @dataclass
@@ -77,8 +81,12 @@ class Board:
     classes: list[NetClass] = field(default_factory=list)
     patterns: list[tuple[str, str]] = field(default_factory=list)
     thickness: float = 1.6
+    overrides: dict = field(default_factory=dict)   # net -> NetClass with its custom-rule values
+    notes: list = field(default_factory=list)       # custom rules not (fully) modelled
 
     def netclass(self, net: str) -> NetClass:
+        if net in self.overrides:
+            return self.overrides[net]
         by_name = {item.name: item for item in self.classes}
         for pattern, name in self.patterns:
             if name in by_name and (pattern == net or fnmatchcase(net, pattern)):
@@ -230,13 +238,14 @@ def _zones(parent, layers, codes):
         fill = _first(node, "fill") or []
         relief = [_first(fill, key) for key in ("thermal_gap", "thermal_bridge_width")]
         thin = _first(node, "min_thickness")
+        name = _first(node, "name")
         for polygon in children(node, "polygon"):
             points = tuple((_f(xy, 1), _f(xy, 2)) for xy in children(_first(polygon, "pts"), "xy"))
             if len(points) >= 3:
                 yield Zone("" if keepout else _net_name(node, codes), _copper(names, layers), points,
                            flags.get("tracks") == "not_allowed", flags.get("vias") == "not_allowed",
                            flags.get("copperpour") == "not_allowed", _f(gap) if gap else 0.0, _f(thin) if thin else 0.25, mode,
-                           *(_f(value) if value else 0.5 for value in relief))
+                           *(_f(value) if value else 0.5 for value in relief), str(name[1]) if name else "")
 
 
 def load_board(path: Path) -> Board:
@@ -326,6 +335,7 @@ def load_board(path: Path) -> Board:
                               (("rrect", 0.0, 0.0, size, size, size / 2),), tuple(range(len(layers))),
                               _f(_first(node, "drill"))))
     _read_project(board, path.with_suffix(".kicad_pro"))
+    _custom_rules(board, path.with_suffix(".kicad_dru"))
     return board
 
 
@@ -357,3 +367,229 @@ def _read_project(board: Board, project: Path) -> None:
     for item in settings.get("netclass_patterns") or []:
         if item.get("pattern"):
             board.patterns.append((str(item["pattern"]), str(item.get("netclass", "Default"))))
+
+
+# ---- custom rules (.kicad_dru) ------------------------------------------------
+# Idea from KiCadRoutingTools: read the routing subset of KiCad's custom rules, resolve
+# it in KiCad's order, and list what is not modelled instead of ignoring it.
+
+_UNITS = {"mm": 1.0, "mil": 0.0254, "in": 25.4, "um": 0.001}
+_TOKEN = re.compile(r"""\s*('[^']*'|"[^"]*"|&&|\|\||==|!=|[()!,.]|[A-Za-z_]\w*|[-+\d.]+\w*)""")
+# Constraint -> the routed item it sizes (None: tracks and vias alike).
+_KINDS = {"clearance": None, "hole_clearance": None, "edge_clearance": None,
+          "track_width": "Track", "via_diameter": "Via", "hole_size": "Via"}
+
+
+class _Unsupported(ValueError):
+    pass
+
+
+def _length(text):
+    found = re.fullmatch(r"([-+]?[\d.]+)\s*(mm|mil|in|um)?", str(text))
+    return float(found[1]) * _UNITS[found[2] or "mm"] if found else None
+
+
+def _condition(text, item, area=None):
+    """Tri-state value of a rule condition for a net's routed item: True, False, or None when
+    it hangs on what a net-wide value cannot pin down (layer, other item B, area). ``item``:
+    {"net", "class", "type"}, None = unknown. Area tests give ``area``; their names are
+    collected in item["areas"]. Raises _Unsupported for anything else."""
+    tokens, i = [], 0
+    while text[i:].strip():
+        found = _TOKEN.match(text, i)
+        if not found:
+            raise _Unsupported(f"cannot read {text[i:]!r}")
+        tokens.append(found[1])
+        i = found.end()
+    tokens.append("")
+    at = 0
+
+    def take(expected=None):
+        nonlocal at
+        token = tokens[at]
+        if not token or expected is not None and token != expected:
+            raise _Unsupported(f"expected {expected or 'more'} at {token or 'end'!r}")
+        at += 1
+        return token.strip("'\"")
+
+    def tri(values, stop):   # and (stop False) / or (stop True) over True, False, None
+        return stop if stop in values else None if None in values else not stop
+
+    def either():
+        values = [both()]
+        while tokens[at] == "||":
+            take()
+            values.append(both())
+        return tri(values, True)
+
+    def both():
+        values = [one()]
+        while tokens[at] == "&&":
+            take()
+            values.append(one())
+        return tri(values, False)
+
+    def one():
+        if tokens[at] in ("!", "("):
+            if take() == "!":
+                value = one()
+                return None if value is None else not value
+            value = either()
+            take(")")
+            return value
+        side = take()
+        if side not in ("A", "B"):
+            raise _Unsupported(f"unknown item {side!r}")
+        take(".")
+        name = take().lower()
+        if tokens[at] == "(":
+            take()
+            args = []
+            while tokens[at] != ")":
+                args.append(take())
+                if tokens[at] == ",":
+                    take()
+            take(")")
+            if name in ("intersectsarea", "insidearea", "enclosedbyarea") and args:
+                item.setdefault("areas", []).append(args[0])
+                return None if side == "B" else area
+            if name == "hasnetclass" and args:
+                value = item["class"]
+            elif name == "existsonlayer":
+                return None
+            else:
+                raise _Unsupported(f"{name}()")
+            target, equal = args[0], True
+        else:
+            if tokens[at] not in ("==", "!=") or name not in (
+                    "netclass", "netname", "type", "pad_type", "via_type", "layer"):
+                raise _Unsupported(f"{side}.{name}")
+            equal, target = take() == "==", take()
+            kind = item["type"]
+            value = {"netclass": item["class"], "netname": item["net"], "type": kind,
+                     "pad_type": kind and "",   # a track or via is no pad
+                     "via_type": kind and ("Through" if kind == "Via" else "")}.get(name)
+        # KiCad compares strings case-blind, with * and ? wildcards.
+        return None if side == "B" or value is None else fnmatchcase(value.lower(), target.lower()) == equal
+    value = either()
+    if tokens[at]:
+        raise _Unsupported(f"unexpected {tokens[at]!r}")
+    return value
+
+
+def _rule_layers(rule, layers):
+    """Copper layer indexes a rule's (layer ...) clause selects; None = every layer."""
+    clause = _first(rule, "layer")
+    if clause is None:
+        return None
+    name, last = str(clause[1]), len(layers) - 1
+    return {"outer": {0, last}, "inner": set(range(1, last))}.get(name, {layers.index(name)} if name in layers else set())
+
+
+def _custom_rules(board: Board, path: Path) -> None:
+    """Fold the routing subset of a .kicad_dru into per-net classes, board rules and keep-outs.
+
+    As in KiCad the last matching rule wins; a pad or footprint clearance still applies on
+    top (Pad.clearance). A rule that applies to a net only sometimes (a layer, an area, the
+    other item) is applied net-wide where that is the safer side, and noted. Clearances are
+    only ever raised: VelaTrace also proves a route under Board Setup rules alone. ``disallow``
+    of tracks or vias becomes a keep-out over the rule areas it names, or the whole board.
+    """
+    if not path.is_file() or path.stat().st_size > 1_000_000:
+        return
+    text = "\n".join(line for line in path.read_text(encoding="utf-8").splitlines() if not line.lstrip().startswith("#"))
+    try:
+        rules = [node for node in parse(f"(rules {text})", kicad=True)[1:] if node[:1] == ["rule"]]
+    except (ValidationError, IndexError, TypeError) as exc:
+        board.notes.append(f"custom rules not read: {exc}")
+        return
+    layers, r = board.layers, board.rules
+    every = set(range(len(layers)))
+    nets = sorted({pad.net for pad in board.pads if pad.net} | {zone.net for zone in board.zones if zone.net})
+    resolved = {net: {} for net in nets}   # net -> kind -> (value, minimum)
+    notes = []
+    for rule in rules:
+        if any(len(s) > 1 and s[1] == "ignore" for s in children(rule, "severity")):
+            continue
+        condition = _first(rule, "condition")
+        condition = str(condition[1]) if condition else ""
+        on = _rule_layers(rule, layers)
+        for constraint in children(rule, "constraint"):
+            kind = str(constraint[1]) if len(constraint) > 1 else ""
+            limits = {str(c[0]): _length(c[1]) for c in constraint[2:] if isinstance(c, list) and len(c) > 1}
+            low, opt, high = limits.get("min"), limits.get("opt"), limits.get("max")
+            try:
+                if kind == "disallow":
+                    notes += _disallow(board, rule, constraint, condition, on)
+                    continue
+                if kind not in _KINDS:
+                    notes.append(f"custom rule {rule[1]!r}: {kind} is not a routing constraint; KiCad DRC checks it")
+                    continue
+                vague = False
+                for net in nets:
+                    base = board.netclass(net)
+                    applies = _condition(condition, {"net": net, "class": base.name, "type": _KINDS[kind]}) if condition else True
+                    if applies is False or on is not None and not on & every:
+                        continue
+                    if on is not None and not on >= every:
+                        applies = None
+                    vague |= applies is None
+                    start = {"track_width": base.width, "via_diameter": base.via_diameter, "hole_size": base.via_drill}.get(kind)
+                    value, floor = resolved[net].get(kind, (start, 0.0))
+                    if start is None:   # a clearance
+                        value = low if applies else max(value or 0.0, low or 0.0)
+                    elif applies:
+                        value, floor = (opt if opt is not None else min(max(start, low or 0.0), high or math.inf)), low or 0.0
+                    else:
+                        value, floor = min(max(value, low or 0.0), high or math.inf), max(floor, low or 0.0)
+                    resolved[net][kind] = (value, floor)
+                if vague:
+                    notes.append(f"custom rule {rule[1]!r}: {kind} depends on a layer, an area or the other item; "
+                                 "applied net-wide where that is the safer side")
+            except _Unsupported as exc:
+                notes.append(f"custom rule {rule[1]!r}: condition not modelled ({exc}); not applied")
+    for net, values in resolved.items():
+        base = board.netclass(net)
+        drill = max(values.get("hole_size", (base.via_drill,))[0], r["min_through_hole_diameter"])
+        override = replace(
+            base, clearance=max(base.clearance, values.get("clearance", (0.0,))[0] or 0.0),
+            width=max(values.get("track_width", (base.width,))[0], r["min_track_width"]),
+            via_drill=drill, via_diameter=max(values.get("via_diameter", (base.via_diameter,))[0],
+                                              r["min_via_diameter"], drill + 2 * r["min_via_annular_width"]),
+            min_width=values.get("track_width", (0, 0.0))[1])
+        if override != base:
+            board.overrides[net] = override
+        for kind, key in (("hole_clearance", "min_hole_clearance"), ("edge_clearance", "min_copper_edge_clearance")):
+            r[key] = max(r[key], values.get(kind, (0.0,))[0] or 0.0)
+    board.notes.extend(dict.fromkeys(notes))
+
+
+def _disallow(board, rule, constraint, condition, on):
+    """``disallow`` of tracks and/or vias as rule-area keep-outs; returns notes."""
+    kinds = {str(k) for k in constraint[2:]}
+    tracks, vias = "track" in kinds, bool(kinds & {"via", "through_via"})
+    rest = kinds - {"track", "via", "through_via", "micro_via", "buried_via", "blind_via"}
+    notes = [f"custom rule {rule[1]!r}: disallow {' '.join(sorted(rest))} is not routing; KiCad DRC checks it"] if rest else []
+    if not (tracks or vias):
+        return notes   # micro, blind and buried vias: Vela only makes through vias
+    item = {"net": None, "class": None, "type": "Via" if vias and not tracks else "Track" if not vias else None}
+    inside = _condition(condition, item, True) if condition else True
+    names = item.get("areas")
+    outside = _condition(condition, dict(item), False) if names else inside
+    if inside is None or outside is None:
+        return notes + [f"custom rule {rule[1]!r}: disallow depends on the net, layer or item; not modelled"]
+    if not inside:
+        return notes
+    names = None if outside else names   # true outside the areas too: the whole board
+    areas = [zone for zone in board.zones if not zone.net and zone.name in (names or ())]
+    if names and not areas:
+        return notes + [f"custom rule {rule[1]!r}: rule area {names[0]!r} not found; not applied"]
+    if not names:
+        xs = [v for e in board.edges for v in (e[0], e[2])] or [pad.x for pad in board.pads]
+        ys = [v for e in board.edges for v in (e[1], e[3])] or [pad.y for pad in board.pads]
+        areas = [Zone("", tuple(range(len(board.layers))), ((min(xs), min(ys)), (max(xs), min(ys)),
+                                                             (max(xs), max(ys)), (min(xs), max(ys))))]
+    for zone in areas:
+        board.zones.append(Zone("", tuple(sorted(set(zone.layers) & (on if on is not None else set(zone.layers)))),
+                                zone.points, no_tracks=tracks, no_vias=vias, name=f"rule {rule[1]}"))
+    return notes
