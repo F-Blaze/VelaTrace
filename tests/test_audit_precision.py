@@ -268,3 +268,71 @@ def test_pi_header_pullups_with_moderate_hat_pullup_are_fine():
     rtc = ic("U1", ("5", "SDA", "SDA"), value="MCP7940N")
     assert i2c_found(hat, rtc, res("R1", "SDA", "+3V3", "5k1")) == []
     assert i2c_found(hat, rtc, res("R1", "SDA", "+3V3", "1k5")) == [("i2c.pullup.combined", Severity.WARNING)]
+
+
+def test_controller_alone_on_a_breakout_header_has_its_pullups_off_board():
+    mcu = ic("U1", ("5", "SDA", "GPIO21"), value="STM32")
+    breakout = part("J1", "HEADER", "Connector_PinSocket_2.54mm:PinSocket_1x12", ("1", "SDA"), ("2", "PA1"),
+                    ("3", "PA2"), ("4", "PA3"), ("5", "PA4"), ("6", "GND"))
+    assert i2c_found(mcu, breakout) == []
+    i2c_port = part("J2", "I2C", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "SDA"), ("2", "GND"))
+    assert i2c_found(mcu, i2c_port) == [("i2c.pullup.missing", Severity.INFO)]
+
+
+def test_pullup_behind_series_resistor_or_analog_switch_counts():
+    mcu = ic("U1", ("5", "SCL", "GPIO22"), value="AVR")
+    slave = ic("U2", ("3", "SCL", "SCL"), value="SENSOR")
+    assert [f for f, _ in i2c_found(mcu, slave)] == ["i2c.pullup.missing"]
+    # 1k series resistor to a node that has the pull-up (level-shifter MOSFET side)
+    shifted = [res("R1", "SCL", "Net-(Q1-D)", "1k"), res("R2", "Net-(Q1-D)", "+3V3", "10k")]
+    assert i2c_found(mcu, slave, *shifted) == []
+    # a 100k series resistor is not a link
+    assert i2c_found(mcu, slave, res("R1", "SCL", "Net-(Q1-D)", "100k"), shifted[1]) != []
+    # small switch/translator IC joining two SCL nets, pull-up on the far side
+    switch = part("U3", "SN74LVC1G3157", "Package_TO_SOT_SMD:SOT-363", ("1", "SCL_EXT", "B2"), ("2", "GND", "GND"),
+                  ("3", "SCL", "B1"), ("5", "+3V3", "VCC"))
+    far = [res("R3", "SCL_EXT", "+3V3", "4.7k")]
+    assert i2c_found(mcu, slave, switch, *far) == []
+    assert i2c_found(mcu, slave, switch) != []  # no pull-up anywhere: still reported
+
+
+def test_txs_translator_has_internal_pullups_and_odd_named_rail_counts():
+    mcu = ic("U1", ("5", "SDA_1V8", "GPIO22"), value="AVR")
+    txs = part("U6", "TXS0102DQMR", "TXS0102DQ:IC_TXS0102DQMR", ("3", "SDA_1V8", "A2"), ("6", "SDA", "B2"))
+    assert i2c_found(mcu, txs) == []
+    # pull-up to a rail that is not named like a supply but feeds an IC's VDD pin
+    slave = ic("U2", ("3", "SDA", "SDA"), value="SENSOR")
+    sensor_rail = part("U4", "AFE", "Package_QFN:QFN-24", ("1", "FING_V", "VDD"), ("2", "GND", "GND"))
+    assert i2c_found(mcu, slave, res("R1", "SDA", "FING_V"), sensor_rail) == []
+    assert [f for f, _ in i2c_found(mcu, slave, res("R1", "SDA", "FING_V"))] == ["i2c.pullup.missing"]
+
+
+# --- round 2: module rails, board interfaces, unused sideband/debug pins -----------------
+
+def test_dev_board_socket_is_a_module_not_an_ic_to_decouple():
+    kit = lambda footprint: part("U1", "ESP32-DevKitC", footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"))
+    assert decoupling(kit("Package_QFP:LQFP-32")) == [(("U1",), ("+3V3",))]
+    assert decoupling(kit("PCM_Espressif:ESP32-DevKitC")) == []
+    assert decoupling(kit("Vendor:Radio_Module_Castellated")) == []
+
+
+def test_fpc_and_wide_signal_interfaces_are_not_power_entries():
+    load = typed_ic("U1", ("1", "+5V", "VDD", "power_in"))
+    assert connector(load, header("J1", "+5V", "GND")) == [(("J1",), ("+5V",))]
+    assert connector(load, header("J1", "+5V", "GND", footprint="Connector_FFC-FPC:Hirose_FH12-6S")) == []
+    wide = header("J1", "+5V", "GND", *[f"/S{n}" for n in range(12)])
+    assert connector(load, wide) == []
+    assert connector(load, header("J1", "+5V", "GND", *[f"/S{n}" for n in range(8)])) == [(("J1",), ("+5V",))]
+
+
+def test_usbc_sideband_and_debug_or_flag_pins_may_stay_open():
+    usbc = lambda pin: part("J1", "USB_C", "Connector_USB:USB_C", ("A8", "/SBU1", pin), ("A1", "GND"), ("A12", "GND"))
+    assert [f.rule for f in rules(design(usbc("CC1")), "net")] == ["net.single_pin"]
+    assert rules(design(usbc("SBU1")), "net") == []
+
+    def chip(pin_name):
+        return part("U1", "SENSOR", "Package_SO:SOIC-8", ("1", "+5V", "V+", "power_in"), ("2", "GND", "V-", "power_in"),
+                    ("8", "unconnected-(U1-X-Pad8)", pin_name, "input"))
+    assert [f.refs for f in rules(design(chip("IN+")), "pin")] == [("U1",)]
+    for name in ("SWCLK", "PA13-SWDIO", "DRDY", "INT1"):
+        assert rules(design(chip(name)), "pin") == []

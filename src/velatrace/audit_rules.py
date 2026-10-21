@@ -67,9 +67,16 @@ _ADDRESSABLE_LED = re.compile(r"WS28\d\d|SK6\d{3}|APA1\d\d|SK98\d\d", re.IGNOREC
 _NOT_SUPPLY_PIN = re.compile(r"(?:SW|LX|PH|DCC\w*|EN|PG|PGOOD|BOOT|BST)\d*")
 # Op-amp offset-null/trim and compensation pins: left open when unused, per datasheets.
 _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
+# Input-typed pins that may stay open: debug pins with internal pulls, and flag outputs
+# (data-ready/interrupt) that some symbols type as input.
+_OPEN_OK_PIN = {"SWCLK", "SWDIO", "SWO", "SWDCK", "TCK", "TMS", "TDI", "TDO", "DRDY", "RDY", "INT", "INT1",
+                "INT2", "IRQ", "ALERT"}
+_UNUSED_USB_PIN = re.compile(r"SBU\d")  # USB-C sideband pins: unused on USB 2.0
 _LED_PART = re.compile(r"7.?SEG|SEVEN.?SEG|(?:^|\s)(?:LED|DISPLAY)")  # on "value footprint"
 # Connectors that never bring power in: memory-card/SIM sockets, M.2, SWD/JTAG/Tag-Connect pads.
-_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|M\.2|TAG-?CONNECT|TC20\d0|SWD|JTAG")
+_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|M\.2|TAG-?CONNECT|TC20\d0|SWD|JTAG|"
+                              r"FPC|FFC|BOARD.?TO.?BOARD|MEZZANINE|CASTELLAT|STAMP")
+SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
 _OUT_PIN = re.compile(r"V?OUT\d*|VO\d*")
@@ -98,6 +105,8 @@ def is_supply_name(net: str) -> bool:
 
 def i2c_line(net: str) -> str | None:
     tokens = re.split(r"[^A-Z0-9]+", net_label(net))
+    if set(tokens) & ({"SPI"} | _SIGNAL_TOKENS):  # SPI_SCL is a clock, SDA_CTRL a switch control
+        return None
     for line, pattern in _I2C.items():
         if any(pattern.fullmatch(token) for token in tokens):
             return line
@@ -110,7 +119,8 @@ def part_kind(comp: Component) -> str:
     text = (comp.footprint + " " + comp.value).upper()
     if library.startswith("CONNECTOR") or "PINHEADER" in text or "PINSOCKET" in text:
         return "connector"
-    if library.startswith("MODULE") or library.startswith("RF_MODULE") or "MODULE" in comp.value.upper():
+    if (library.startswith("MODULE") or library.startswith("RF_MODULE") or "MODULE" in comp.value.upper()
+            or re.search(r"MODULE|DEV[-_]?KIT", comp.footprint.split(":", 1)[-1].upper())):
         return "module"
     if _ADDRESSABLE_LED.search(comp.value):
         return "ic"
@@ -240,12 +250,12 @@ def _supply_pins(design: _Design, ic: Component) -> dict[str, list[Pin]]:
     return result
 
 
-def _series_link(design: _Design, comp: Component) -> bool:
+def _series_link(design: _Design, comp: Component, max_ohms: int = 1) -> bool:
     """Fuse, ferrite bead or ≤1 Ω resistor: the rail continues through it for decoupling."""
     kind = design.kind[comp.reference]
     if kind == "resistor":
         ohms = parse_resistance(comp.value)
-        return ohms is not None and ohms <= 1
+        return ohms is not None and ohms <= max_ohms
     return kind in {"fuse", "ferrite"} or (kind == "inductor" and bool(_FERRITE.search(
         f"{comp.footprint} {comp.value}".upper())))
 
@@ -353,6 +363,8 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
 KNOWN_MODULE_PULLUPS = (
     (re.compile(r"CM[45]|COMPUTE\s*MODULE|RASPBERRY|\bRPI"), re.compile(r"(?:.*\W)?GPIO[23](?:\W.*)?"),
      Decimal(1800), Decimal("3.3")),
+    # TI TXS01xx I2C translators: 10 kΩ pull-ups on every A and B port (datasheet: no external ones needed).
+    (re.compile(r"TXS01\d\d"), re.compile(r"[AB]\d"), Decimal(10000), Decimal("3.3")),
 )
 I2C_SINK_MAX_A = Decimal("0.003")  # I2C sink limit; checked as V/R (ignores VOL: conservative)
 
@@ -387,6 +399,52 @@ def _combined_pullup(net: str, board: list, built_in: list) -> list[Finding]:
         f"Remove {board[0][0].reference} (the module already pulls the line up) or raise it to ≥10 kΩ.")]
 
 
+_SUPPLY_PIN = re.compile(r"[AD]?V(?:DD|CC|IO)[\w@]*")
+
+
+def _is_rail(design: _Design, net: str) -> bool:
+    """A named supply, or a net that feeds an IC's VDD/VCC pin (a rail with an unconventional name)."""
+    return net in design.supplies or (net not in design.grounds and any(
+        design.kind[comp.reference] == "ic" and _SUPPLY_PIN.fullmatch(pin.name.upper())
+        for comp, pin in design.nodes[net]))
+
+
+def _breakout(design: _Design, ref: str) -> bool:
+    """A pin header that exposes many other signals (not a dedicated I2C connector)."""
+    comp = design.parts[ref]
+    others = {pin.net for pin in comp.pins if net_label(pin.net) and pin.net not in design.grounds
+              and pin.net not in design.supplies and not i2c_line(pin.net)}
+    return design.kind[ref] == "connector" and len(others) >= 4
+
+
+def _pulled_up_nearby(design: _Design, net: str, line: str) -> bool:
+    """Is the bus pulled up on a net joined to this one by a ≤1 kΩ series resistor or by a small
+    switch/translator IC with pins on another net of the same I2C line (SN74LVC1G3157, TXS-style)?"""
+    seen, todo = {net}, [net]
+    while todo:
+        for comp, _ in design.nodes[todo.pop()]:
+            nets = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
+            if nets and _series_link(design, comp, 1000):
+                joined = list(nets)
+            elif design.kind[comp.reference] == "ic" and len(terminals(comp)) <= 8:
+                joined = [n for n in terminals(comp).values() if i2c_line(n) == line]
+            else:
+                continue
+            for other in joined:
+                if (other not in seen and other not in design.supplies and other not in design.grounds
+                        and i2c_line(other) in {None, line}):  # never hop onto the other bus line
+                    seen.add(other)
+                    todo.append(other)
+    for other in seen - {net}:
+        for comp, _ in design.nodes[other]:
+            nets = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
+            if nets and other in nets and _is_rail(design, nets[1] if nets[0] == other else nets[0]):
+                return True
+        if _module_pullups(design, other):
+            return True
+    return False
+
+
 def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
     """SDA/SCL lines: missing, redundant, mixed-rail, 0 Ω or out-of-range pull-ups."""
     design = _Design(snapshot)
@@ -403,7 +461,7 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
             if not nets or net not in nets:
                 continue
             other = nets[1] if nets[0] == net else nets[0]
-            if other in design.supplies:
+            if _is_rail(design, other):
                 pullups.append((comp, other, parse_resistance(comp.value)))
         zero = [row for row in pullups if row[2] == 0]
         for comp, rail, _ in zero:
@@ -425,6 +483,10 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
             master_here = any(design.kind[comp.reference] == "ic" and any(
                 _GPIO_PIN.fullmatch(token) for token in re.split(r"[/\s,]+", pin.name))
                 for comp, pin in design.nodes[net])
+            if master_here and len(devices) == 1 and offboard and all(_breakout(design, ref) for ref in offboard):
+                continue  # only the controller is here and the bus goes to a general pin header: slaves and pull-ups are off-board
+            if _pulled_up_nearby(design, net, line):
+                continue
             if offboard and not master_here:
                 findings.append(Finding(
                     "i2c.pullup.missing", Severity.INFO, f"{net} has no pull-up on this board (expected off-board?)",
@@ -563,6 +625,8 @@ def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
         # (the receiving side's label, if mistyped, is reported on its own input).
         if pin.no_connect or _base_type(pin) in {"output", "power_out"}:
             continue
+        if design.kind[comp.reference] == "connector" and _UNUSED_USB_PIN.fullmatch(pin.name.upper()):
+            continue
         twins = sorted(other for other in by_label[net_label(net)]
                        if other != net and len(design.nodes[other]) > 1)
         if twins:
@@ -619,7 +683,8 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
         if _PROTECTION_VALUE.search(text) or _LED_PART.search(text):
             continue
         floating = [pin for pin in ic.pins if pin.net and pin.electrical_type.strip().lower() == "input"
-                    and len(design.nodes.get(pin.net, ())) == 1 and not _TRIM_PIN.search(pin.name.upper())]
+                    and len(design.nodes.get(pin.net, ())) == 1 and not _TRIM_PIN.search(pin.name.upper())
+                    and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & _OPEN_OK_PIN]
         if not floating:
             continue
         names = ", ".join(pin.name or pin.number for pin in floating)
@@ -679,6 +744,8 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
         if _NOT_POWER_ENTRY.search(f"{conn.value} {conn.footprint}".upper()):
             continue  # card sockets, M.2, SWD/Tag-Connect: loads and programming pads
         if not any(net in design.grounds or _RETURN.fullmatch(net_label(net)) for net in nets):
+            continue
+        if len({n for n in nets if net_label(n) and n not in design.grounds and n not in design.supplies}) >= SIGNAL_INTERFACE_MIN:
             continue
         for net in sorted(nets & design.supplies):
             if net.startswith("unconnected-(") or len(design.nodes[net]) < 2:
