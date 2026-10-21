@@ -1067,7 +1067,9 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
 BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating",
                         # High-speed checks: not yet measured on unseen boards.
-                        "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via"})
+                        "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",
+                        # Footprint-fit checks: starting tolerances, not yet measured.
+                        "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order"})
 
 
 def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable[Check]) -> list[Finding]:

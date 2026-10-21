@@ -17,6 +17,11 @@ class Pin:
     electrical_type: str = ""
     # Absolute pad position on the board; None for schematic/netlist sources.
     position_mm: tuple[float, float] | None = None
+    # Pad centre relative to the footprint origin in the footprint's own unrotated frame
+    # (footprint-fit check); None when the source does not provide it.
+    offset_mm: tuple[float, float] | None = None
+    # The pad has a drill (PTH or NPTH); None when unknown.
+    through_hole: bool | None = None
 
     @property
     def no_connect(self) -> bool:
