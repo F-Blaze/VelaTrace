@@ -83,7 +83,7 @@ def _nearest(point: tuple[float, float], points: Sequence[tuple[float, float]]) 
 
 def _alignments(fp: Sequence[tuple[float, float]], real: Sequence[tuple[float, float]]):
     """For each of the 8 rotations/mirrors of the real pads: (worst offset, total offset,
-    footprint pad -> nearest real pad index, offset per footprint pad)."""
+    footprint pad -> nearest real pad index, offset per footprint pad, mirrored)."""
     for mirror in (1, -1):
         for turn in range(4):
             cos, sin = round(math.cos(turn * math.pi / 2)), round(math.sin(turn * math.pi / 2))
@@ -91,7 +91,7 @@ def _alignments(fp: Sequence[tuple[float, float]], real: Sequence[tuple[float, f
             near = [_nearest(point, moved) for point in fp]
             back = max(_nearest(point, fp)[1] for point in moved)
             offsets = [distance for _, distance in near]
-            yield max(max(offsets), back), sum(offsets), [i for i, _ in near], offsets
+            yield max(max(offsets), back), sum(offsets), [i for i, _ in near], offsets, mirror < 0
 
 
 def _part_name(real: RealPart) -> str:
@@ -145,22 +145,29 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart) -> list[F
     options = list(_alignments(mine, theirs))
     fits = [option for option in options if option[0] <= FIT_TOLERANCE_MM]
     if not fits:
-        worst, _, _, offsets = min(options, key=lambda option: option[:2])
+        worst, _, _, offsets, _ = min(options, key=lambda option: option[:2])
         pad = fp[offsets.index(max(offsets))][0]
         return finding("fit.pitch", f"pad positions differ from {name} by up to {worst:.2f} mm",
                        f"Best alignment still leaves pad {pad} {worst:.2f} mm off (tolerance "
                        f"{FIT_TOLERANCE_MM:.2f} mm). Pad pitch: footprint {_pitch(mine):.2f} mm, part "
                        f"{_pitch(theirs):.2f} mm.",
                        "Use the footprint with the part's pad pitch and spacing.")
+    # Both sides are top views (bottom-side footprints are un-mirrored on read), so a mirror may
+    # explain the geometry but never the numbering: a mirror-image pinout is a real mistake.
     wrong = []
-    for _, _, nearest, _ in fits:
+    for _, _, nearest, _, mirrored in fits:
         bad = [(fp[i][0], part[j][0]) for i, j in enumerate(nearest)
                if fp[i][0].upper() != part[j][0].upper()
                and _PIN_LABEL.fullmatch(fp[i][0].upper()) and _PIN_LABEL.fullmatch(part[j][0].upper())]
-        if not bad:
+        if not bad and not mirrored:
             return []
         wrong.append(bad)
     bad = min(wrong, key=len)
+    if not bad:
+        return finding("fit.pin_order", f"footprint is a mirror image of {name}",
+                       "The pads and numbers match the part only when flipped left-to-right, so pin 1 "
+                       "and the numbering run the wrong way round.",
+                       "Use a footprint drawn from the top view, as in the part's datasheet.", Severity.WARNING)
     sample = ", ".join(f"footprint pad {a} sits where the part has pin {b}" for a, b in bad[:3])
     return finding("fit.pin_order", f"pad numbers differ from {name} ({len(bad)} of {len(fp)} pads)",
                    f"The pads line up with the part, but the numbering does not: {sample}"

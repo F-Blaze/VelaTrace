@@ -110,12 +110,14 @@ def test_soic_matches_in_any_orientation():
     assert rules(soic8(), mirrored) == []
 
 
-def test_every_fixture_fits_itself_turned_and_mirrored():
+def test_every_fixture_fits_itself_turned_but_not_mirrored():
     for code in ("C65114", "C7593", "C2040", "C124378"):
         part = real(code)
         turned = [(p.number, -p.y_mm, p.x_mm, p.through_hole) for p in part.pads]
         mirrored = [(p.number, -p.x_mm, p.y_mm, p.through_hole) for p in part.pads]
-        assert rules(turned, part) == rules(mirrored, part) == [], code
+        assert rules(turned, part) == [], code
+        # A mirror-image pinout is wrong, except for a single row where a mirror equals a turn.
+        assert rules(mirrored, part) == ([] if code == "C124378" else ["fit.pin_order"]), code
 
 
 def test_swapped_pin_numbers_are_a_pin_order_warning():
