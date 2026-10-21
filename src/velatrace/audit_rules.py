@@ -98,6 +98,8 @@ def is_supply_name(net: str) -> bool:
 
 def i2c_line(net: str) -> str | None:
     tokens = re.split(r"[^A-Z0-9]+", net_label(net))
+    if set(tokens) & ({"SPI"} | _SIGNAL_TOKENS):  # SPI_SCL is a clock, SDA_CTRL a switch control
+        return None
     for line, pattern in _I2C.items():
         if any(pattern.fullmatch(token) for token in tokens):
             return line
