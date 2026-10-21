@@ -76,3 +76,8 @@ def test_repeated_pad_on_real_and_unconnected_net_prefers_real_net(tmp_path, ord
 def test_pad_on_two_real_nets_is_still_rejected(tmp_path):
     with pytest.raises(ValidationError):
         _netlist(tmp_path, '<net name="A"><node ref="U1" pin="1"/></net><net name="B"><node ref="U1" pin="1"/></net>')
+
+
+def test_unannotated_parts_get_an_actionable_error(tmp_path):
+    with pytest.raises(ValidationError, match="unannotated"):
+        _netlist(tmp_path, '<net name="A"><node ref="R?" pin="1"/></net><net name="B"><node ref="R?" pin="1"/></net>', ("R?",))

@@ -46,6 +46,8 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
             if name.startswith("unconnected-("):
                 continue
             if not pins[key].net.startswith("unconnected-("):
+                if key[0].endswith("?"):
+                    raise ValidationError(f"Schematic has unannotated parts ({key[0]}); annotate it and export the netlist again.")
                 raise ValidationError("Netlist contains duplicate or conflicting pin membership.")
         pins[key] = Pin(key[1], name, func, node.get("pintype", ""))
     by_ref: dict[str, list[Pin]] = {}

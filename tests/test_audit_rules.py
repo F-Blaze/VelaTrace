@@ -63,7 +63,8 @@ def test_supply_names(net, supply):
 
 
 @pytest.mark.parametrize("net,line", [("SDA", "SDA"), ("I2C1_SDA", "SDA"), ("/io/SCL0", "SCL"),
-                                      ("SCLK", None), ("Net-(U1-SDA)", None), ("MOSI", None)])
+                                      ("SCLK", None), ("Net-(U1-SDA)", None), ("MOSI", None),
+                                      ("SPI_SCL", None), ("SDA_CTRL", None)])
 def test_i2c_names(net, line):
     assert i2c_line(net) == line
 
