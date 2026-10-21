@@ -39,6 +39,7 @@ class Pad:
     tie: tuple = ()              # net-tie footprint: other nets allowed to touch this copper
     zone_connect: int = -1       # pad/footprint override: 0 none, 1 thermal, 2 solid, 3 thermal if THT; -1 zone
     spoke_angle: float | None = None   # thermal spoke angle; None = KiCad default (45 round, 90 other)
+    teardrop: tuple = ()         # (half width, length past the rim) of KiCad's teardrop on a leaving track
 
 
 @dataclass(frozen=True)
@@ -227,6 +228,18 @@ def _graphic_pad(layer, shapes):
     return Pad("", "", "", cx, cy, 0.0, local, (layer,))
 
 
+def _teardrop(node, size):
+    """(half width, length) of the teardrop KiCad grows where a track leaves a pad, both from
+    the pad's smaller side; () when the pad has none."""
+    if node is None or str((_first(node, "enabled") or [0, "no"])[1]) != "yes":
+        return ()
+    value = {row[0]: float(row[1]) for row in node[1:] if isinstance(row, list) and len(row) > 1
+             and row[0] in ("best_length_ratio", "max_length", "best_width_ratio", "max_width")}
+    width = value.get("best_width_ratio", 1.0) * size
+    length = value.get("best_length_ratio", 0.5) * size
+    return (min(width, value.get("max_width") or width) / 2, min(length, value.get("max_length") or length))
+
+
 def _zones(parent, layers, codes):
     for node in children(parent, "zone"):
         names = [str(n) for item in children(node, "layer") + children(node, "layers") for n in item[1:]]
@@ -305,7 +318,8 @@ def load_board(path: Path) -> Board:
                 _copper([str(n) for n in (_first(pad, "layers") or [])[1:]], layers),
                 hole, pad[2] != "np_thru_hole", _f(_first(pad, "clearance") or local or [0, 0]),
                 zone_connect=int(_f(_first(pad, "zone_connect") or joined or [0, -1])),
-                spoke_angle=_f(_first(pad, "thermal_bridge_angle")) if _first(pad, "thermal_bridge_angle") else None))
+                spoke_angle=_f(_first(pad, "thermal_bridge_angle")) if _first(pad, "thermal_bridge_angle") else None,
+                teardrop=_teardrop(_first(pad, "teardrops"), min(_f(size, 1), _f(size, 2)))))
         # A net tie joins nets on purpose: its grouped pads and its copper may touch each other.
         for group in (_first(fp, "net_tie_pad_groups") or [])[1:]:
             numbers = {part.strip() for part in str(group).split(",")}
