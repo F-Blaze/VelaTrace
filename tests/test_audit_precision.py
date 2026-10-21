@@ -268,3 +268,40 @@ def test_pi_header_pullups_with_moderate_hat_pullup_are_fine():
     rtc = ic("U1", ("5", "SDA", "SDA"), value="MCP7940N")
     assert i2c_found(hat, rtc, res("R1", "SDA", "+3V3", "5k1")) == []
     assert i2c_found(hat, rtc, res("R1", "SDA", "+3V3", "1k5")) == [("i2c.pullup.combined", Severity.WARNING)]
+
+
+def test_controller_alone_on_a_breakout_header_has_its_pullups_off_board():
+    mcu = ic("U1", ("5", "SDA", "GPIO21"), value="STM32")
+    breakout = part("J1", "HEADER", "Connector_PinSocket_2.54mm:PinSocket_1x12", ("1", "SDA"), ("2", "PA1"),
+                    ("3", "PA2"), ("4", "PA3"), ("5", "PA4"), ("6", "GND"))
+    assert i2c_found(mcu, breakout) == []
+    i2c_port = part("J2", "I2C", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "SDA"), ("2", "GND"))
+    assert i2c_found(mcu, i2c_port) == [("i2c.pullup.missing", Severity.INFO)]
+
+
+def test_pullup_behind_series_resistor_or_analog_switch_counts():
+    mcu = ic("U1", ("5", "SCL", "GPIO22"), value="AVR")
+    slave = ic("U2", ("3", "SCL", "SCL"), value="SENSOR")
+    assert [f for f, _ in i2c_found(mcu, slave)] == ["i2c.pullup.missing"]
+    # 1k series resistor to a node that has the pull-up (level-shifter MOSFET side)
+    shifted = [res("R1", "SCL", "Net-(Q1-D)", "1k"), res("R2", "Net-(Q1-D)", "+3V3", "10k")]
+    assert i2c_found(mcu, slave, *shifted) == []
+    # a 100k series resistor is not a link
+    assert i2c_found(mcu, slave, res("R1", "SCL", "Net-(Q1-D)", "100k"), shifted[1]) != []
+    # small switch/translator IC joining two SCL nets, pull-up on the far side
+    switch = part("U3", "SN74LVC1G3157", "Package_TO_SOT_SMD:SOT-363", ("1", "SCL_EXT", "B2"), ("2", "GND", "GND"),
+                  ("3", "SCL", "B1"), ("5", "+3V3", "VCC"))
+    far = [res("R3", "SCL_EXT", "+3V3", "4.7k")]
+    assert i2c_found(mcu, slave, switch, *far) == []
+    assert i2c_found(mcu, slave, switch) != []  # no pull-up anywhere: still reported
+
+
+def test_txs_translator_has_internal_pullups_and_odd_named_rail_counts():
+    mcu = ic("U1", ("5", "SDA_1V8", "GPIO22"), value="AVR")
+    txs = part("U6", "TXS0102DQMR", "TXS0102DQ:IC_TXS0102DQMR", ("3", "SDA_1V8", "A2"), ("6", "SDA", "B2"))
+    assert i2c_found(mcu, txs) == []
+    # pull-up to a rail that is not named like a supply but feeds an IC's VDD pin
+    slave = ic("U2", ("3", "SDA", "SDA"), value="SENSOR")
+    sensor_rail = part("U4", "AFE", "Package_QFN:QFN-24", ("1", "FING_V", "VDD"), ("2", "GND", "GND"))
+    assert i2c_found(mcu, slave, res("R1", "SDA", "FING_V"), sensor_rail) == []
+    assert [f for f, _ in i2c_found(mcu, slave, res("R1", "SDA", "FING_V"))] == ["i2c.pullup.missing"]
