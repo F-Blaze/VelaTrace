@@ -38,11 +38,29 @@ def row(count, pitch=2.54, tht=True):
 HEADER_2X3 = [(str(i + 1), 2.54 * (i % 2), 2.54 * (i // 2), True) for i in range(6)]
 
 
+def soic(pins=8, pitch=1.27, tht=False, row=2.475):
+    """KiCad SOIC-8_3.9x4.9mm_P1.27mm (pins=14: SOIC-14_3.9x8.7mm): pins down the left, then up the right."""
+    side = pins // 2
+    half = pitch * (side - 1) / 2
+    return ([(str(i + 1), -row, -half + pitch * i, tht) for i in range(side)]
+            + [(str(i + side + 1), row, half - pitch * i, tht) for i in range(side)])
+
+
 def soic8(pitch=1.27, tht=False):
-    """KiCad SOIC-8_3.9x4.9mm_P1.27mm: pins 1-4 down the left, 5-8 up the right."""
-    half = pitch * 1.5
-    return ([(str(i + 1), -2.475, -half + pitch * i, tht) for i in range(4)]
-            + [(str(i + 5), 2.475, half - pitch * i, tht) for i in range(4)])
+    return soic(8, pitch, tht)
+
+
+def two_pads(half):
+    """A 2-pad footprint (diode, buzzer) with its pad centres half apart from the origin."""
+    return [("1", -half, 0.0, False), ("2", half, 0.0, False)]
+
+
+# KiCad library pads of the megadesk parts (footprint frame), as read from the bench board.
+TO252_2 = [("1", -5.04, -2.28, False), ("3", -5.04, 2.28, False), ("2", 1.26, 0.0, False)] + [
+    ("2", x, y, False) for x in (-0.415, 2.935) for y in (-1.525, 1.525)]     # split tab, one number
+SOT89_3 = [("1", -1.95, -1.5, False), ("2", -1.863, 0.0, False), ("3", -1.95, 1.5, False)]  # pad 2: custom tab
+FFC_10 = [(str(i + 1), -4.5 + i, 0.0, False) for i in range(10)]           # F1004-H-10-20G-R pins
+FFC_MOUNT = [("0", -7.0, 3.1, False), ("0", 7.0, 3.1, False)]
 
 
 def spacing(pads):
@@ -65,6 +83,8 @@ def test_parser_reads_pads_in_mm_from_the_origin():
     assert len(real("C124378").pads) == 4 and spacing(real("C124378").pads) == 2.54
     qfn = real("C2040")
     assert len(qfn.pads) == 57 and spacing(qfn.pads) == 0.4 and not any(p.through_hole for p in qfn.pads)
+    areas = {p.number: p.area_mm2 for p in real("C16106").pads}    # SOT-89: the tab is 10 x a pin
+    assert areas["1"] == areas["3"] == pytest.approx(1.06, abs=0.01) and areas["2"] == pytest.approx(10.2, abs=0.1)
 
 
 def test_malformed_pad_records_are_ignored():
@@ -111,7 +131,7 @@ def test_soic_matches_in_any_orientation():
 
 
 def test_every_fixture_fits_itself_turned_but_not_mirrored():
-    for code in ("C65114", "C7593", "C2040", "C124378"):
+    for code in ("C65114", "C7593", "C2040", "C124378", "C614879", "C152207"):
         part = real(code)
         turned = [(p.number, -p.y_mm, p.x_mm, p.through_hole) for p in part.pads]
         mirrored = [(p.number, -p.x_mm, p.y_mm, p.through_hole) for p in part.pads]
@@ -156,6 +176,54 @@ def test_package_only_part_checks_count_and_mount_type_and_says_so():
     assert "not available" in finding.evidence
     assert rules(row(6, tht=False), part) == ["fit.mount_type"]
     assert rules(row(6), part) == [] and rules(HEADER_2X3, part) == []   # layout is not claimed
+
+
+# ---- library differences that are not wrong parts (megadesk, LCSC parts captured 2026-10-21) ----
+
+def test_row_spacing_may_differ_but_pin_pitch_may_not():
+    # Same packages, other land patterns: rows 4.95 mm apart in KiCad, 5.60 / 5.41 mm at LCSC.
+    assert rules(soic(14), real("C614879")) == [] and rules(soic8(), real("C152207")) == []
+    # Two-pad parts: the pad spacing is the land pattern (SOD-123F 2.8 vs 3.3 mm, buzzer 8.7 vs 8.0 mm).
+    assert rules(two_pads(1.4), real("C353288")) == [] and rules(two_pads(4.35), real("C391035")) == []
+    # A different package still differs: narrow SOIC on a wide-SOIC land pattern (rows 9.3 mm apart),
+    # SOD-123F on SOD-323 pads (2.1 mm), the buzzer on pads 11 mm apart, and a 1.2 mm pitch.
+    assert rules(soic(8, row=4.65), real("C152207")) == ["fit.pitch"]
+    assert rules(two_pads(1.05), real("C353288")) == ["fit.pitch"]
+    assert rules(two_pads(5.5), real("C391035")) == ["fit.pitch"]
+    (finding,) = compare("U3", soic(14, pitch=1.2), real("C614879"))
+    assert finding.rule == "fit.pitch" and "0.15 mm along a row" in finding.evidence
+
+
+def test_tab_pad_is_left_out_of_layout_and_positions():
+    assert rules(SOT89_3, real("C16106")) == []     # KiCad anchors the tab by the pins, LCSC mid-tab
+    assert rules(TO252_2, real("C116325")) == []
+    # SOT-23 pads (1 and 2 on one side, 3 opposite) are still not a SOT-89.
+    sot23 = [("1", -0.9375, -0.95, False), ("2", -0.9375, 0.95, False), ("3", 0.9375, 0.0, False)]
+    assert rules(sot23, real("C16106")) == ["fit.layout"]
+    # The tab still counts: a SOT-89 footprint without it has too few pads.
+    assert rules(SOT89_3[::2], real("C16106")) == ["fit.pad_count"]
+
+
+def test_mounting_pads_are_left_out_on_both_sides():
+    part = real("C668117")             # 10 pins, mounting tabs numbered 11 and 12
+    assert rules(FFC_10 + FFC_MOUNT, part) == []
+    assert rules(FFC_10 + [("MP", x, y, t) for _, x, y, t in FFC_MOUNT], part) == []
+    assert rules(FFC_10 + [("", x, y, t) for _, x, y, t in FFC_MOUNT], part) == []
+    # Without mounting pads in the footprint the tabs have nowhere to go.
+    assert rules(FFC_10, part) == ["fit.pad_count"]
+    # Small extra pins are never taken for mounting pads: 9 pins + mounting pads vs the 10-pin part.
+    assert rules(FFC_10[:9] + FFC_MOUNT, part) == ["fit.pad_count"]
+    # An exposed pad is matched by number, not dropped: a QFN footprint without it has too few pads.
+    qfn = real("C2040")
+    assert rules([(p.number, p.x_mm, p.y_mm, False) for p in qfn.pads if p.number != "57"], qfn) == ["fit.pad_count"]
+
+
+def test_cached_rows_with_and_without_pad_area():
+    from velatrace.part_lookup import _from_row, _row
+    part = real("C16106")
+    assert _from_row("C16106", _row(part, "2026-10-21T00:00:00Z")) == part
+    old = {"title": "T", "package": "P", "pads": [["1", 0.0, 0.0, False], ["2", 1.0, 0.0, False]]}
+    assert [p.area_mm2 for p in _from_row("C1", old).pads] == [0.0, 0.0]
 
 
 # ---- parts to look up ----
@@ -204,10 +272,11 @@ def test_ipc_pad_offsets_undo_footprint_rotation_and_side():
     # Back side: the library frame is mirrored left-right.
     back = _reader_snapshot(0, BoardLayer.BL_B_Cu, [("1", 12.54, 20, 0.0)]).components[0].pins[0]
     assert back.offset_mm == pytest.approx((-2.54, 0))
-    # An unnumbered pad stays a Pin but is left out of the comparison.
+    # An unnumbered pad is passed on too: compare() counts it as a mounting pad.
     assert kicad_pads(Component("J3", "", "L:F", tuple(pins))) == [
         ("1", pytest.approx(0, abs=1e-9), pytest.approx(0, abs=1e-9), True),
-        ("2", pytest.approx(0, abs=1e-9), pytest.approx(2.54), False)]
+        ("2", pytest.approx(0, abs=1e-9), pytest.approx(2.54), False),
+        ("", pytest.approx(-2.54), pytest.approx(0, abs=1e-9), False)]
 
 
 def test_ipc_missing_pad_fields_leave_fit_data_unknown():

@@ -2,6 +2,18 @@
 
 Pure geometry on two pad lists, no network. Only the most fundamental mismatch per part is
 reported (pad count > mount type > layout > pitch > pin order) so one wrong footprint is one finding.
+
+Library differences that are not wrong parts, and how they are left alone:
+- Mounting pads: KiCad numbers them "0" or "MP" or leaves them unnumbered; EasyEDA gives them the
+  next numbers (a 10-pin connector's tabs are 11 and 12). The footprint's mechanical pads are left
+  out, and so are as many of the part's large pads (4 x the median pad area or more) whose numbers
+  the footprint does not use. A part with mounting pads on a footprint without any still differs.
+- Tabs and exposed pads: the largest pad, when it is 4 x the median or more, is left out of the
+  layout and position checks (still counted). Libraries put its centre in different places: KiCad's
+  SOT-89 anchors the tab pad next to the pins, EasyEDA at the middle of the tab.
+- Row spacing: vendors move whole rows of pads in or out (toe/heel), so pad positions are checked
+  tightly only along a line of 3+ pads (the pin pitch). Across it, and between the two pads of a
+  2-pad part, the spacing may differ by up to 0.5 mm or 20 %, whichever is larger.
 """
 from __future__ import annotations
 
@@ -14,9 +26,15 @@ from .easyeda import RealPart
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot
 
-# Starting value, not measured: KiCad and vendor land patterns of the same part differ by about
-# 0.1 mm (SOIC-8 rows, for one), so anything tighter would flag correct footprints.
+# Starting values, not measured on unseen boards. Along a row of pads: the pin pitch varies by
+# less than 0.15 mm between libraries. Across rows: on megadesk, KiCad and LCSC land patterns of the
+# same parts differed by 0.46-0.70 mm (8-18 %) in row spacing; a different package (SOD-323 vs
+# SOD-123, narrow vs wide SOIC) differs by 30 % or more.
 FIT_TOLERANCE_MM = 0.15
+ROW_SPACING_MM = 0.5
+ROW_SPACING_SHARE = 0.2
+_LARGE_PAD = 4.0    # x the median pad area: a tab, exposed pad or mounting pad
+_MECHANICAL = {"", "0", "MP"}   # KiCad numbers of mounting pads
 _PASSIVE_KINDS = {"resistor", "capacitor", "inductor", "ferrite", "resistor_array", "testpoint"}
 # ponytail: brute-force nearest pad is O(8 * n^2); above this (huge BGAs) alignment is skipped
 # and only count, mount type and layout are checked. Upgrade: grid lookup instead of a full scan.
@@ -27,16 +45,21 @@ Pad = tuple[str, float, float, bool | None]   # number, x, y (mm, footprint fram
 
 
 def kicad_pads(comp: Component) -> list[Pad]:
-    """Numbered pads with a known offset; unnumbered (mechanical) pads are not compared."""
+    """Pads with a known offset; compare() leaves the mechanical ones out."""
     return [(pin.number, pin.offset_mm[0], pin.offset_mm[1], pin.through_hole)
-            for pin in comp.pins if pin.number and pin.offset_mm is not None]
+            for pin in comp.pins if pin.offset_mm is not None]
+
+
+def _mechanical(pad: Pad) -> bool:
+    return pad[0].strip().upper() in _MECHANICAL
 
 
 def fit_candidates(snapshot: DesignSnapshot) -> list[Component]:
     """Parts worth looking up: not a passive, with a footprint and at least one numbered pad.
     The snapshot does not carry DNP, so callers that know the DNP set filter it themselves."""
     return [comp for comp in snapshot.components
-            if comp.footprint and part_kind(comp) not in _PASSIVE_KINDS and kicad_pads(comp)]
+            if comp.footprint and part_kind(comp) not in _PASSIVE_KINDS
+            and any(not _mechanical(pad) for pad in kicad_pads(comp))]
 
 
 def _collapse(pads: Iterable[Pad]) -> list[Pad]:
@@ -81,17 +104,43 @@ def _nearest(point: tuple[float, float], points: Sequence[tuple[float, float]]) 
     return min(((i, math.dist(point, other)) for i, other in enumerate(points)), key=lambda item: item[1])
 
 
+def _allowed(points: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Allowed (x, y) offset per pad: tight along a line of 3+ pads, loose across it."""
+    def loose(c: float) -> float:   # half the row-spacing limit: both rows move
+        return max(ROW_SPACING_MM, ROW_SPACING_SHARE * 2 * abs(c)) / 2
+
+    def in_line(axis: int, value: float) -> int:
+        return sum(abs(other[axis] - value) <= FIT_TOLERANCE_MM for other in points)
+    return [(FIT_TOLERANCE_MM if in_line(1, y) >= 3 else loose(x), FIT_TOLERANCE_MM if in_line(0, x) >= 3 else loose(y))
+            for x, y in points]
+
+
 def _alignments(fp: Sequence[tuple[float, float]], real: Sequence[tuple[float, float]]):
-    """For each of the 8 rotations/mirrors of the real pads: (worst offset, total offset,
-    footprint pad -> nearest real pad index, offset per footprint pad, mirrored)."""
+    """For each of the 8 rotations/mirrors of the real pads: (worst excess over the allowed offset,
+    total offset, footprint pad -> nearest real pad index, offset per footprint pad, mirrored)."""
+    allowed = _allowed(fp)
     for mirror in (1, -1):
         for turn in range(4):
             cos, sin = round(math.cos(turn * math.pi / 2)), round(math.sin(turn * math.pi / 2))
             moved = [(mirror * x * cos - y * sin, mirror * x * sin + y * cos) for x, y in real]
             near = [_nearest(point, moved) for point in fp]
-            back = max(_nearest(point, fp)[1] for point in moved)
-            offsets = [distance for _, distance in near]
-            yield max(max(offsets), back), sum(offsets), [i for i, _ in near], offsets, mirror < 0
+            index = [i for i, _ in near]
+            excess = max(max(abs(a - b) - tol for a, b, tol in zip(point, moved[i], limit))
+                         for point, i, limit in zip(fp, index, allowed))
+            if len(set(index)) < len(index):   # two footprint pads on one real pad: no fit
+                excess = math.inf
+            yield excess, sum(d for _, d in near), index, [d for _, d in near], mirror < 0
+
+
+def _large_pads(real: RealPart) -> list[str]:
+    """Numbers of the part's pads with 4 x the median pad area or more, largest first."""
+    area: dict[str, float] = {}
+    for pad in real.pads:
+        area[pad.number.strip()] = area.get(pad.number.strip(), 0.0) + pad.area_mm2
+    sizes = sorted(area.values())
+    median = sizes[len(sizes) // 2] if sizes else 0.0
+    return sorted((n for n, a in area.items() if n and median and a >= _LARGE_PAD * median),
+                  key=area.__getitem__, reverse=True)
 
 
 def _part_name(real: RealPart) -> str:
@@ -104,8 +153,14 @@ def _label(rows: int, cols: int) -> str:
 
 def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart) -> list[Finding]:
     """Findings (at most one) for a footprint whose pads do not fit the real part."""
-    fp = _collapse(pad for pad in kicad_pads if pad[0].strip())
+    pads = list(kicad_pads)
+    fp = _collapse(pad for pad in pads if not _mechanical(pad))
     part = _collapse((p.number, p.x_mm, p.y_mm, p.through_hole) for p in real.pads if p.number.strip())
+    large = _large_pads(real)
+    used = {pad[0] for pad in fp}
+    mounting = [number for number in large if number not in used][:sum(map(_mechanical, pads))]
+    part = [pad for pad in part if pad[0] not in mounting]
+    tab = next((number for number in large if number in used), None) if len(part) > 2 else None
     part_count = len(part) or real.pin_count
     if not fp or not part_count:
         return []
@@ -126,6 +181,8 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart) -> list[F
         return finding("fit.mount_type", f"footprint is {mount[here]} but {name} is {mount[there]}",
                        f"The footprint's pads are {mount[here]}; the part's pads are {mount[there]}.",
                        "Use a footprint with the same mounting type as the part.")
+    count = len(fp)
+    fp, part = [pad for pad in fp if pad[0] != tab], [pad for pad in part if pad[0] != tab]
     rows_cols = _rows_cols(fp)
     if part:
         part_rows_cols = _rows_cols(part)
@@ -136,7 +193,7 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart) -> list[F
     if sorted(rows_cols) != sorted(part_rows_cols):
         return finding("fit.layout", f"pad layout differs from {name} (footprint "
                        f"{_label(*rows_cols)}, part {_label(*part_rows_cols)})",
-                       f"The footprint's {len(fp)} pads form {rows_cols[0]} row(s) × {rows_cols[1]} column(s); "
+                       f"The footprint's {count} pads form {rows_cols[0]} row(s) × {rows_cols[1]} column(s); "
                        f"the part's {part_count} pads form {part_rows_cols[0]} row(s) × "
                        f"{part_rows_cols[1]} column(s).",
                        "Use the footprint for this part's package; the pin count matches but the pads "
@@ -146,14 +203,16 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart) -> list[F
 
     mine, theirs = _centred(fp), _centred(part)
     options = list(_alignments(mine, theirs))
-    fits = [option for option in options if option[0] <= FIT_TOLERANCE_MM]
+    fits = [option for option in options if option[0] <= 0]
     if not fits:
-        worst, _, _, offsets, _ = min(options, key=lambda option: option[:2])
-        pad = fp[offsets.index(max(offsets))][0]
+        _, _, _, offsets, _ = min(options, key=lambda option: option[:2])
+        worst = max(offsets)
+        pad = fp[offsets.index(worst)][0]
         return finding("fit.pitch", f"pad positions differ from {name} by up to {worst:.2f} mm",
-                       f"Best alignment still leaves pad {pad} {worst:.2f} mm off (tolerance "
-                       f"{FIT_TOLERANCE_MM:.2f} mm). Pad pitch: footprint {_pitch(mine):.2f} mm, part "
-                       f"{_pitch(theirs):.2f} mm.",
+                       f"Best alignment still leaves pad {pad} {worst:.2f} mm off (allowed: "
+                       f"{FIT_TOLERANCE_MM:.2f} mm along a row of pads; {ROW_SPACING_MM:.1f} mm or "
+                       f"{ROW_SPACING_SHARE:.0%} in row spacing). Pad pitch: footprint {_pitch(mine):.2f} mm, "
+                       f"part {_pitch(theirs):.2f} mm.",
                        "Use the footprint with the part's pad pitch and spacing.")
     # Both sides are top views (bottom-side footprints are un-mirrored on read), so a mirror may
     # explain the geometry but never the numbering: a mirror-image pinout is a real mistake.
@@ -172,7 +231,7 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart) -> list[F
                        "and the numbering run the wrong way round.",
                        "Use a footprint drawn from the top view, as in the part's datasheet.", Severity.WARNING)
     sample = ", ".join(f"footprint pad {a} sits where the part has pin {b}" for a, b in bad[:3])
-    return finding("fit.pin_order", f"pad numbers differ from {name} ({len(bad)} of {len(fp)} pads)",
+    return finding("fit.pin_order", f"pad numbers differ from {name} ({len(bad)} of {count} pads)",
                    f"The pads line up with the part, but the numbering does not: {sample}"
                    f"{'; ...' if len(bad) > 3 else ''}.",
                    "Check pin 1 and the numbering direction against the datasheet; the footprint may "

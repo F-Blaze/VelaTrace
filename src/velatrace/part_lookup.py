@@ -109,7 +109,9 @@ def _load_cache(config_dir: Path) -> dict[str, dict]:
 
 def _from_row(code: str, row: dict) -> RealPart | None:
     try:
-        pads = tuple(RealPad(str(n)[:16], float(x), float(y), bool(t)) for n, x, y, t in row["pads"])
+        # Rows saved before pad areas were kept have 4 fields; their area is unknown (0).
+        pads = tuple(RealPad(str(n)[:16], float(x), float(y), bool(t), float(area[0]) if area else 0.0)
+                     for n, x, y, t, *area in row["pads"])
         return RealPart(code, str(row["title"]), str(row["package"]), pads) if pads else None
     except (KeyError, TypeError, ValueError):
         return None
@@ -119,7 +121,7 @@ def _row(part: RealPart | None, at: str) -> dict:
     if part is None:
         return {"at": at, "none": True}
     return {"at": at, "title": part.title, "package": part.package,
-            "pads": [[p.number, p.x_mm, p.y_mm, p.through_hole] for p in part.pads]}
+            "pads": [[p.number, p.x_mm, p.y_mm, p.through_hole, p.area_mm2] for p in part.pads]}
 
 
 # ---- DigiKey -----------------------------------------------------------------------------------
