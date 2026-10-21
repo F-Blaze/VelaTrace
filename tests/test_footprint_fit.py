@@ -248,3 +248,14 @@ def test_seeded_bench_boards():
         (ref,) = case["refs"]
         found = rules(bench_pads(BENCH / case["board"], ref), real("C65114"), ref)
         assert found == case["expected_rules"], case["id"]
+
+
+def test_package_only_part_that_states_its_rows_gets_a_layout_check():
+    stated = RealPart("", "EXAMPLE-2X3-HDR", "", source="digikey", pin_count=6, through_hole=True, rows=2)
+    found = compare("J1", row(6), stated)
+    assert [item.rule for item in found] == ["fit.layout"]
+    assert "part 2 × 3" in found[0].title and "pad positions were not compared" in found[0].evidence
+    assert rules(HEADER_2X3, stated) == []
+    assert rules(row(6), replace(stated, rows=1)) == []
+    assert rules(row(6), replace(stated, rows=0)) == []        # no row count: nothing to compare
+    assert rules(row(6), replace(stated, rows=4)) == []        # 6 pins cannot be 4 rows: ignore the hint

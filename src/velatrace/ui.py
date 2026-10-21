@@ -20,7 +20,7 @@ from PySide6.QtCore import Qt, QThread, Signal, Slot, QStandardPaths, QTimer
 from PySide6.QtGui import QCursor, QColor, QPainter, QPen, QFontDatabase, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-    QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QSpinBox, QStackedWidget, QToolTip,
     QTextEdit, QVBoxLayout, QWidget,
 )
@@ -35,6 +35,7 @@ from .errors import ExportUnavailable, RoutingCancelled, ValidationError
 from .findings import Finding, Severity
 from .flags import Bucket, Function, Verdict
 from .ipc import KiCadReader
+from .jlc_catalog import best_parts_db
 from .kicad_cli import KiCadCli, sweep_stale_settings
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
@@ -43,6 +44,7 @@ from . import __version__
 from .preflight import preflight
 from .jlc_parts import design_findings
 from .parts_db import cache_paths, download_catalogue
+from .part_lookup import DigiKeyLogin, PartLookup, excluded_refs
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
@@ -206,14 +208,20 @@ class Settings:
     verified_model: str = ""
     cap: int = 40
     output_cap: int = 4096
+    digikey_id: str = ""
+    digikey_secret: str = field(default="", repr=False)
+
+    def digikey_login(self):
+        return DigiKeyLogin(self.digikey_id, self.digikey_secret) if self.digikey_id and self.digikey_secret else None
 
     def provider_config(self):
         return ProviderConfig(self.name, self.endpoint, self.model, self.key,
                               self.protocol, self.search_model or None, self.search)
 
     def save(self, path: Path):
-        """Remember paths and provider choices between launches. Never the API key."""
-        values = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "key"}
+        """Remember paths and provider choices between launches. Never the API key or DigiKey secret."""
+        values = {name: getattr(self, name) for name in self.__dataclass_fields__
+                  if name not in ("key", "digikey_secret")}
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(values, indent=2), encoding="utf-8")
 
@@ -226,7 +234,7 @@ class Settings:
         if not isinstance(saved, dict):
             return
         for name, value in saved.items():
-            if name != "key" and name in self.__dataclass_fields__ and type(value) is type(getattr(self, name)):
+            if name not in ("key", "digikey_secret") and name in self.__dataclass_fields__ and type(value) is type(getattr(self, name)):
                 setattr(self, name, value)
 
 
@@ -309,6 +317,14 @@ class SettingsDialog(QDialog):
         self.protocol.currentTextChanged.connect(update_search)
         update_search(self.protocol.currentText())
         ai.addRow(self.search)
+
+        digikey = section("DigiKey (optional)", False, "Only used by Run heavy checks, for parts that are not on LCSC.")
+        note = QLabel("Optional. Your own DigiKey developer app (Product Information v4). Untested with real keys.")
+        note.setWordWrap(True)
+        digikey.addRow(note)
+        text(digikey, "digikey_id", "Client ID")
+        secret = text(digikey, "digikey_secret", "Client secret", "Kept in memory for this launch only; never saved.")
+        secret.setEchoMode(QLineEdit.EchoMode.Password)
 
         advanced = section("Advanced", False)
         text(advanced, "search_model", "Search model ID", "Optional; defaults to the model ID.")
@@ -569,8 +585,11 @@ EXPLAIN = "Explain with AI"
 
 
 class MainWindow(QMainWindow):
+    call_on_ui = Signal(object)  # a worker's question to the user; see on_ui_thread
+
     def __init__(self, *, demo=False, config_dir=None):
         super().__init__()
+        self.call_on_ui.connect(self.run_on_ui)
         self.setWindowTitle("VelaTrace")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
         screen = QApplication.primaryScreen().availableGeometry()
@@ -1164,17 +1183,111 @@ class MainWindow(QMainWindow):
             self.reset_ai()
         self.run_work("Checking design", operation, success)
 
+    @Slot(object)
+    def run_on_ui(self, job):
+        job()
+
+    def on_ui_thread(self, function):
+        """`function` as called from the worker: it runs on the UI thread and the worker waits for the answer."""
+        def call(*args):
+            done, answer = threading.Event(), []
+            def job():
+                try:
+                    answer.append(function(*args))
+                finally:
+                    done.set()
+            self.call_on_ui.emit(job)
+            done.wait()
+            return answer[0] if answer else None
+        return call
+
+    def part_prompt(self, title, label, items=None):
+        """Pick from `items` or type text; Skip (or closing) answers None."""
+        box = QInputDialog(self)
+        box.setWindowTitle(title)
+        box.setLabelText(label)
+        for text in box.findChildren(QLabel):
+            text.setTextFormat(Qt.TextFormat.PlainText)  # part and board text is not markup
+        box.setCancelButtonText("Skip")
+        if items:
+            box.setComboBoxItems(items)
+        return box.textValue() if box.exec() else None
+
+    def choose_part(self, reference, options):
+        labels = [option.label for option in options]
+        picked = self.part_prompt(f"Which part is {reference}?", "Pick the real part. Skip leaves it unchecked "
+                                  "and is remembered for this board.", labels)
+        return options[labels.index(picked)] if picked in labels else None
+
+    def ask_part(self, reference, prompt):
+        return self.part_prompt(f"Part for {reference}", prompt + "\nSkip is remembered for this board.")
+
+    def ask_lookup(self, easyeda, digikey):
+        """Yes / Cached only / Cancel before any part number is sent: "yes", "cached" or None."""
+        def parts(count):
+            return f"{count} part" + ("" if count == 1 else "s")
+        question = (f"Look up {parts(easyeda)} on easyeda.com" + (f" (and DigiKey for {digikey})" if digikey else "")
+                    if easyeda else f"Look up {parts(digikey)} on DigiKey") + "?"
+        box = QMessageBox(self)
+        box.setWindowTitle("Footprint lookup")
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(question + "\n\nOnly part numbers are sent, about one request per second; nothing about "
+                    "your board. Answers saved earlier are reused. Cached only sends nothing.")
+        yes = box.addButton("Yes", QMessageBox.ButtonRole.AcceptRole)
+        cached = box.addButton("Cached only", QMessageBox.ButtonRole.ActionRole)
+        cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(cancel)
+        box.exec()
+        return {yes: "yes", cached: "cached"}.get(box.clickedButton())
+
+    def prepare_part_lookup(self):
+        """Identify the real part behind each non-passive footprint (local, may ask which part it is),
+        then ask once before anything is sent. Returns (lookup, network); (None, False) when there is
+        nothing to look up; None when the user cancels."""
+        catalogue = None
+        try:
+            catalogue = best_parts_db(self.config_dir)
+        except ValidationError:
+            pass  # without a catalogue the user is asked instead
+        lookup = PartLookup(self.audit_snapshot, self.config_dir, excluded=excluded_refs(self.audit_snapshot.path),
+                            catalogue=catalogue, digikey=self.settings.digikey_login(),
+                            choose=self.choose_part, ask=self.ask_part)
+        try:
+            lookup.identify()
+        finally:
+            if hasattr(catalogue, "close"):
+                catalogue.close()
+        if not lookup.candidates:
+            return None, False
+        easyeda, digikey = lookup.needs_network()
+        if not easyeda and not digikey:
+            return lookup, False
+        answer = self.ask_lookup(easyeda, digikey)
+        return None if answer is None else (lookup, answer == "yes")
+
     def run_heavy_checks(self):
         """Re-read the open board with its routed copper and run the slower checks."""
+        prepared = self.prepare_part_lookup()
+        if prepared is None:
+            return
+        lookup, network = prepared
         def operation(_):
             snapshot = KiCadReader.connect().read_board(copper=True)
             if snapshot.path != self.audit_snapshot.path:
                 raise ValidationError("The open board changed. Run Check design again.")
-            return run_heavy(replace(snapshot, components=tuple(c for c in snapshot.components if c.nets)))
+            providers = []
+            if lookup is not None:
+                lookup.fetch(network=network, choose=self.on_ui_thread(self.choose_part),
+                             ask=self.on_ui_thread(self.ask_part))
+                providers.append(lookup.provider())
+            return run_heavy(replace(snapshot, components=tuple(c for c in snapshot.components if c.nets)),
+                             providers=providers)
         def success(value):
             self.heavy_findings = value
             self.show_findings_summary()
             self.render_cards()
+            if lookup is not None:
+                self.status.setText(lookup.summary)
         self.run_work("Running heavy checks", operation, success)
 
     def restart_audit(self):

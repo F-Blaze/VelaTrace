@@ -56,7 +56,7 @@ electrical-routing research ([scope and benchmarks](docs/ELECTRICAL_ROUTING.md))
 
 ## Offline by default
 
-The audit and routing run on your computer. Network use is opt-in and limited to: optional AI provider calls (your own endpoint and key), an optional JLCPCB parts download from a public GitHub Pages site (`bouni.github.io` for the full catalogue, `lrks.github.io` for the small list), an optional live stock and price lookup that sends only LCSC part numbers to `cart.jlcpcb.com` (a JLCPCB website endpoint, not an official API), and optional Groq search (which uses Tavily). Installation also downloads Python packages (including numpy for routing). No telemetry. Details: [docs/privacy.md](docs/privacy.md).
+The audit and routing run on your computer. Network use is opt-in and limited to: optional AI provider calls (your own endpoint and key), an optional JLCPCB parts download from a public GitHub Pages site (`bouni.github.io` for the full catalogue, `lrks.github.io` for the small list), an optional live stock and price lookup that sends only LCSC part numbers to `cart.jlcpcb.com` (a JLCPCB website endpoint, not an official API), an optional footprint lookup in Run heavy checks that sends LCSC part numbers to `easyeda.com` (and, with your own API credentials, part numbers to `api.digikey.com`), and optional Groq search (which uses Tavily). Installation also downloads Python packages (including numpy for routing). No telemetry. Details: [docs/privacy.md](docs/privacy.md).
 
 ## Audit accuracy
 

@@ -1,4 +1,4 @@
-"""Bounded HTTPS for the two opt-in JLCPCB features (catalogue download, live part lookup).
+"""Bounded HTTPS for the opt-in parts features (JLCPCB catalogue and live lookup, footprint fit).
 
 Only the fixed hosts below can be contacted, over verified TLS, with no redirects, no cookies,
 a hard size limit and a hard deadline. Nothing here runs unless the user clicked a button.
@@ -15,30 +15,44 @@ from urllib.parse import urlsplit
 from .errors import ValidationError
 from .network import connect_before
 
-# Every host this feature may contact. docs/privacy.md lists the same two.
-ALLOWED_HOSTS = frozenset({"bouni.github.io", "cart.jlcpcb.com"})
+# Every host this feature may contact. docs/privacy.md lists the same ones.
+ALLOWED_HOSTS = frozenset({"bouni.github.io", "cart.jlcpcb.com", "easyeda.com", "api.digikey.com"})
+# DigiKey takes the user's own API credentials, so only its token and keyword-search paths are open.
+_DIGIKEY_POSTS = frozenset({"/v1/oauth2/token", "/products/v4/search/keyword"})
 USER_AGENT = "VelaTrace-jlcpcb (+https://github.com/F-Blaze/VelaTrace)"
 IDLE_TIMEOUT = 30.0
 
 
 class JlcNetError(ValidationError):
     """The request was refused, failed or exceeded its limits; nothing was changed."""
+    status = 0   # the HTTP status when the server answered with a refusal
 
 
 class Cancelled(JlcNetError):
     pass
 
 
+def _permitted(host: str | None, method: str, path: str) -> bool:
+    if host == "api.digikey.com":
+        return method == "POST" and path in _DIGIKEY_POSTS
+    if host == "easyeda.com":
+        return method == "GET"
+    return host in ALLOWED_HOSTS and method in {"GET", "HEAD"}
+
+
 def request(url: str, *, method: str = "GET", headers: dict[str, str] | None = None,
             timeout: float = 30.0, max_bytes: int = 1_000_000,
             sink: Callable[[bytes], None] | None = None,
-            cancel: Callable[[], bool] | None = None) -> tuple[int, dict[str, str], bytes]:
+            cancel: Callable[[], bool] | None = None,
+            body: bytes | None = None, content_type: str | None = None) -> tuple[int, dict[str, str], bytes]:
     """One request. Returns (status, lower-cased headers, body); with `sink` the body is
-    streamed to it instead. Only 200 and 206 are accepted."""
+    streamed to it instead. Only 200 and 206 are accepted. POST needs `body` and `content_type`;
+    other methods send neither."""
     parsed = urlsplit(url)
-    if (parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS or parsed.port
-            or parsed.username or parsed.password or method not in {"GET", "HEAD"}):
-        raise JlcNetError("Only the built-in JLCPCB data hosts can be contacted.")
+    sends = body is not None and bool(content_type) if method == "POST" else body is None and content_type is None
+    if (parsed.scheme != "https" or not _permitted(parsed.hostname, method, parsed.path) or parsed.port
+            or parsed.username or parsed.password or not sends):
+        raise JlcNetError("Only the built-in parts data hosts can be contacted.")
     deadline = monotonic() + timeout
     connection = http.client.HTTPSConnection(parsed.hostname, 443, timeout=timeout,
                                              context=ssl.create_default_context())
@@ -47,12 +61,15 @@ def request(url: str, *, method: str = "GET", headers: dict[str, str] | None = N
     response = None
     try:
         path = parsed.path + ("?" + parsed.query if parsed.query else "")
-        connection.request(method, path, headers={
-            "User-Agent": USER_AGENT, "Accept-Encoding": "identity", **(headers or {})})
+        connection.request(method, path, body=body, headers={
+            "User-Agent": USER_AGENT, "Accept-Encoding": "identity",
+            **({"Content-Type": content_type} if content_type else {}), **(headers or {})})
         response = connection.getresponse()
         if response.status not in (200, 206):
-            raise JlcNetError(f"{parsed.hostname} answered HTTP {response.status}"
-                              + ("; redirects are refused." if 300 <= response.status < 400 else "."))
+            refused = JlcNetError(f"{parsed.hostname} answered HTTP {response.status}"
+                                  + ("; redirects are refused." if 300 <= response.status < 400 else "."))
+            refused.status = response.status
+            raise refused
         found = {name.lower(): value for name, value in response.getheaders()}
         declared = found.get("content-length")
         if declared is not None and not declared.isdigit():

@@ -1069,7 +1069,8 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_
                         # High-speed checks: not yet measured on unseen boards.
                         "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",
                         # Footprint-fit checks: starting tolerances, not yet measured.
-                        "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order"})
+                        "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order",
+                        "fit.unverified"})
 
 
 def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable[Check]) -> list[Finding]:

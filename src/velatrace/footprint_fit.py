@@ -126,19 +126,22 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart) -> list[F
         return finding("fit.mount_type", f"footprint is {mount[here]} but {name} is {mount[there]}",
                        f"The footprint's pads are {mount[here]}; the part's pads are {mount[there]}.",
                        "Use a footprint with the same mounting type as the part.")
-    if not part:
+    rows_cols = _rows_cols(fp)
+    if part:
+        part_rows_cols = _rows_cols(part)
+    elif real.rows and part_count % real.rows == 0:   # package-only part that states its rows
+        part_rows_cols = (real.rows, part_count // real.rows)
+    else:
         return []
-
-    rows_cols, part_rows_cols = _rows_cols(fp), _rows_cols(part)
     if sorted(rows_cols) != sorted(part_rows_cols):
         return finding("fit.layout", f"pad layout differs from {name} (footprint "
                        f"{_label(*rows_cols)}, part {_label(*part_rows_cols)})",
                        f"The footprint's {len(fp)} pads form {rows_cols[0]} row(s) × {rows_cols[1]} column(s); "
-                       f"the part's {len(part)} pads form {part_rows_cols[0]} row(s) × "
+                       f"the part's {part_count} pads form {part_rows_cols[0]} row(s) × "
                        f"{part_rows_cols[1]} column(s).",
                        "Use the footprint for this part's package; the pin count matches but the pads "
                        "are arranged differently.")
-    if len(fp) > _MAX_ALIGN_PADS:
+    if not part or len(fp) > _MAX_ALIGN_PADS:
         return []
 
     mine, theirs = _centred(fp), _centred(part)

@@ -28,6 +28,7 @@ class RealPart:
     # Package-only parts (no pad geometry, e.g. from a distributor): pin count and mount type.
     pin_count: int = 0
     through_hole: bool | None = None
+    rows: int = 0    # connector rows when the source states them (pins are then rows x columns)
 
 
 def _text(value: object) -> str:
