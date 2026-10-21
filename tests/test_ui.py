@@ -758,6 +758,189 @@ class SetupUsabilityTests(unittest.TestCase):
         self.assertTrue(window.next_button.isEnabled())
         self.assertFalse(window.price_button.isVisibleTo(window))
 
+    def open_board_audit(self, window):
+        """Check design against a fake open board; returns the recorded read_board(copper=...) calls."""
+        from velatrace import ui
+        from velatrace.models import DesignSnapshot, Pin
+        parts = (Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"))),)
+        calls = []
+        def read_board(copper=False):
+            calls.append(copper)
+            return DesignSnapshot(parts, "board")
+        reader = SimpleNamespace(read_board=read_board, version=(10, 0, 6))
+        window.source.setCurrentIndex(0)
+        with patch.object(ui.KiCadReader, "connect", return_value=reader):
+            window.load_design()
+            self.settle(window)
+        return calls, reader
+
+    def heading_texts(self, window):
+        from PySide6.QtWidgets import QLabel
+        return [item.text() for item in window.card_container.findChildren(QLabel)]
+
+    def test_check_design_reads_light_and_heavy_button_needs_a_board_audit(self):
+        window = self.launch()
+        self.assertFalse(window.heavy_button.isEnabled())
+        self.read_fixture(window)  # netlist source
+        self.assertFalse(window.heavy_button.isEnabled())
+        calls, _ = self.open_board_audit(window)
+        self.assertEqual(calls, [False])
+        self.assertTrue(window.heavy_button.isEnabled())
+        self.assertIsNone(window.heavy_findings)
+        self.assertIn("Light checks", self.heading_texts(window))
+        self.assertNotIn("Heavy checks", self.heading_texts(window))
+
+    def test_heavy_checks_render_under_their_own_heading_and_reset_on_recheck(self):
+        from velatrace import ui
+        from velatrace.findings import Finding, Severity
+        window = self.launch()
+        calls, reader = self.open_board_audit(window)
+        window.audit_snapshot = replace(window.audit_snapshot, path=None)
+        for found, expected in (([Finding("hs.pair.skew", Severity.INFO, "Pair skew", ("U1",))], "Pair skew"),
+                                ([], "No issues found.")):
+            with patch.object(ui.KiCadReader, "connect", return_value=reader),                     patch("velatrace.ui.run_heavy", return_value=found):
+                window.heavy_button.click()
+                self.settle(window)
+            self.assertEqual(calls[-1], True)
+            texts = self.heading_texts(window)
+            self.assertEqual(window.heavy_findings, found)
+            self.assertLess(texts.index("Light checks"), texts.index("Heavy checks"))
+            self.assertIn(expected, texts[texts.index("Heavy checks"):] + [card.finding.title for card in window.finding_cards])
+        with patch.object(ui.KiCadReader, "connect", return_value=reader):
+            window.load_design()
+            self.settle(window)
+        self.assertIsNone(window.heavy_findings)
+        self.assertNotIn("Heavy checks", self.heading_texts(window))
+
+    def lookup_board(self, window, *parts):
+        """Audit a fake open board whose footprints have pad offsets (so they are lookup candidates)."""
+        from velatrace import ui
+        from velatrace.models import DesignSnapshot
+        board = DesignSnapshot(tuple(parts), "board")
+        reader = SimpleNamespace(read_board=lambda copper=False: board, version=(10, 0, 6))
+        window.audit_snapshot, window.findings = board, []
+        return board, reader
+
+    @staticmethod
+    def header(ref, value="Conn", **fields):
+        from velatrace.models import Pin
+        return Component(ref, value, "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+                         (Pin("1", "A", offset_mm=(0.0, 0.0), through_hole=True),
+                          Pin("2", "B", offset_mm=(0.0, 2.54), through_hole=True)), fields)
+
+    def test_heavy_checks_ask_once_with_the_counts_and_cached_only_sends_nothing(self):
+        from velatrace import ui
+        from velatrace.jlc_http import http
+        window = self.launch()
+        self.open_board_audit(window)
+        board, reader = self.lookup_board(window, self.header("J1", LCSC="C65114"), self.header("J2", LCSC="C65114"),
+                                          self.header("J3", LCSC="C124378"))
+        asked = []
+
+        def answer(easyeda, digikey):
+            asked.append((easyeda, digikey))
+            return "cached"
+        window.ask_lookup = answer
+        with patch.object(ui.KiCadReader, "connect", return_value=reader),                 patch.object(http.client, "HTTPSConnection", side_effect=AssertionError("network")):
+            window.heavy_button.click()
+            self.settle(window)
+        self.assertEqual(asked, [(2, 0)])           # three footprints, two different LCSC numbers
+        self.assertEqual(window.status.text(), "Footprints: 0 checked, 3 not looked up")
+        self.assertEqual([item.rule for item in window.heavy_findings], ["fit.unverified"])
+        # Cancel: no worker, nothing changes.
+        window.heavy_findings = None
+        window.ask_lookup = lambda easyeda, digikey: None
+        with patch.object(ui.KiCadReader, "connect", return_value=reader) as connect:
+            window.heavy_button.click()
+            self.settle(window)
+        connect.assert_not_called()
+        self.assertIsNone(window.heavy_findings)
+
+    def test_prompt_wording_and_the_three_answers(self):
+        from PySide6.QtWidgets import QMessageBox
+        window = self.launch()
+        shown = []
+        for clicked, expected in (("Yes", "yes"), ("Cached only", "cached"), ("Cancel", None)):
+            def exec_(box, clicked=clicked):
+                shown.append(box.text().splitlines()[0])
+                button = next(b for b in box.buttons() if b.text().replace("&", "") == clicked)
+                box._clicked = button
+                return 0
+            with patch.object(QMessageBox, "exec", exec_),                     patch.object(QMessageBox, "clickedButton", lambda box: box._clicked):
+                self.assertEqual(window.ask_lookup(12, 3), expected)
+        with patch.object(QMessageBox, "exec", lambda box: shown.append(box.text().splitlines()[0]) or 0):
+            window.ask_lookup(1, 0)
+            window.ask_lookup(0, 2)
+        self.assertEqual(shown, ["Look up 12 parts on easyeda.com (and DigiKey for 3)?"] * 3
+                         + ["Look up 1 part on easyeda.com?", "Look up 2 parts on DigiKey?"])
+
+    def test_identification_asks_to_choose_or_type_on_the_ui_thread_and_not_for_one_hit(self):
+        from jlc_fixture import install
+        install(self.config).close()
+        window = self.launch()
+        self.lookup_board(window, self.header("J1", "RP2040"), self.header("J2", "Thick Film"),
+                          self.header("J3", "zzzzzz"))
+        chosen, typed = [], []
+
+        def choose(reference, options):
+            chosen.append((reference, len(options), threading.current_thread() is threading.main_thread()))
+            return options[0]
+
+        def type_in(reference, prompt):
+            typed.append(reference)
+            return "C65114"
+        window.choose_part, window.ask_part = choose, type_in
+        window.ask_lookup = lambda easyeda, digikey: "cached"
+        lookup, network = window.prepare_part_lookup()
+        self.assertFalse(network)
+        self.assertEqual((chosen[0][0], chosen[0][1] > 1, chosen[0][2], typed), ("J2", True, True, ["J3"]))
+        self.assertEqual(len(chosen), 1)            # J1 had a single catalogue hit: no dialog
+        self.assertEqual(lookup.targets["J1"], "C2040")
+        self.assertEqual(lookup.targets["J3"], "C65114")
+
+    def test_the_worker_asks_its_questions_on_the_ui_thread(self):
+        from velatrace import ui
+        from velatrace.part_lookup import PartLookup, Option
+        window = self.launch()
+        self.open_board_audit(window)
+        board, reader = self.lookup_board(window, self.header("J1", LCSC="C65114"))
+        seen = {}
+
+        def fetch(lookup, *, network, choose, ask, **kwargs):
+            seen["network"] = network
+            seen["worker"] = threading.current_thread() is not threading.main_thread()
+            seen["answer"] = choose("J1", [Option("C1", "one"), Option("C2", "two")])
+            seen["typed"] = ask("J1", "which?")
+        window.ask_lookup = lambda easyeda, digikey: "yes"
+        window.choose_part = lambda reference, options: seen.update(ui_thread=threading.current_thread() is threading.main_thread()) or options[1]
+        window.ask_part = lambda reference, prompt: "C7"
+        with patch.object(ui.KiCadReader, "connect", return_value=reader), patch.object(PartLookup, "fetch", fetch):
+            window.heavy_button.click()
+            self.settle(window)
+        self.assertEqual((seen["network"], seen["worker"], seen["ui_thread"], seen["answer"].key, seen["typed"]),
+                         (True, True, True, "C2", "C7"))
+
+    def test_digikey_settings_are_a_password_field_and_the_secret_is_never_saved(self):
+        from PySide6.QtWidgets import QLineEdit
+        from velatrace.ui import Settings, SettingsDialog
+        window = self.launch()
+        dialog = SettingsDialog(window.settings, window)
+        self.addCleanup(dialog.deleteLater)
+        self.assertEqual(dialog.fields["digikey_secret"].echoMode(), QLineEdit.EchoMode.Password)
+        self.assertNotEqual(dialog.fields["digikey_id"].echoMode(), QLineEdit.EchoMode.Password)
+        dialog.fields["digikey_id"].setText("the-id")
+        dialog.fields["digikey_secret"].setText("synthetic-secret")
+        settings = dialog.value()
+        self.assertEqual((settings.digikey_login().client_id, settings.digikey_login().client_secret),
+                         ("the-id", "synthetic-secret"))
+        self.assertNotIn("synthetic-secret", repr(settings))
+        path = self.config / "saved.json"
+        settings.save(path)
+        self.assertNotIn("synthetic-secret", path.read_text(encoding="utf-8"))
+        loaded = Settings()
+        loaded.load(path)
+        self.assertEqual((loaded.digikey_id, loaded.digikey_secret, loaded.digikey_login()), ("the-id", "", None))
+
     def test_logos_with_duplicate_refs_do_not_block_the_checks(self):
         from velatrace.models import DesignSnapshot, Pin
         parts = (Component("REF**", "LOGO", "Symbol:Logo", ()), Component("REF**", "LOGO", "Symbol:Logo", ()),

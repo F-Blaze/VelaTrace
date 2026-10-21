@@ -20,13 +20,13 @@ from PySide6.QtCore import Qt, QThread, Signal, Slot, QStandardPaths, QTimer
 from PySide6.QtGui import QCursor, QColor, QPainter, QPen, QFontDatabase, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-    QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QSpinBox, QStackedWidget, QToolTip,
     QTextEdit, QVBoxLayout, QWidget,
 )
 
 from .audit import AuditSession, AuditStage, require_connectivity
-from .audit_rules import run_rules, summarize
+from .audit_rules import run_heavy, run_rules, summarize
 from .bom import bom_findings
 from .candidate import SafeCandidateValidator, canonical, project_context, trusted_via_catalog
 from .constraints import Constraint, ConstraintStore, Scope, propose_constraint
@@ -35,6 +35,7 @@ from .errors import ExportUnavailable, RoutingCancelled, ValidationError
 from .findings import Finding, Severity
 from .flags import Bucket, Function, Verdict
 from .ipc import KiCadReader
+from .jlc_catalog import best_parts_db
 from .kicad_cli import KiCadCli, sweep_stale_settings
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
@@ -43,6 +44,7 @@ from . import __version__
 from .preflight import preflight
 from .jlc_parts import design_findings
 from .parts_db import cache_paths, download_catalogue
+from .part_lookup import DigiKeyLogin, PartLookup, excluded_refs
 from .pricing import PricingSession, estimate_price
 from .privacy import ConsentStore, PROVIDER_NOTE, disclosure_text
 from .provider import CallBudget, Provider, ProviderConfig, Usage
@@ -206,14 +208,20 @@ class Settings:
     verified_model: str = ""
     cap: int = 40
     output_cap: int = 4096
+    digikey_id: str = ""
+    digikey_secret: str = field(default="", repr=False)
+
+    def digikey_login(self):
+        return DigiKeyLogin(self.digikey_id, self.digikey_secret) if self.digikey_id and self.digikey_secret else None
 
     def provider_config(self):
         return ProviderConfig(self.name, self.endpoint, self.model, self.key,
                               self.protocol, self.search_model or None, self.search)
 
     def save(self, path: Path):
-        """Remember paths and provider choices between launches. Never the API key."""
-        values = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "key"}
+        """Remember paths and provider choices between launches. Never the API key or DigiKey secret."""
+        values = {name: getattr(self, name) for name in self.__dataclass_fields__
+                  if name not in ("key", "digikey_secret")}
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(values, indent=2), encoding="utf-8")
 
@@ -226,7 +234,7 @@ class Settings:
         if not isinstance(saved, dict):
             return
         for name, value in saved.items():
-            if name != "key" and name in self.__dataclass_fields__ and type(value) is type(getattr(self, name)):
+            if name not in ("key", "digikey_secret") and name in self.__dataclass_fields__ and type(value) is type(getattr(self, name)):
                 setattr(self, name, value)
 
 
@@ -309,6 +317,14 @@ class SettingsDialog(QDialog):
         self.protocol.currentTextChanged.connect(update_search)
         update_search(self.protocol.currentText())
         ai.addRow(self.search)
+
+        digikey = section("DigiKey (optional)", False, "Only used by Run heavy checks, for parts that are not on LCSC.")
+        note = QLabel("Optional. Your own DigiKey developer app (Product Information v4). Untested with real keys.")
+        note.setWordWrap(True)
+        digikey.addRow(note)
+        text(digikey, "digikey_id", "Client ID")
+        secret = text(digikey, "digikey_secret", "Client secret", "Kept in memory for this launch only; never saved.")
+        secret.setEchoMode(QLineEdit.EchoMode.Password)
 
         advanced = section("Advanced", False)
         text(advanced, "search_model", "Search model ID", "Optional; defaults to the model ID.")
@@ -569,8 +585,11 @@ EXPLAIN = "Explain with AI"
 
 
 class MainWindow(QMainWindow):
+    call_on_ui = Signal(object)  # a worker's question to the user; see on_ui_thread
+
     def __init__(self, *, demo=False, config_dir=None):
         super().__init__()
+        self.call_on_ui.connect(self.run_on_ui)
         self.setWindowTitle("VelaTrace")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
         screen = QApplication.primaryScreen().availableGeometry()
@@ -592,6 +611,7 @@ class MainWindow(QMainWindow):
         # The audit's own design read; self.snapshot belongs to routing.
         self.audit_snapshot: DesignSnapshot | None = None
         self.findings: list[Finding] = []
+        self.heavy_findings: list[Finding] | None = None  # None until "Run heavy checks" has run
         self.worker = None
         self.executor = Worker(self)
         self.executor.usage.connect(self.update_usage)
@@ -679,6 +699,10 @@ class MainWindow(QMainWindow):
         self.load_button.setObjectName("primary")
         self.load_button.clicked.connect(self.load_design)
         source.addWidget(self.load_button)
+        self.heavy_button = tip(QPushButton("Run heavy checks"), "Slower checks: high-speed signals (and part "
+                                "footprints, coming). Reads the routed copper.")
+        self.heavy_button.clicked.connect(self.run_heavy_checks)
+        source.addWidget(self.heavy_button)
         self.restart_button = tip(QPushButton("Reset"), "Clear findings, annotations and the AI review")
         self.restart_button.clicked.connect(self.restart_audit)
         source.addWidget(self.restart_button)
@@ -909,6 +933,8 @@ class MainWindow(QMainWindow):
              "Finish the AI review first." if stage != AuditStage.CLASSIFIED else
              "No flagged parts." if not self.audit.flags else "")
         gate(self.report_button, "Check a design first." if self.audit_snapshot is None else "")
+        gate(self.heavy_button, "Not available in the demo." if self.demo else "Busy." if busy else
+             "Check the open PCB first." if self.audit_snapshot is None or self.reader is None else "")
         gate(self.annotations, "Not available in the demo." if self.demo else
              "Finish the AI review first." if stage != AuditStage.CLASSIFIED else
              "Needs the open PCB." if self.safety is None else "")
@@ -946,7 +972,8 @@ class MainWindow(QMainWindow):
         if not path:
             return
         try:
-            save_report(path, render_report(self.audit_snapshot, list(self.findings), version=__version__))
+            save_report(path, render_report(self.audit_snapshot, list(self.findings), version=__version__,
+                                                  heavy=self.heavy_findings))
         except OSError as exc:
             self.show_error(f"Could not save report: {exc}")
             return
@@ -1111,7 +1138,7 @@ class MainWindow(QMainWindow):
         self.render_cards()
 
     def show_findings_summary(self):
-        self.totals.setText(summarize(self.findings) if self.audit_snapshot else "")
+        self.totals.setText(summarize(self.findings + (self.heavy_findings or [])) if self.audit_snapshot else "")
         self.totals.setVisible(self.audit_snapshot is not None)
 
     def load_design(self):
@@ -1130,7 +1157,7 @@ class MainWindow(QMainWindow):
             reader = safety = None
             if choice == 0:
                 reader = KiCadReader.connect()
-                snapshot = reader.read_board(copper=True)
+                snapshot = reader.read_board()  # light: no routed copper (see run_heavy_checks)
                 if snapshot.path:
                     safety = BoardSafety(reader.client.get_board(), snapshot.path, journal_dir=self.config_dir / "journals")
             elif choice == 1:
@@ -1145,6 +1172,7 @@ class MainWindow(QMainWindow):
             return snapshot, self.check_design(snapshot), reader, safety
         def success(value):
             self.audit_snapshot, self.findings, self.reader, self.safety = value
+            self.heavy_findings = None
             self.apply_theme(self.theme.currentText())
             self.pricing = self.routing = None
             self.ticket = None
@@ -1155,12 +1183,119 @@ class MainWindow(QMainWindow):
             self.reset_ai()
         self.run_work("Checking design", operation, success)
 
+    @Slot(object)
+    def run_on_ui(self, job):
+        job()
+
+    def on_ui_thread(self, function):
+        """`function` as called from the worker: it runs on the UI thread and the worker waits for the answer."""
+        def call(*args):
+            done, answer = threading.Event(), []
+            def job():
+                try:
+                    answer.append(function(*args))
+                finally:
+                    done.set()
+            self.call_on_ui.emit(job)
+            done.wait()
+            return answer[0] if answer else None
+        return call
+
+    def part_prompt(self, title, label, items=None):
+        """Pick from `items` or type text; Skip (or closing) answers None."""
+        box = QInputDialog(self)
+        box.setWindowTitle(title)
+        box.setLabelText(label)
+        for text in box.findChildren(QLabel):
+            text.setTextFormat(Qt.TextFormat.PlainText)  # part and board text is not markup
+        box.setCancelButtonText("Skip")
+        if items:
+            box.setComboBoxItems(items)
+        return box.textValue() if box.exec() else None
+
+    def choose_part(self, reference, options):
+        labels = [option.label for option in options]
+        picked = self.part_prompt(f"Which part is {reference}?", "Pick the real part. Skip leaves it unchecked "
+                                  "and is remembered for this board.", labels)
+        return options[labels.index(picked)] if picked in labels else None
+
+    def ask_part(self, reference, prompt):
+        return self.part_prompt(f"Part for {reference}", prompt + "\nSkip is remembered for this board.")
+
+    def ask_lookup(self, easyeda, digikey):
+        """Yes / Cached only / Cancel before any part number is sent: "yes", "cached" or None."""
+        def parts(count):
+            return f"{count} part" + ("" if count == 1 else "s")
+        question = (f"Look up {parts(easyeda)} on easyeda.com" + (f" (and DigiKey for {digikey})" if digikey else "")
+                    if easyeda else f"Look up {parts(digikey)} on DigiKey") + "?"
+        box = QMessageBox(self)
+        box.setWindowTitle("Footprint lookup")
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(question + "\n\nOnly part numbers are sent, about one request per second; nothing about "
+                    "your board. Answers saved earlier are reused. Cached only sends nothing.")
+        yes = box.addButton("Yes", QMessageBox.ButtonRole.AcceptRole)
+        cached = box.addButton("Cached only", QMessageBox.ButtonRole.ActionRole)
+        cancel = box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(cancel)
+        box.exec()
+        return {yes: "yes", cached: "cached"}.get(box.clickedButton())
+
+    def prepare_part_lookup(self):
+        """Identify the real part behind each non-passive footprint (local, may ask which part it is),
+        then ask once before anything is sent. Returns (lookup, network); (None, False) when there is
+        nothing to look up; None when the user cancels."""
+        catalogue = None
+        try:
+            catalogue = best_parts_db(self.config_dir)
+        except ValidationError:
+            pass  # without a catalogue the user is asked instead
+        lookup = PartLookup(self.audit_snapshot, self.config_dir, excluded=excluded_refs(self.audit_snapshot.path),
+                            catalogue=catalogue, digikey=self.settings.digikey_login(),
+                            choose=self.choose_part, ask=self.ask_part)
+        try:
+            lookup.identify()
+        finally:
+            if hasattr(catalogue, "close"):
+                catalogue.close()
+        if not lookup.candidates:
+            return None, False
+        easyeda, digikey = lookup.needs_network()
+        if not easyeda and not digikey:
+            return lookup, False
+        answer = self.ask_lookup(easyeda, digikey)
+        return None if answer is None else (lookup, answer == "yes")
+
+    def run_heavy_checks(self):
+        """Re-read the open board with its routed copper and run the slower checks."""
+        prepared = self.prepare_part_lookup()
+        if prepared is None:
+            return
+        lookup, network = prepared
+        def operation(_):
+            snapshot = KiCadReader.connect().read_board(copper=True)
+            if snapshot.path != self.audit_snapshot.path:
+                raise ValidationError("The open board changed. Run Check design again.")
+            providers = []
+            if lookup is not None:
+                lookup.fetch(network=network, choose=self.on_ui_thread(self.choose_part),
+                             ask=self.on_ui_thread(self.ask_part))
+                providers.append(lookup.provider())
+            return run_heavy(replace(snapshot, components=tuple(c for c in snapshot.components if c.nets)),
+                             providers=providers)
+        def success(value):
+            self.heavy_findings = value
+            self.show_findings_summary()
+            self.render_cards()
+            if lookup is not None:
+                self.status.setText(lookup.summary)
+        self.run_work("Running heavy checks", operation, success)
+
     def restart_audit(self):
         def operation(_):
             if self.safety:
                 self.safety.clear_preview()
         def done(_):
-            self.audit_snapshot, self.findings = None, []
+            self.audit_snapshot, self.findings, self.heavy_findings = None, [], None
             self.audit_step.setText(READY_STEP)
             self.audit_step.setToolTip("")
             self.reset_ai()
@@ -1282,21 +1417,24 @@ class MainWindow(QMainWindow):
         self.finding_cards = []
 
     def render_findings(self):
-        if not self.findings:
-            self.card_layout.addWidget(label("No issues found.", muted=True))
-            return
         locate = self.zoom_to_part if self.can_zoom() else None
-        for severity, heading in SEVERITY_GROUPS:
-            rows = [item for item in self.findings if item.severity == severity]
-            if not rows:
+        for title, findings in (("Light checks", self.findings), ("Heavy checks", self.heavy_findings)):
+            if findings is None:
                 continue
-            header = label(f"{heading} · {len(rows)}")
-            header.setStyleSheet(f"color:{SEVERITY_COLORS[severity]}; font-weight:600")
-            self.card_layout.addWidget(header)
-            for finding in rows:
-                card = FindingCard(finding, locate)
-                self.finding_cards.append(card)
-                self.card_layout.addWidget(card)
+            self.card_layout.addWidget(label(title, muted=True))
+            if not findings:
+                self.card_layout.addWidget(label("No issues found.", muted=True))
+            for severity, heading in SEVERITY_GROUPS:
+                rows = [item for item in findings if item.severity == severity]
+                if not rows:
+                    continue
+                header = label(f"{heading} · {len(rows)}")
+                header.setStyleSheet(f"color:{SEVERITY_COLORS[severity]}; font-weight:600")
+                self.card_layout.addWidget(header)
+                for finding in rows:
+                    card = FindingCard(finding, locate)
+                    self.finding_cards.append(card)
+                    self.card_layout.addWidget(card)
 
     def render_cards(self):
         classified = bool(self.audit and self.audit.stage == AuditStage.CLASSIFIED)

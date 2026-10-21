@@ -1102,6 +1102,10 @@ RULES: dict[str, Check] = {
     "connector": check_connector_protection,
     "value": check_values,
     "coverage": check_coverage,
+}
+
+# Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
+HEAVY_RULES: dict[str, Check] = {
     "hs.pair.skew": check_pair_skew,
     "hs.pair.vias": check_pair_vias,
     "hs.return.no_plane": check_return_plane,
@@ -1130,18 +1134,16 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
 BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating",
                         # High-speed checks: not yet measured on unseen boards.
-                        "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via"})
+                        "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",
+                        # Footprint-fit checks: starting tolerances, not yet measured.
+                        "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order",
+                        "fit.unverified"})
 
 
-def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
-    """All built-in checks plus extra providers, sorted by severity.
-
-    A failing check never hides the others: it becomes an INFO finding.
-    """
-    checks = list(RULES.items()) + [(getattr(provider, "__name__", "extra"), provider)
-                                    for provider in (EXTRA_PROVIDERS if providers is None else providers)]
+def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable[Check]) -> list[Finding]:
     findings: list[Finding] = []
-    for name, check in checks:
+    for name, check in [*checks.items(), *((getattr(provider, "__name__", "extra"), provider)
+                                           for provider in providers)]:
         try:
             findings.extend(check(snapshot))
         except Exception as exc:  # a check bug must not block the rest of the audit
@@ -1149,6 +1151,19 @@ def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None
                                     f"The {name} check could not run", evidence=str(exc) or type(exc).__name__))
     return sort_findings([replace(item, severity=Severity.INFO) if item.rule in BETA_RULES else item
                           for item in findings])
+
+
+def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
+    """The light built-in checks plus extra providers, sorted by severity.
+
+    A failing check never hides the others: it becomes an INFO finding.
+    """
+    return _run(RULES, snapshot, EXTRA_PROVIDERS if providers is None else providers)
+
+
+def run_heavy(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
+    """The heavy checks (HEAVY_RULES) plus providers; no providers by default."""
+    return _run(HEAVY_RULES, snapshot, providers or ())
 
 
 def saving_total(findings: Iterable[Finding]) -> Decimal:

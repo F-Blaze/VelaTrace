@@ -1,0 +1,131 @@
+{
+ "Products": [
+  {
+   "Description": {
+    "ProductDescription": "CONN HEADER VERT 6POS 2.54MM",
+    "DetailedDescription": "CONN HEADER VERT 6POS 2.54MM (detailed)"
+   },
+   "Manufacturer": {
+    "Id": 1,
+    "Name": "Example Connectors"
+   },
+   "ManufacturerProductNumber": "EXAMPLE-2X3-HDR",
+   "ProductVariations": [
+    {
+     "DigiKeyProductNumber": "EX-2X3-ND",
+     "PackageType": {
+      "Name": "Bulk"
+     }
+    }
+   ],
+   "Parameters": [
+    {
+     "ParameterId": 1,
+     "ParameterText": "Number of Positions",
+     "ParameterType": "Parameter",
+     "ValueId": "10",
+     "ValueText": "6"
+    },
+    {
+     "ParameterId": 2,
+     "ParameterText": "Number of Rows",
+     "ParameterType": "Parameter",
+     "ValueId": "20",
+     "ValueText": "2"
+    },
+    {
+     "ParameterId": 3,
+     "ParameterText": "Pitch",
+     "ParameterType": "Parameter",
+     "ValueId": "30",
+     "ValueText": "0.100\" (2.54mm)"
+    },
+    {
+     "ParameterId": 4,
+     "ParameterText": "Mounting Type",
+     "ParameterType": "Parameter",
+     "ValueId": "40",
+     "ValueText": "Through Hole"
+    },
+    {
+     "ParameterId": 5,
+     "ParameterText": "Package / Case",
+     "ParameterType": "Parameter",
+     "ValueId": "50",
+     "ValueText": "Header"
+    }
+   ]
+  },
+  {
+   "Description": {
+    "ProductDescription": "CONN HEADER VERT 6POS 2.54MM SINGLE ROW",
+    "DetailedDescription": "CONN HEADER VERT 6POS 2.54MM SINGLE ROW (detailed)"
+   },
+   "Manufacturer": {
+    "Id": 1,
+    "Name": "Example Connectors"
+   },
+   "ManufacturerProductNumber": "EXAMPLE-1X6-HDR",
+   "ProductVariations": [
+    {
+     "DigiKeyProductNumber": "EX-1X6-ND",
+     "PackageType": {
+      "Name": "Bulk"
+     }
+    }
+   ],
+   "Parameters": [
+    {
+     "ParameterId": 1,
+     "ParameterText": "Number of Positions",
+     "ParameterType": "Parameter",
+     "ValueId": "10",
+     "ValueText": "6"
+    },
+    {
+     "ParameterId": 2,
+     "ParameterText": "Number of Rows",
+     "ParameterType": "Parameter",
+     "ValueId": "20",
+     "ValueText": "1"
+    },
+    {
+     "ParameterId": 4,
+     "ParameterText": "Mounting Type",
+     "ParameterType": "Parameter",
+     "ValueId": "40",
+     "ValueText": "Through Hole"
+    }
+   ]
+  },
+  {
+   "Description": {
+    "ProductDescription": "ACCESSORY",
+    "DetailedDescription": "ACCESSORY (detailed)"
+   },
+   "Manufacturer": {
+    "Id": 1,
+    "Name": "Example Connectors"
+   },
+   "ManufacturerProductNumber": "EXAMPLE-NO-DATA",
+   "ProductVariations": [
+    {
+     "DigiKeyProductNumber": "EX-NODATA-ND",
+     "PackageType": {
+      "Name": "Bulk"
+     }
+    }
+   ],
+   "Parameters": [
+    {
+     "ParameterId": 9,
+     "ParameterText": "Color",
+     "ParameterType": "Parameter",
+     "ValueId": "90",
+     "ValueText": "Black"
+    }
+   ]
+  }
+ ],
+ "ProductsCount": 3
+}

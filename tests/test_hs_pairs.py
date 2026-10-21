@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from velatrace.audit_rules import check_pair_skew, check_pair_vias, run_rules
+from velatrace.audit_rules import check_pair_skew, check_pair_vias, run_heavy
 from velatrace.copper import BoardCopper, Segment, Via, read_copper_file
 from velatrace.findings import Severity
 from velatrace.models import DesignSnapshot
@@ -79,11 +79,11 @@ def test_single_extra_via_on_same_layers_is_normal():
 
 def test_saved_board_layer_mismatch_and_info_severity():
     snapshot = DesignSnapshot((), "fixture", copper=read_copper_file(FIXTURE))
-    found = [item for item in run_rules(snapshot, providers=()) if item.rule.startswith("hs.")]
+    found = [item for item in run_heavy(snapshot, providers=()) if item.rule.startswith("hs.")]
     assert [item.rule for item in found] == ["hs.pair.vias"]   # D+ on F.Cu and B.Cu, D- on B.Cu only
     assert all(item.severity == Severity.INFO for item in found)   # beta until measured
     skewed = board(track("USB_D+", 30), track("USB_D-", 5, y=1))
-    assert [(item.rule, item.severity) for item in run_rules(skewed, providers=()) if item.rule.startswith("hs.")] \
+    assert [(item.rule, item.severity) for item in run_heavy(skewed, providers=()) if item.rule.startswith("hs.")] \
         == [("hs.pair.skew", Severity.INFO)]
 
 

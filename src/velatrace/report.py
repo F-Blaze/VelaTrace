@@ -57,18 +57,26 @@ def _finding(item: Finding) -> str:
 
 
 def render_report(snapshot: DesignSnapshot, findings: list[Finding], *, project_name: str = "",
-                  generated_at: datetime | None = None, version: str = "") -> str:
+                  generated_at: datetime | None = None, version: str = "",
+                  heavy: list[Finding] | None = None) -> str:
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
     name = project_name or (snapshot.path.stem if snapshot.path else "") or "Untitled design"
     meta = [when, f"{len(snapshot.components)} parts"] + ([f"VelaTrace {version}"] if version else [])
     body = [f"<h1>{_esc(name)} — audit report</h1>",
             f'<div class="meta">{" · ".join(_esc(m) for m in meta)}</div>',
-            f'<div class="summary">{_esc(summarize(findings))}</div>']
-    for severity, heading in _SECTIONS:
-        group = [f for f in findings if f.severity == severity]
-        if group:
-            body.append(f"<h2>{heading} ({len(group)})</h2>")
-            body.extend(_finding(f) for f in group)
+            f'<div class="summary">{_esc(summarize(findings + (heavy or [])))}</div>']
+    for title, rows in (("Light checks", findings), ("Heavy checks", heavy)):
+        if rows is None:
+            continue
+        if heavy is not None:
+            body.append(f"<h2>{title}</h2>")
+            if not rows:
+                body.append('<div class="fine">No issues found.</div>')
+        for severity, heading in _SECTIONS:
+            group = [f for f in rows if f.severity == severity]
+            if group:
+                body.append(f"<h2>{heading} ({len(group)})</h2>")
+                body.extend(_finding(f) for f in group)
     rows = "".join(f"<tr><td>{_esc(c.reference)}</td><td>{_esc(c.value)}</td>"
                    f"<td>{_esc(c.footprint)}</td></tr>"
                    for c in sorted(snapshot.components, key=lambda c: c.reference))

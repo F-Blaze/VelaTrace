@@ -2,12 +2,31 @@
 
 All board mutations belong to the separately reviewed write-safety boundary.
 """
+import math
 from pathlib import Path
 from typing import Any
 
 from .copper import read_copper_ipc
 from .errors import CapabilityError
 from .models import Component, DesignSnapshot, Pin
+
+
+def _pin(fp: Any, pad: Any, bottom: bool) -> Pin:
+    """A pad as a Pin. Children carry absolute board positions (kipy docs), so the footprint-frame
+    offset undoes the footprint rotation (KiCad's, y down) and, on the back side, the x mirror."""
+    position = (pad.position.x / 1_000_000, pad.position.y / 1_000_000)
+    offset = through_hole = None
+    try:
+        angle = math.radians(fp.orientation.degrees)
+        dx, dy = (pad.position.x - fp.position.x) / 1_000_000, (pad.position.y - fp.position.y) / 1_000_000
+        offset = (dx * math.cos(angle) - dy * math.sin(angle), dx * math.sin(angle) + dy * math.cos(angle))
+        if bottom:
+            offset = (-offset[0], offset[1])
+        drill = pad.padstack.drill.diameter
+        through_hole = drill.x > 0 or drill.y > 0
+    except Exception:  # a missing field leaves the fit data unknown, never fails the board read
+        pass
+    return Pin(pad.number, pad.net.name, position_mm=position, offset_mm=offset, through_hole=through_hole)
 
 
 class KiCadReader:
@@ -36,6 +55,7 @@ class KiCadReader:
         """Footprints, pads and copper layers of the open board; with ``copper`` also its
         routed copper (live text, unsaved edits included) for the high-speed checks."""
         from kipy.board_types import Field
+        from kipy.proto.board.board_types_pb2 import BoardLayer
         from kipy.util.board_layer import canonical_name, is_copper_layer
 
         board = self.client.get_board()
@@ -48,10 +68,7 @@ class KiCadReader:
                 reference=fp.reference_field.text.value,
                 value=fp.value_field.text.value,
                 footprint=f"{library.library}:{library.name}",
-                # Footprint children carry absolute board positions (kipy docs).
-                pins=tuple(Pin(pad.number, pad.net.name,
-                               position_mm=(pad.position.x / 1_000_000, pad.position.y / 1_000_000))
-                           for pad in fp.definition.pads),
+                pins=tuple(_pin(fp, pad, fp.layer == BoardLayer.BL_B_Cu) for pad in fp.definition.pads),
                 fields=fields,
                 position_mm=(fp.position.x / 1_000_000, fp.position.y / 1_000_000),
                 uuid=fp.id.value,

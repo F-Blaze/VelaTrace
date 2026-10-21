@@ -73,3 +73,11 @@ def test_save_report_utf8_atomic(tmp_path):
     save_report(target, "café — ok")
     assert target.read_bytes().decode("utf-8") == "café — ok"
     assert [p.name for p in tmp_path.iterdir()] == ["r.html"]
+
+
+def test_light_and_heavy_sections():
+    heavy = [Finding("hs.pair.skew", Severity.INFO, "Pair skew", ())]
+    html = render(sample(), heavy=heavy)
+    assert html.index("Light checks") < html.index("Errors (1)") < html.index("Heavy checks") < html.index("Pair skew")
+    assert "Light checks" not in render(sample()) and "Heavy checks" not in render(sample())
+    assert "No issues found." in render(sample(), heavy=[])
