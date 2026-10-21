@@ -32,8 +32,9 @@ def local_tool_environment() -> dict[str, str]:
 def find_tool(tool: str | Path, *, forbidden=()) -> Path | None:
     """Absolute path of an external program, or None when it is not installed.
 
-    A bare name is searched in the absolute PATH folders only: never in the working
-    directory (where shutil.which and Windows itself look first) and never in a
+    A bare name is searched in the absolute PATH folders, then next to the Python that
+    started this one (KiCad's bundled python.exe sits beside kicad-cli.exe and the plugin
+    venv inherits it): never in the working directory (where shutil.which and Windows itself look first) and never in a
     `forbidden` folder (the project being opened), so a downloaded project cannot
     supply the program. For the same reason a configured path must be absolute.
     On Windows a bare name means the native .exe; callers refuse scripts."""
@@ -44,8 +45,9 @@ def find_tool(tool: str | Path, *, forbidden=()) -> Path | None:
         if os.name == "nt" and not text.lower().endswith(".exe"):
             text += ".exe"
         banned = {Path(folder).resolve() for folder in (Path.cwd(), *forbidden)}
-        candidates = [Path(folder) / text for folder in os.environ.get("PATH", "").split(os.pathsep)
-                      if folder and Path(folder).is_absolute()]
+        folders = [*os.environ.get("PATH", "").split(os.pathsep),
+                   os.path.dirname(getattr(sys, "_base_executable", None) or sys.executable)]
+        candidates = [Path(folder) / text for folder in folders if folder and Path(folder).is_absolute()]
     for candidate in candidates:
         try:
             found = candidate.resolve(strict=True)
@@ -149,6 +151,9 @@ class DrcResult:
     # (type, severity, item uuids) per violation/parity issue, to tell pre-existing
     # issues from ones a route introduced. Empty means identities are unknown.
     issues: tuple = ()
+    # Each missing connection as KiCad reports it: ((description, x_mm, y_mm), ...) per
+    # pair, for a router that reconnects exactly what KiCad finds open.
+    missing: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -191,6 +196,14 @@ def _issue(row) -> tuple | None:
     return kind, severity, tuple(sorted(uuids))
 
 
+def _located(item) -> tuple | None:
+    """(description, x, y) of a DRC item; None without a usable position (it only informs)."""
+    try:
+        return str(item.get("description", "")), float(item["pos"]["x"]), float(item["pos"]["y"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def parse_drc_report(path: Path) -> DrcResult:
     if path.stat().st_size > 32_000_000:
         raise ValidationError("KiCad DRC report exceeds 32 MB.")
@@ -218,9 +231,10 @@ def parse_drc_report(path: Path) -> DrcResult:
         # findings, which route_issues() treats as blocking; known carried warnings
         # need not become blockers just because another row omitted its UUID.
         issues = tuple(sorted(issue for issue in identities if issue is not None))
+        missing = tuple(tuple(_located(item) for item in row.get("items", []) if _located(item)) for row in rows[1])
     except (ValueError, KeyError, TypeError) as exc:
         raise ValidationError("KiCad DRC report is incomplete or malformed; approval is unavailable.") from exc
-    return DrcResult(*(len(items) for items in rows), issues)
+    return DrcResult(*(len(items) for items in rows), issues, missing)
 
 
 class KiCadCli:

@@ -10,6 +10,7 @@ stripline approximation), not a field solver and not signal-integrity sign-off.
 """
 from dataclasses import dataclass
 import math
+import re
 
 from .errors import ValidationError
 from .stackup import homogeneous_delay_ps, read_stackup, thin_microstrip
@@ -130,17 +131,27 @@ def layer_models(layers, thickness, text, planes) -> list[LayerModel]:
     return models
 
 
-_PAIR_SUFFIXES = (("+", "-"), ("_P", "_N"), ("_DP", "_DN"), ("DP", "DM"), ("_D+", "_D-"), ("P", "N"))
+_PAIR_SUFFIXES = (("+", "-"), ("_P", "_N"), ("_DP", "_DN"), ("DP", "DM"), ("_D+", "_D-"), ("P", "N"), ("P", "M"))
+
+
+def _pair_key(name):
+    """KiCad's automatic name Net-(U3-GPIO20{slash}USB_D+) -> U3-USB_D+: the part and the pin's last alias."""
+    found = re.fullmatch(r"Net-\((\w+)-(.*)\)", name)
+    return f"{found.group(1)}-{found.group(2).split('{slash}')[-1]}" if found else name
 
 
 def differential_pairs(names) -> list[tuple[str, str]]:
-    """Net-name pairs such as USB_D+/USB_D-; a naming guess, reported not enforced."""
-    names, pairs, used = set(names), [], set()
-    for name in sorted(names):
+    """Net-name pairs such as USB_D+/USB_D-; a naming guess."""
+    keys = {}
+    for name in names:
+        keys.setdefault(_pair_key(name), []).append(name)
+    keys = {key: found[0] for key, found in keys.items() if len(found) == 1}
+    pairs, used = [], set()
+    for name in sorted(keys):
         for positive, negative in _PAIR_SUFFIXES:
             other = name[:-len(positive)] + negative
-            if name.endswith(positive) and other in names and len(name) > len(positive) and not {name, other} & used:
-                pairs.append((name, other))
+            if name.endswith(positive) and other in keys and len(name) > len(positive) and not {name, other} & used:
+                pairs.append((keys[name], keys[other]))
                 used.update((name, other))
                 break
     return pairs
@@ -160,6 +171,10 @@ def demo():
     assert layer_models(("F.Cu", "B.Cu"), 1.6, "(kicad_pcb)", set())[0].impedance_ohm(0.2) is None
     assert differential_pairs(["USB_D+", "USB_D-", "CLK_P", "CLK_N", "GND", "P", "N"]) == [
         ("CLK_P", "CLK_N"), ("USB_D+", "USB_D-")]
+    assert differential_pairs(["Net-(U3-USB_DP)", "Net-(U3-USB_DM)", "USBP", "USBM", "Net-(U1-IO19{slash}USB_D-)",
+                               "Net-(U1-IO20{slash}USB_D+)"]) == [
+        ("Net-(U1-IO20{slash}USB_D+)", "Net-(U1-IO19{slash}USB_D-)"), ("Net-(U3-USB_DP)", "Net-(U3-USB_DM)"),
+        ("USBP", "USBM")]
 
 
 if __name__ == "__main__":

@@ -77,8 +77,9 @@ unrouted copy and `report.json` into the new folder.
   0.2 mm outer dielectric on 4+ layers, 35 um copper) and every affected figure
   is flagged `assumed`. This replaces "no guessed dielectric" for this engine
   only; nothing is written back to the board.
-- **Pairs.** Nets named like `USB_D+`/`USB_D-` are routed first and their delay
-  skew is reported. They are **not** routed as coupled pairs.
+- **Pairs.** Nets named like `USB_D+`/`USB_D-` (also KiCad's automatic
+  `Net-(U3-USB_DP)` names) are routed as a coupled pair where possible and
+  delay-matched afterwards; see "Differential pairs and delay matching" below.
 
 All figures are quasi-static estimates (the existing Hammerstad-Jensen
 microstrip and the IPC-2141 stripline approximation). They are not a field
@@ -256,13 +257,172 @@ On 11 of 13 boards Vela connects every pad in every order and adds no DRC
 error beyond warnings; on mikoto, usb-i2c and bms only errors that were already
 on the unrouted board stop acceptance.
 
+### Finishing dense boards: ideas from KiCadRoutingTools, 2026-10-16
+
+Two completion mechanisms re-implemented in Vela's own design from the ideas of
+KiCadRoutingTools 0.23.1 (ideas from KiCadRoutingTools, MIT, (c) 2026 drandyhaas).
+No KRT code is used, and unlike KRT nothing rewrites the board's design rules:
+KiCad DRC stays the only judge.
+
+- **KiCad check and reconnect** (`kicad_check`, `Router.reconnect`). With a
+  kicad-cli (the runner's `--kicad-cli`, or the plugin's KiCad), the routed copy
+  goes through `kicad-cli pcb drc --refill-zones`. Each pair KiCad reports open
+  (`DrcResult.missing`: item descriptions with positions) is mapped back to the
+  net's copper: a pad by its position, a track or via by the nearest copper Vela
+  drew, a zone by the rest of the net. Vela then tries, in order: a straight
+  off-grid track between two pads of the net within 2 mm, checked exactly
+  against all other copper (fine-pitch neighbours the grid phase walls off; if
+  only routed copper is in the way, one rip-up turn moves it); a strict search
+  between the two copper islands; one rip-up turn of the rescue. KiCad checks
+  again, at most two rounds. A round KiCad counts no better (open connections
+  plus violations) is rolled back. `--kicad-rounds 0` only judges. Time in
+  KiCad is reported as `kicad_check_s` and left out of `seconds`. A new restart
+  is only begun if the last one fits in what is left plus 30 s, so the check
+  has time (a cut-short restart never won on the bench).
+- **Rip-up churn control** (`Router._turn`, `rescue`). A net that loses a
+  connection as a rip victim costs more to push through each later turn (a
+  per-net surcharge in the search window; none while it is open anyway).
+  Victims re-route least ripped first. A net ripped three times waits for a
+  final round instead of trading places (soleil seed 1 spent all its turns
+  swapping +BATT and U7-STAT2). A turn that leaves more open than it found, or
+  a conflict, is undone; the best state seen is kept as before.
+
+Measured on the 13 boards, seeds 1, 4, 7, 600 s, three boards at a time
+(runs c1/c4/c7 against f1/f4/f7). The machine was busier than for the
+reference runs, so times are noisy; open connections are KiCad's count.
+
+| Board | Open before (1/4/7) | Open after | Router s after (before) |
+|---|---|---|---|
+| soleil | 2/1/2 | 1/1/1 | 264/214/247 (229/188/212) |
+| bitaxe-ultra | 4/3/2 | 4/4/3 | 580/607/513 (613/627/601) |
+| other 11 boards | unchanged | unchanged | mostly lower; mtb-led and zereader 20-50 % higher in this run only |
+
+- soleil: the KiCad check closed one connection on seed 1 (V_CHARGE, by a
+  rip-up turn). What stays open is GND ball B2 in the middle of the 0.5 mm
+  DSBGA U9: the only way out is a 0.15 mm track to ball C1 between B1 and C2
+  with 6 um to spare. U9 sits 0.7 cell off the grid phase, and B1's 0.3 mm
+  track end swells past its pad; moving it in a rip-up turn leaves B1 and C2
+  unreachable, so the link is refused.
+- bitaxe: the check closed one connection on seed 1 (5 to 4 open). Two runs of
+  the final code gave 4/4/3; an earlier full run of nearly the same code gave
+  4/1/2. The difference to the reference is within run-to-run noise. Routing
+  now ends inside the budget.
+- Same connections, KiCad-unconnected, new DRC and acceptance on every other
+  board and seed (20 of 39 runs accepted, as before).
+- A third idea, a search budget extended in tranches only while the search
+  closes in on its goal, was tried and dropped: failing searches were already
+  cheap (the backwards probe finds walled-in pads), and soleil gave identical
+  results and times with and without it.
+
+### Differential pairs and delay matching, 2026-10-18
+
+Ideas from KiCadRoutingTools 0.23.1 (MIT, (c) 2026 drandyhaas): a pair routed as
+one centreline and offset to its two tracks (`diff_pair_routing.py`), and
+trombone meanders on the faster net matched in time per layer
+(`length_matching.py`, `impedance.py`). Re-implemented in Vela's own design; no
+KRT code is used and no design rule is loosened.
+
+- **Trunk.** Width `w` and gap `g` come from the net class's `diff_pair_width` /
+  `diff_pair_gap` (.kicad_pro; class width and clearance when unset; the gap is
+  never below clearance + 0.02 mm, the grid's keep-off margin). The pair's ends
+  are the two places farthest apart where a P and an N pad sit within 3 mm. A
+  one-layer A* on a virtual class `2w + g` (an extra occupancy map, open ground
+  cheaper than ground next to pins) joins free cells within a launch radius
+  (0.75 to 4.5 mm) of each end, the pads' own layer first. The centreline is
+  straightened, offset to +-(w + g)/2 with mitred 45/90-degree corners and each
+  track checked exactly against all fixed copper.
+- **Breakouts.** Each track becomes fixed copper of its net (a pad-like trunk,
+  `Router._add_trunk`); the nets' own searches then only join pads to it
+  (Kruskal takes trunk joins first). A candidate trunk is kept only if both nets,
+  alone on the board, route all their pads through it. After routing, a trunk
+  that left its pair unrouted or that the routes bypass gives way, and
+  `route_board` re-routes that order without it; trunk ends past the outermost
+  joins are cut (KiCad would report them dangling) and own vias stay off the
+  trunk (a track end inside a via must sit on its centre).
+- **Delay matching** (`Router.tune`, end of `run`). The faster net of each pair
+  (delay from the stackup model, per segment layer and width, plus via barrels)
+  gets exact bumps on the outer side of its trunk, or, uncoupled, square grid
+  bumps on its straight runs in cells free of all other copper (residue at most
+  one grid step's delay, about 0.6 ps at 0.1 mm), until skew <= `Options.skew_ps`
+  (1 ps). Bump height is capped by `Options.meander_mm` (1 mm).
+- **Report.** `electrical.pairs`: coupled, layer, width, achieved gap, coupled
+  length and % of the routed length, skew in ps and mm before and after tuning,
+  meander count, and the reason when a pair routes as two nets.
+
+### Custom rules and BGA escape, 2026-10-19
+
+Ideas from KiCadRoutingTools 0.23.1 (MIT, (c) 2026 drandyhaas): reading the
+routing subset of `.kicad_dru` in KiCad's order and listing what is not modelled
+(`kicad_dru.py`, `design_rules.py`), and under-pad escape of dense ball arrays
+(`bga_fanout/underpad.py`). Re-implemented in Vela's own design; no KRT code is
+used.
+
+- **Custom rules** (`vela_board._custom_rules`). Constraints `clearance`,
+  `track_width`, `via_diameter`, `hole_size`, `hole_clearance`, `edge_clearance`
+  and `disallow` (track, via, through_via). Conditions: `NetClass`, `NetName`
+  (case-blind, `*`/`?` wildcards), `hasNetclass()`, `Type`, `Pad_Type`,
+  `Via_Type`, `&&`, `||`, `!`, A/B, the `(layer ...)` clause and
+  `intersectsArea`/`insideArea`/`enclosedByArea` on named rule areas. As in
+  KiCad the last matching rule wins; a pad or footprint clearance still applies
+  on top. A condition is evaluated per net as true, false or "depends" (on the
+  layer, an area or the other item B); a "depends" rule is applied net-wide on
+  the safe side (higher clearance, width clamped to its min/max) and noted.
+  Clearances are only ever raised, because VelaTrace also proves a route under
+  Board Setup rules alone. `disallow` becomes a keep-out over the named rule
+  areas (or the whole board). A per-net minimum width turns off that net's
+  neck-down. Every rule, constraint or condition not modelled (`assertion`,
+  `isPlated()`, net-specific `disallow`, ...) is listed in report.json `notes`.
+  On the bench only soleil and zereader-pico carry a `.kicad_dru` (AISLER's
+  rules); neither changes routing (PTH hole size, no blind/micro vias, a
+  solder-mask `assertion`, which is noted).
+- **BGA escape** (`Router._escape`, before routing). Footprints whose SMD pads
+  sit on a square pitch, at least 3x3 and half filled, are ball arrays. An inner
+  ball is walled in when the grid, flooding its free cells from the ball, gets
+  neither past the outer balls nor to a cell where a via of its net fits. Such a
+  ball gets fixed copper (a pad-like trunk, as for pairs), each piece checked
+  exactly: a straight track to a same-net ball that is not walled in, else a via
+  in the pad, else a dog-bone via on a diagonal between four balls. soleil's
+  0.5 mm DSBGA centre ball (GND) clears its neighbours by 6 um with a 0.15 mm
+  track to the GND corner ball, less than the grid's keep-off margin; it now
+  escapes that way.
+
+Measured with seeds 1, 4 and 7 on all 13 boards, budget 600 s, against the step-2
+engine (runs d1/d4/d7; d1 where a seed was not run). Only soleil changed
+because of this step: 1 open connection on every seed before, 0 after, and one
+`connection width` warning fewer (blocking 16/16/15; all other blockers are
+courtyard and silk errors already on the unrouted board, so soleil is still not
+accepted). Totals over 39 runs: accepted 21 vs 21, unconnected 9 vs 20,
+blocking 406 vs 407. The rest of the unconnected drop is bitaxe-ultra (8 vs 17),
+which an A-only run with identical inputs also reached (12 in total): it comes
+from the baseline having been run on a busier machine (more re-route tries fit
+the budget now), as do the shorter times (2603 s vs 4913 s in total; A-only
+2872 s). bms seed 7 leaves 1 open with the step-2 engine too. Smoke (demo,
+practice, Prod_v2): all accepted.
+
+Step 4 (measured 2026-10-19, 13 boards x seeds 1/4/7, 600 s, same harness):
+tracks leaving a teardrop pad keep a teardrop half width off no-track keep-outs
+(KiCad checks the teardrop, not the track), and thermal relief counts spokes a
+fixed pair trunk cuts as cut. zereader-pico: "items not allowed" gone on all
+seeds; blocking 4/2/3 -> 4/1/1. Its remaining starved thermals are U2 pad 9
+(already on the unrouted board) and J3 SH2 on seed 1, where routing fences the
+spokes' fill into an island (not fixed: a gate/pocket model was tried and
+reverted, its fill estimate gave false pockets). Totals: accepted 21 vs 21,
+unconnected 10 vs 9 (soleil seed 1: the KiCad reconnect round was rolled back),
+blocking 401 vs 406, 2539 s vs 2603 s. bitaxe-ultra stays at 2-3 open: its
+BM1366 QFN pins are walled in by neighbours' jogs; reserved escape lanes were
+tried (4/4 open, regressions elsewhere) and reverted.
+
 ### Known limits
 
-- No coupled differential-pair routing, no length or delay tuning (serpentines),
-  no impedance-driven width changes: delay, impedance and skew are reported, and
-  delay steers layer choice, but nothing is tuned to a target.
-- Through vias only. No blind, buried or micro vias, no BGA fanout patterns.
-- Custom rule files (`.kicad_dru`), footprint copper text, teardrops and
+- Coupled pairs: one layer per trunk, no paired vias inside the trunk, no
+  polarity swap; pairs that cannot be coupled route as two nets (reported).
+  Delay matching covers name-detected pairs only (no length groups), and no
+  widths are changed for impedance.
+- Through vias only. No blind, buried or micro vias. BGA escape covers walled-in
+  inner balls of square-pitch arrays only (no staggered arrays, no channel or
+  lane planning, escape vias at the class size).
+- Custom rules beyond the subset above (area-specific or pairwise values are
+  applied net-wide on the safe side), footprint copper text, teardrops and
   thermal-relief spokes are not modelled; KiCad DRC catches the misses. Starved
   thermals are the most common new DRC error.
 - A plane that belongs to a net with no second plane never carries signals, which

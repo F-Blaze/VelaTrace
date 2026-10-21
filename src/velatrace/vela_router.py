@@ -52,6 +52,8 @@ def constrained(board, constraints):
     width = max((c.minimum_mm for c in constraints if c.kind == "trace-width"), default=0)
     gap = max((c.minimum_mm for c in constraints if c.kind == "clearance"), default=0)
     board.classes = [replace(c, width=max(c.width, width), clearance=max(c.clearance, gap)) for c in board.classes]
+    board.overrides = {net: replace(c, width=max(c.width, width), clearance=max(c.clearance, gap))
+                       for net, c in board.overrides.items()}
     board.rules["min_track_width"] = max(board.rules.get("min_track_width", 0), width)  # also the neck width
     return board
 
@@ -77,7 +79,7 @@ class VelaRouter:
         from .candidate import trusted_via_catalog
         from .copper_text import extract_copper_text
         from .vela_board import load_board
-        from .vela_engine import Options, route_board
+        from .vela_engine import Options, kicad_check, route_board
         if not all(c.kind in {"clearance", "trace-width"} and c.target == "all nets" for c in constraints):
             raise CapabilityError("Some confirmed routing constraints cannot be enforced by this router.")
         # The private copy KiCad exported the DSN from (live board text); the saved
@@ -94,6 +96,14 @@ class VelaRouter:
         def log(text):
             self.progress("Routing · " + text.split("] ", 1)[-1])
         router = route_board(board, Options(log=log, cancel=self.cancel), obstacles)
+        project, rules = path.with_suffix(".kicad_pro"), path.with_suffix(".kicad_dru")
+        if not rules.is_file() and getattr(dsn, "ticket", None) is not None:
+            rules = Path(dsn.ticket.board_path).with_suffix(".kicad_dru")
+        if self.cli is not None and project.is_file():
+            try:   # KiCad's own DRC of the zone-refilled copy: reconnect exactly what it finds open
+                kicad_check(router, self.cli, path.name, (project, rules))
+            except (CapabilityError, ValidationError) as exc:
+                self.progress(f"KiCad check skipped: {exc}")
         self.last_report = router.report()
         items = router.copper()
         catalog = trusted_via_catalog(dsn) if any(item.kind == "via" for item in items) else {}

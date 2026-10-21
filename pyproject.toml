@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "velatrace"
-version = "0.1.0a1"
+version = "0.1.0a2"
 description = "Connectivity-aware component audits and guarded routing for KiCad"
 requires-python = ">=3.11"
 license = "MIT"

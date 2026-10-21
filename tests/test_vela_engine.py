@@ -158,3 +158,154 @@ def test_tracks_that_starve_a_thermal_relief_move_off_its_spokes(tmp_path):
         return min(_gap(p, q, (10, 6.3), (10, 5.675)) for _, p, q, _ in router.geometry(router.nets["SIG"])[0])
     # The straight line clears the pads but cuts that spoke: one left, KiCad reports a starved thermal.
     assert nearest(False) < 0.1 and nearest(True) >= 0.1 + 0.2 - 1e-6
+
+
+def test_rescue_turn_is_undone_when_worse_and_victims_get_dearer(tmp_path):
+    import numpy as np
+    board = _board(tmp_path, _pad("A1", 3, 6, "A") + _pad("A2", 17, 6, "A")
+                   + _pad("B1", 10, 2, "B") + _pad("B2", 10, 10, "B"))
+    router = route_board(board, Options())
+    a, b = router.nets["A"], router.nets["B"]
+    saved = router._state(a)
+
+    def worse(price):   # a turn that only breaks things
+        router._ripup(a)
+        a.failed = 1
+        return 0
+    assert router._turn(a, worse, 8.0) is None
+    assert router._state(a)[0] is saved[0] and a.failed == 0 and not router._in_conflict(a)
+    args = (a, a.t, 0, router.H, 0, router.W, 1.0, False, router.via_cost, False)
+    plain = np.asarray(router._costs(*args)[0])
+    router.surcharge = {"B": 5.0}   # B was ripped before: crossing it costs more
+    dear = np.asarray(router._costs(*args)[0])
+    assert np.isclose((dear - plain).max(), 5.0) and (dear >= plain).all() and b.stamps is not None
+
+
+def test_reconnect_routes_what_kicad_reports_open(tmp_path):
+    from velatrace.kicad_cli import DrcResult
+    from velatrace.vela_engine import kicad_check
+    board = _board(tmp_path, _pad("A1", 3, 6, "A") + _pad("A2", 17, 6, "A")
+                   + _pad("C1", 3, 2, "C") + _pad("C2", 4.6, 2, "C"))
+    router = route_board(board, Options())
+    for name in "AC":   # pretend both were left open
+        router._restore(router.nets[name], ([], set(), 1, 1))
+    missing = (("Pad 1 [A] of A1 on F.Cu", 3, 6), ("Pad 1 [A] of A2 on F.Cu", 17, 6)), \
+              (("Pad 1 [C] of C1 on F.Cu", 3, 2), ("Zone 'C' [C] on F.Cu", 0.5, 0.5))
+
+    class Cli:   # KiCad: first two open connections, then none
+        results = [DrcResult(0, 2, 0, (), missing), DrcResult(0, 0, 0)]
+
+        def drc(self, path):
+            assert "(segment" in path.read_text(encoding="utf-8") or self.results[0].unconnected
+            return self.results.pop(0)
+    result, text = kicad_check(router, Cli(), "board.kicad_pcb")
+    a, c = router.nets["A"], router.nets["C"]
+    assert result.unconnected == 0 and not a.failed and not c.failed and a.paths
+    assert c.links and c.links[0][1:3] == ((3.0, 2.0), (4.6, 2.0))   # off-grid straight link, pad to pad
+    assert not router._in_conflict(a) and "(segment" in text
+
+
+def _pair_part(ref, x, y, angle=0):
+    return (f'(footprint "P" (layer "F.Cu") (at {x} {y}) (property "Reference" "{ref}") '
+            f'(pad "1" smd rect (at 0 -0.4) (size 0.6 0.4) (layers "F.Cu") (net "D+")) '
+            f'(pad "2" smd rect (at 0 0.4) (size 0.6 0.4) (layers "F.Cu") (net "D-")))')
+
+
+def _clear(router, names, rule):
+    """Every pair of segments and vias of different nets keeps ``rule`` between copper edges."""
+    shapes = [(name, layer, p, q, w) for name in names for layer, p, q, w in router.geometry(router.nets[name])[0]]
+    for i, (na, la, p, q, wa) in enumerate(shapes):
+        for nb, lb, r, s, wb in shapes[i + 1:]:
+            assert na == nb or la != lb or _gap(p, q, r, s) >= (wa + wb) / 2 + rule - 1e-6
+
+
+def test_coupled_pair_keeps_its_gap_and_is_delay_matched(tmp_path):
+    blocker = '(footprint "X" (layer "F.Cu") (at 10 6) (property "Reference" "X1") (pad "1" smd rect (at 0 0) (size 2 2) (layers "F.Cu") (net "X")))'
+    _board(tmp_path, _pair_part("U1", 2, 6) + _pair_part("U2", 18, 6) + blocker)
+    (tmp_path / "board.kicad_pro").write_text(
+        '{"net_settings": {"classes": [{"name": "Default", "track_width": 0.2, "clearance": 0.2, "via_diameter": 0.6, '
+        '"via_drill": 0.3, "diff_pair_width": 0.25, "diff_pair_gap": 0.3}]}}', encoding="utf-8")
+    router = route_board(load_board(tmp_path / "board.kicad_pcb"), Options())
+    report = router.report()
+    pair, = report["electrical"]["pairs"]
+    assert report["unrouted"] == 0 and pair["coupled"] and pair["width_mm"] == 0.25
+    assert abs(pair["gap_mm"] - 0.3) < 1e-6 and pair["coupled_pct"] > 50
+    assert pair["skew_ps"] <= 1.0
+    trunk = [[(p, q) for _, p, q, w in router.geometry(router.nets[name])[0] if w == 0.25] for name in ("D+", "D-")]
+    assert min(_gap(p, q, r, s) for p, q in trunk[0] for r, s in trunk[1]) >= 0.25 + 0.3 - 1e-5
+    _clear(router, ("D+", "D-", "X"), 0.2)
+
+
+def test_meander_matches_delay_without_breaking_clearance(tmp_path):
+    # Uncoupled pair with one net much shorter; a neighbour track runs alongside the short one.
+    body = (_pad("A1", 2, 3, "D+") + _pad("A2", 18, 3, "D+") + _pad("B1", 2, 9, "D-") + _pad("B2", 14, 9, "D-")
+            + _pad("C1", 2, 11, "N") + _pad("C2", 14, 11, "N"))
+    router = route_board(_board(tmp_path, body), Options(couple=False))
+    report = router.report()
+    pair, = report["electrical"]["pairs"]
+    assert report["unrouted"] == 0 and not pair["coupled"]
+    assert pair["skew_ps_before"] > 20 and pair["meanders"] > 0 and pair["skew_ps"] <= 1.0
+    assert not any(router._in_conflict(net) for net in router.order)
+    _clear(router, ("D+", "D-", "N"), 0.2)
+
+
+def test_custom_rules_resolve_in_kicad_order_and_list_what_is_not_modelled(tmp_path):
+    (tmp_path / "board.kicad_dru").write_text(
+        '(version 1)\n# a comment\n'
+        '(rule "hv" (constraint clearance (min 0.5mm)) (constraint track_width (min 0.3mm) (opt 0.4mm))\n'
+        '  (condition "A.NetClass == \'Default\' && A.NetName == \'H*\'"))\n'
+        '(rule "later wins" (constraint track_width (min 0.25mm) (opt 0.35mm)) (condition "A.NetName == \'HV\'"))\n'
+        '(rule "pair" (constraint clearance (min 0.8mm)) (condition "A.NetName == \'HV\' && B.NetName == \'SIG\'"))\n'
+        '(rule "area" (constraint disallow via) (condition "A.intersectsArea(\'NOVIA\')"))\n'
+        '(rule "plated" (constraint clearance (min 1mm)) (condition "A.isPlated()"))\n', encoding="utf-8")
+    area = ('(zone (name "NOVIA") (layers "F.Cu" "B.Cu") (keepout (tracks allowed) (vias allowed) (copperpour allowed)) '
+            '(polygon (pts (xy 8 0) (xy 12 0) (xy 12 12) (xy 8 12))))')
+    board = _board(tmp_path, area + _pad("H1", 3, 6, "HV") + _pad("H2", 17, 6, "HV")
+                   + _pad("S1", 10, 2, "SIG") + _pad("S2", 10, 10, "SIG"))
+    hv, sig = board.netclass("HV"), board.netclass("SIG")
+    # Later rule wins on width; the pair rule is only known for one side, so it is kept net-wide.
+    assert (hv.width, hv.min_width, hv.clearance) == (0.35, 0.25, 0.8) and (sig.width, sig.clearance) == (0.2, 0.2)
+    keepout = board.zones[-1]
+    assert keepout.no_vias and not keepout.no_tracks and keepout.points == board.zones[0].points
+    assert any("'plated'" in note and "not applied" in note for note in board.notes)
+    assert any("'pair'" in note for note in board.notes)
+    router = route_board(board, Options())
+    segments, vias = router.geometry(router.nets["HV"])
+    vias += router.geometry(router.nets["SIG"])[1]
+    assert router.report()["unrouted"] == 0 and {s[3] for s in segments} == {0.35}
+    assert vias and not any(8 < x < 12 for x, _ in vias)
+
+
+def test_walled_in_ball_escapes_by_an_exact_track_to_a_same_net_ball(tmp_path):
+    # 3x3 array at 0.57 mm: the centre ball fits a 0.15 mm track past its neighbours by 5 um,
+    # less than the grid's keep-off margin, so only the exactly checked escape gets it out.
+    p, nets = 0.57, ["N1", "N2", "N3", "N4", "G", "N5", "G", "N6", "N7"]
+    balls = "".join(f'(pad "{"ABC"[k // 3]}{k % 3 + 1}" smd circle (at {(k % 3 - 1) * p:g} {(k // 3 - 1) * p:g}) '
+                    f'(size 0.245 0.245) (layers "F.Cu") (net "{net}"))' for k, net in enumerate(nets))
+    board = _board(tmp_path, f'(footprint "BGA" (layer "F.Cu") (at 6 6) (property "Reference" "U1") {balls})'
+                   + _pad("J1", 15, 6, "G"))
+    router = route_board(board, Options())
+    report = router.report()
+    assert report["notes"] == ["escape U1.B2: 0.15 mm track to U1.C1"] and report["unrouted"] == 0
+    segments, _ = router.geometry(router.nets["G"])
+    assert (0, (6 - p, 6 + p), (6.0, 6.0), 0.15) in [(s[0], tuple(map(lambda v: round(v, 6), s[1])), s[2], s[3])
+                                                     for s in segments]
+
+
+def test_track_leaves_a_teardrop_pad_a_teardrop_half_width_off_a_keepout(tmp_path):
+    keepout = ('(zone (layers "F.Cu") (keepout (tracks not_allowed) (vias allowed) (copperpour allowed)) '
+               '(polygon (pts (xy 3 6.7) (xy 7 6.7) (xy 7 11) (xy 3 11))))')
+    teardrop = '(teardrops (best_length_ratio 0.5) (max_length 1) (best_width_ratio 1) (max_width 2) (enabled yes))'
+    pad = ('(footprint "T" (layer "F.Cu") (at 5 6) (property "Reference" "T1") '
+           f'(pad "1" smd rect (at 0 0) (size 1.2 1.2) (layers "F.Cu") (net "A") {teardrop}))')
+    board = _board(tmp_path, keepout + pad + _pad("A2", 15, 8, "A"))
+    assert board.pads[0].teardrop == (0.6, 0.6) and board.pads[1].teardrop == ()
+    router = route_board(board, Options())
+    assert router.report()["unrouted"] == 0
+    # KiCad grows a 1.2 mm wide teardrop where the track leaves T1 and checks it against the keep-out:
+    # within its 0.6 mm length the centre line keeps about 0.6 mm off (the bare track would hug it).
+    for _, p, q, _ in router.geometry(router.nets["A"])[0]:
+        for t in (i / 50 for i in range(51)):
+            x, y = p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])
+            rim = math.hypot(max(abs(x - 5) - 0.6, 0), max(abs(y - 6) - 0.6, 0))
+            assert not 0 < rim < 0.6 or 6.7 - y >= 0.5
