@@ -67,9 +67,16 @@ _ADDRESSABLE_LED = re.compile(r"WS28\d\d|SK6\d{3}|APA1\d\d|SK98\d\d", re.IGNOREC
 _NOT_SUPPLY_PIN = re.compile(r"(?:SW|LX|PH|DCC\w*|EN|PG|PGOOD|BOOT|BST)\d*")
 # Op-amp offset-null/trim and compensation pins: left open when unused, per datasheets.
 _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
+# Input-typed pins that may stay open: debug pins with internal pulls, and flag outputs
+# (data-ready/interrupt) that some symbols type as input.
+_OPEN_OK_PIN = {"SWCLK", "SWDIO", "SWO", "SWDCK", "TCK", "TMS", "TDI", "TDO", "DRDY", "RDY", "INT", "INT1",
+                "INT2", "IRQ", "ALERT"}
+_UNUSED_USB_PIN = re.compile(r"SBU\d")  # USB-C sideband pins: unused on USB 2.0
 _LED_PART = re.compile(r"7.?SEG|SEVEN.?SEG|(?:^|\s)(?:LED|DISPLAY)")  # on "value footprint"
 # Connectors that never bring power in: memory-card/SIM sockets, M.2, SWD/JTAG/Tag-Connect pads.
-_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|M\.2|TAG-?CONNECT|TC20\d0|SWD|JTAG")
+_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|M\.2|TAG-?CONNECT|TC20\d0|SWD|JTAG|"
+                              r"FPC|FFC|BOARD.?TO.?BOARD|MEZZANINE|CASTELLAT|STAMP")
+SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
 _OUT_PIN = re.compile(r"V?OUT\d*|VO\d*")
@@ -112,7 +119,8 @@ def part_kind(comp: Component) -> str:
     text = (comp.footprint + " " + comp.value).upper()
     if library.startswith("CONNECTOR") or "PINHEADER" in text or "PINSOCKET" in text:
         return "connector"
-    if library.startswith("MODULE") or library.startswith("RF_MODULE") or "MODULE" in comp.value.upper():
+    if (library.startswith("MODULE") or library.startswith("RF_MODULE") or "MODULE" in comp.value.upper()
+            or re.search(r"MODULE|DEV[-_]?KIT", comp.footprint.split(":", 1)[-1].upper())):
         return "module"
     if _ADDRESSABLE_LED.search(comp.value):
         return "ic"
@@ -617,6 +625,8 @@ def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
         # (the receiving side's label, if mistyped, is reported on its own input).
         if pin.no_connect or _base_type(pin) in {"output", "power_out"}:
             continue
+        if design.kind[comp.reference] == "connector" and _UNUSED_USB_PIN.fullmatch(pin.name.upper()):
+            continue
         twins = sorted(other for other in by_label[net_label(net)]
                        if other != net and len(design.nodes[other]) > 1)
         if twins:
@@ -673,7 +683,8 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
         if _PROTECTION_VALUE.search(text) or _LED_PART.search(text):
             continue
         floating = [pin for pin in ic.pins if pin.net and pin.electrical_type.strip().lower() == "input"
-                    and len(design.nodes.get(pin.net, ())) == 1 and not _TRIM_PIN.search(pin.name.upper())]
+                    and len(design.nodes.get(pin.net, ())) == 1 and not _TRIM_PIN.search(pin.name.upper())
+                    and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & _OPEN_OK_PIN]
         if not floating:
             continue
         names = ", ".join(pin.name or pin.number for pin in floating)
@@ -733,6 +744,8 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
         if _NOT_POWER_ENTRY.search(f"{conn.value} {conn.footprint}".upper()):
             continue  # card sockets, M.2, SWD/Tag-Connect: loads and programming pads
         if not any(net in design.grounds or _RETURN.fullmatch(net_label(net)) for net in nets):
+            continue
+        if len({n for n in nets if net_label(n) and n not in design.grounds and n not in design.supplies}) >= SIGNAL_INTERFACE_MIN:
             continue
         for net in sorted(nets & design.supplies):
             if net.startswith("unconnected-(") or len(design.nodes[net]) < 2:

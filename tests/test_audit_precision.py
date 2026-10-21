@@ -305,3 +305,34 @@ def test_txs_translator_has_internal_pullups_and_odd_named_rail_counts():
     sensor_rail = part("U4", "AFE", "Package_QFN:QFN-24", ("1", "FING_V", "VDD"), ("2", "GND", "GND"))
     assert i2c_found(mcu, slave, res("R1", "SDA", "FING_V"), sensor_rail) == []
     assert [f for f, _ in i2c_found(mcu, slave, res("R1", "SDA", "FING_V"))] == ["i2c.pullup.missing"]
+
+
+# --- round 2: module rails, board interfaces, unused sideband/debug pins -----------------
+
+def test_dev_board_socket_is_a_module_not_an_ic_to_decouple():
+    kit = lambda footprint: part("U1", "ESP32-DevKitC", footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"))
+    assert decoupling(kit("Package_QFP:LQFP-32")) == [(("U1",), ("+3V3",))]
+    assert decoupling(kit("PCM_Espressif:ESP32-DevKitC")) == []
+    assert decoupling(kit("Vendor:Radio_Module_Castellated")) == []
+
+
+def test_fpc_and_wide_signal_interfaces_are_not_power_entries():
+    load = typed_ic("U1", ("1", "+5V", "VDD", "power_in"))
+    assert connector(load, header("J1", "+5V", "GND")) == [(("J1",), ("+5V",))]
+    assert connector(load, header("J1", "+5V", "GND", footprint="Connector_FFC-FPC:Hirose_FH12-6S")) == []
+    wide = header("J1", "+5V", "GND", *[f"/S{n}" for n in range(12)])
+    assert connector(load, wide) == []
+    assert connector(load, header("J1", "+5V", "GND", *[f"/S{n}" for n in range(8)])) == [(("J1",), ("+5V",))]
+
+
+def test_usbc_sideband_and_debug_or_flag_pins_may_stay_open():
+    usbc = lambda pin: part("J1", "USB_C", "Connector_USB:USB_C", ("A8", "/SBU1", pin), ("A1", "GND"), ("A12", "GND"))
+    assert [f.rule for f in rules(design(usbc("CC1")), "net")] == ["net.single_pin"]
+    assert rules(design(usbc("SBU1")), "net") == []
+
+    def chip(pin_name):
+        return part("U1", "SENSOR", "Package_SO:SOIC-8", ("1", "+5V", "V+", "power_in"), ("2", "GND", "V-", "power_in"),
+                    ("8", "unconnected-(U1-X-Pad8)", pin_name, "input"))
+    assert [f.refs for f in rules(design(chip("IN+")), "pin")] == [("U1",)]
+    for name in ("SWCLK", "PA13-SWDIO", "DRDY", "INT1"):
+        assert rules(design(chip(name)), "pin") == []
