@@ -16,6 +16,7 @@ class RealPad:
     x_mm: float      # relative to the footprint origin, y down like KiCad
     y_mm: float
     through_hole: bool
+    area_mm2: float = 0.0   # copper area (bounding box for polygons); 0 when unknown
 
 
 @dataclass(frozen=True)
@@ -51,8 +52,10 @@ def _pad(fields: list[str], origin: tuple[float, float]) -> RealPad | None:
     if x is None or y is None or hole is None or not number:  # unnumbered = mechanical
         return None
     slot = _number(fields[13]) if len(fields) > 13 and fields[13] else 0.0
+    width, height = _number(fields[4]) or 0.0, _number(fields[5]) or 0.0
     return RealPad(number, round((x - origin[0]) * _MM_PER_UNIT, 4), round((y - origin[1]) * _MM_PER_UNIT, 4),
-                   fields[6] == "11" or hole > 0 or bool(slot))
+                   fields[6] == "11" or hole > 0 or bool(slot),
+                   round(abs(width * height) * _MM_PER_UNIT ** 2, 4))
 
 
 def parse_component(data: dict) -> RealPart | None:
