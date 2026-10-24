@@ -412,6 +412,35 @@ blocking 401 vs 406, 2539 s vs 2603 s. bitaxe-ultra stays at 2-3 open: its
 BM1366 QFN pins are walled in by neighbours' jogs; reserved escape lanes were
 tried (4/4 open, regressions elsewhere) and reverted.
 
+### Fine-pitch via fanout, 2026-10-22
+
+bitaxe-ultra's BM1366 (U14) sits on B.Cu with 2 x 14 pins at 0.5 mm pitch, and
+every signal it carries ends on F.Cu, so each pin needs a via. 0.8 mm vias
+cannot sit side by side at that pitch. Placed one net at a time, the late nets
+found every via spot taken. Two stub repairs (on a restart, then inside the
+KiCad reconnect loop) joined their pins but left the displaced neighbours
+unroutable; both were dropped. The fix plans the vias together before routing,
+the way a designer fans out such a part (lane-planning idea from
+KiCadRoutingTools' fanout, no code). It applies to straight rows of 5 or more
+pins at 0.5 mm or less, and only to signal nets whose other pads are all on
+another layer (so a via is unavoidable). Per side, each pin runs straight out
+and then at 45 degrees to its own via. The vias sit in a column at legal
+spacing, assigned in pin order so no two fans cross. Each piece is checked
+exactly and laid as fixed copper.
+
+On bitaxe this lays 8 + 10 fans, with via columns 4.7 and 5.4 mm out at
+1.01 mm spacing. Measured with seeds 1, 4 and 7 on all 13 boards, budget 600 s,
+against step 4 (runs s1/s4/s7):
+- bitaxe-ultra open connections went from 2/3/3 to **0/0/0**. Time went from
+  307/289/288 s to 169/157/165 s. Blocking stays 4 on seeds 1 and 4, and goes
+  from 4 to 5 on seed 7 (one starved thermal). bitaxe stays unaccepted: 3
+  "footprint type mismatch" errors are already on the unrouted board.
+- No other board was affected by the fanout. soleil seed 1 went from 1 open to 0
+  (run-to-run variation).
+- Totals over 39 runs: accepted 21 vs 21, unconnected 1 vs 10, blocking 402 vs
+  401, 2021 s vs 2539 s.
+- Smoke test (demo, practice, Prod_v2): all accepted.
+
 ### Known limits
 
 - Coupled pairs: one layer per trunk, no paired vias inside the trunk, no
@@ -420,7 +449,9 @@ tried (4/4 open, regressions elsewhere) and reverted.
   widths are changed for impedance.
 - Through vias only. No blind, buried or micro vias. BGA escape covers walled-in
   inner balls of square-pitch arrays only (no staggered arrays, no channel or
-  lane planning, escape vias at the class size).
+  lane planning, escape vias at the class size). The fine-pitch fanout covers
+  axis-aligned straight rows only, with one via column per side (no staggered
+  columns), and only nets that must change layer.
 - Custom rules beyond the subset above (area-specific or pairwise values are
   applied net-wide on the safe side), footprint copper text, teardrops and
   thermal-relief spokes are not modelled; KiCad DRC catches the misses. Starved
