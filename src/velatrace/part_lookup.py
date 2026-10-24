@@ -24,7 +24,7 @@ from .bom import _ref_key, lcsc_code, mpn_of
 from .easyeda import RealPad, RealPart, _text, parse_component
 from .errors import VelaTraceError
 from .findings import Finding, Severity
-from .footprint_fit import compare, fit_candidates, kicad_pads
+from .footprint_fit import compare, fit_candidates, kicad_pads, pad_nets
 from .jlc_http import JlcNetError, request
 from .models import DesignSnapshot
 from .parts_db import _atomic_write
@@ -445,7 +445,7 @@ class PartLookup:
             found = []
             for ref, part in self.parts.items():
                 if ref in by_ref:
-                    for item in compare(ref, kicad_pads(by_ref[ref]), part):
+                    for item in compare(ref, kicad_pads(by_ref[ref]), part, pad_nets(by_ref[ref])):
                         found.append(replace(item, evidence=item.evidence + " Source: DigiKey.")
                                      if part.source == "digikey" else item)
             if self.unchecked:
