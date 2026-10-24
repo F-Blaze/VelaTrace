@@ -292,6 +292,22 @@ def test_walled_in_ball_escapes_by_an_exact_track_to_a_same_net_ball(tmp_path):
                                                      for s in segments]
 
 
+def test_fine_pitch_rows_fan_out_to_one_via_column_in_pin_order(tmp_path):
+    # Two rows of 6 pins at 0.5 mm on B.Cu, every partner on F.Cu: each pin needs its own via, and
+    # vias do not fit at that pitch, so each row fans out to one column of spaced vias, pin order kept.
+    pins = "".join(f'(pad "{k + 1}" smd rect (at {-1.5 if k < 6 else 1.5} {(k % 6 - 2.5) * 0.5:g}) (size 0.8 0.22) '
+                   f'(layers "B.Cu") (net "N{k}"))' for k in range(12))
+    partners = "".join(_pad(f"P{k}", 3 if k < 6 else 17, 1.5 + 1.8 * (k % 6), f"N{k}") for k in range(12))
+    board = _board(tmp_path, f'(footprint "Q" (layer "F.Cu") (at 10 6) (property "Reference" "U1") {pins})' + partners)
+    router = route_board(board, Options())
+    assert len([note for note in router.escapes if note.startswith("fanout U1 B.Cu")]) == 2
+    vias = {pad.net: (pad.x, pad.y) for pad in router.board.pads if pad.number == "fan"}
+    for row in (range(6), range(6, 12)):
+        column, ys = {round(vias[f"N{k}"][0], 3) for k in row}, [vias[f"N{k}"][1] for k in row]
+        assert len(column) == 1 and all(b - a >= 0.6 + 0.15 for a, b in zip(ys, ys[1:])) and ys == sorted(ys)
+    assert router.report()["unrouted"] == 0
+
+
 def test_track_leaves_a_teardrop_pad_a_teardrop_half_width_off_a_keepout(tmp_path):
     keepout = ('(zone (layers "F.Cu") (keepout (tracks not_allowed) (vias allowed) (copperpour allowed)) '
                '(polygon (pts (xy 3 6.7) (xy 7 6.7) (xy 7 11) (xy 3 11))))')
