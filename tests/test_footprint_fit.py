@@ -218,6 +218,117 @@ def test_mounting_pads_are_left_out_on_both_sides():
     assert rules([(p.number, p.x_mm, p.y_mm, False) for p in qfn.pads if p.number != "57"], qfn) == ["fit.pad_count"]
 
 
+# ---- holdout3 boards (round 3, 2026-10-23; SEEN data now): KiCad pads from the board, LCSC pads as cached ----
+
+def cached(code, title, pads):
+    """A part as the cache stores it: [number, x, y, through_hole, area] per pad."""
+    from velatrace.part_lookup import _from_row
+    return _from_row(code, {"title": title, "package": "", "pads": pads})
+
+
+USB_C_ROW = {"A1": -3.25, "B12": -3.25, "A4": -2.45, "B9": -2.45, "B8": -1.75, "A5": -1.25, "B7": -0.75,
+             "A6": -0.25, "A7": 0.25, "B6": 0.75, "A8": 1.25, "B5": 1.75, "A9": 2.45, "B4": 2.45, "A12": 3.25, "B1": 3.25}
+HRO_TYPE_C_31 = ([(n, x, -4.045, False) for n, x in USB_C_ROW.items()]       # A1/B12 etc. stacked
+                 + [("SH", x, y, True) for x in (-4.32, 4.32) for y in (-3.13, 1.05)])
+C165948 = cached("C165948", "TYPE-C-31-M-12", [
+    [n, x, -2.4741, False, 0.78 if len(n) > 3 else 0.39] for n, x in (
+        ("A1B12", -3.2), ("A4B9", -2.4), ("B8", -1.75), ("A5", -1.25), ("B7", -0.75), ("A6", -0.25),
+        ("A7", 0.25), ("B6", 0.75), ("A8", 1.25), ("B5", 1.75), ("B4A9", 2.4), ("B1A12", 3.2))]
+    + [[n, x, y, True, 2.3] for n, x, y in (("1", 4.3251, -1.7057), ("2", 4.3251, 2.4741),
+                                           ("3", -4.3251, 2.4741), ("4", -4.3251, -1.7057))])
+
+
+def jst(pins, mp, part_pins, part_mp, area=(0.93, 2.16)):
+    """2-pin JST with 2 mounting pads: KiCad pads 1, 2, MP, MP and the LCSC part's 1-4."""
+    return ([("1", -1 * pins[0], pins[1], False), ("2", pins[0], pins[1], False)]
+            + [("MP", x * mp[0], mp[1], False) for x in (-1, 1)],
+            cached("C1", "JST", [["1", -part_pins[0], part_pins[1], False, area[0]],
+                                 ["2", part_pins[0], part_pins[1], False, area[0]],
+                                 ["3", part_mp[0], part_mp[1], False, area[1]],
+                                 ["4", -part_mp[0], part_mp[1], False, area[1]]]))
+
+
+def test_mounting_and_shield_pads_count_on_both_sides():
+    assert rules(HRO_TYPE_C_31, C165948, "J2") == []                     # H005: 16 + 4 SH vs A1B12 ... + shell 1-4
+    assert rules([p for p in HRO_TYPE_C_31 if p[0] != "SH"], C165948) == ["fit.pad_count"]
+    cases = [jst((0.5, -2.0), (1.8, 1.875), (0.5, -1.9375), (1.8, 1.9375)),     # H009 SM02B-SRSS-TB
+             jst((1.0, -2.85), (3.35, 2.9), (1.0, -2.9251), (3.35, 2.9251), (3.8, 5.1)),   # H013/H014 S2B-PH-SM4
+             jst((1.0, 0.5), (3.4, -1.75), (-1.0, -1.1565), (-3.35, 1.1565), (6.0, 6.12))]  # H017 B2B-PH-SM4, turned
+    for pads, part in cases:
+        assert rules(pads, part) == []
+        assert rules(pads[:2], part) == ["fit.pad_count"]               # tabs with nowhere to go
+
+
+def test_repeated_pad_numbers_are_separate_legs():
+    # H018/H019: SW_Push_1P1T_NO_CK_KSC6xxJ numbers its 4 legs 1, 1, 2, 2; the TS-1187A has 1-4.
+    ksc6 = [(n, x, y, False) for n, y in (("1", -2.0), ("2", 2.0)) for x in (-2.9, 2.9)]
+    ts1187a = cached("C318884", "TS-1187A-B-A-B", [[str(i + 1), x, y, False, 0.75]
+                                                  for i, (y, x) in enumerate((y, x) for y in (-1.85, 1.85) for x in (-3.0, 3.0))])
+    assert rules(ksc6, ts1187a, "SW1") == [] and compare("SW1", ksc6, ts1187a, {"1": "NRST", "2": "GND"}) == []
+    assert rules(ksc6[::2], ts1187a) == ["fit.pad_count"]
+
+
+K3_1270 = [("1", -1.875, -1.0, False), ("2", -1.875, 1.0, False), ("3", -1.875, 3.0, False),
+           ("4", 1.875, -3.15, True), ("5", 1.875, 3.15, True)]
+C145857 = cached("C145857", "K3-1270S-F2", [["3", -1.6125, -1.0011, False, 2.25], ["2", -1.6125, 1.0004, False, 2.25],
+                                           ["1", -1.6123, 3.0004, False, 2.25], ["4", 1.6125, 3.151, True, 1.96],
+                                           ["5", 1.6125, -3.151, True, 1.96]])
+
+
+def test_rows_a_hair_apart_are_not_a_layout_difference():
+    # H015/H016: posts at 3.15 mm next to a pin at 3.0 mm cluster as one row in KiCad, two at LCSC.
+    nets = {"1": "Net-(BOOT0-Pad1)", "2": "+3.3V", "3": "Net-(U16-BOOT0)",
+            "4": "unconnected-(BOOT0-Pad4)", "5": "unconnected-(BOOT0-Pad5)"}
+    (finding,) = compare("BOOT0", K3_1270, C145857, nets)
+    assert finding.rule == "fit.pin_order" and "(2 of 5 pads)" in finding.title   # pins 1 and 3 do swap
+    assert rules(row(5, tht=False), C145857) == ["fit.layout"]                     # a real layout difference still is one
+
+
+def header_2x9():
+    """PinSocket_2x09 (odd pins at x 0, even at -2.54) and the PM254-2-09 part, whose rows are the mirror image."""
+    pads = [(str(i + 1), -2.54 * (i % 2), 2.54 * (i // 2), True) for i in range(18)]
+    part = cached("C2897429", "PM254-2-09-W-8.5", [[str(i + 1), -10.16 + 2.54 * (i // 2), 1.27 if i % 2 == 0 else -1.27,
+                                                    True, 2.89] for i in range(18)])
+    return pads, part
+
+
+def test_mirrored_pinout_that_joins_the_same_nets_is_harmless():
+    pads, part = header_2x9()
+    paired = {str(i + 1): f"N{i // 2}" for i in range(18)}               # H001/H002: P8, P10 wire 2k-1 with 2k
+    assert rules(pads, part) == ["fit.pin_order"]                       # nets unknown: still a mirror image
+    assert compare("P8", pads, part, paired) == []
+    paired["1"] = "unconnected-(P8-Pin_1-Pad1)"
+    assert [f.rule for f in compare("P8", pads, part, paired)] == ["fit.pin_order"]
+    # A real mirror-image pinout on distinct nets is still caught.
+    soic_part = real("C7593")
+    mirrored = [(p.number, -p.x_mm, p.y_mm, p.through_hole) for p in soic_part.pads]
+    assert [f.rule for f in compare("U1", mirrored, soic_part, {str(n): f"N{n}" for n in range(1, 9)})] == ["fit.pin_order"]
+
+
+def test_sot23_land_pattern_and_tab_names_are_not_misfits():
+    sot23 = [("1", -0.9375, -0.95, False), ("2", -0.9375, 0.95, False), ("3", 0.9375, 0.0, False)]
+    bss138 = cached("C52895", "BSS138", [["1", 1.2351, 0.95, False, 0.642], ["2", 1.2351, -0.95, False, 0.642],
+                                         ["3", -1.2351, 0.0, False, 0.642]])
+    assert rules(sot23, bss138, "Q2") == []                              # H010-H012: rows 1.875 vs 2.47 mm
+    # H004: KiCad TO-263-2 calls the tab 2, LCSC 4. A real 1/3 swap is still a swap.
+    to263 = [("1", -7.65, -2.54, False), ("2", 1.5, 0.0, False), ("3", -7.65, 2.54, False)]
+    lm317 = cached("C12848", "LM317D2TR4G", [["4", 0.0, -4.7564, False, 87.9], ["1", -2.54, 4.7564, False, 7.6],
+                                             ["3", 2.54, 4.7564, False, 7.6]])
+    assert rules(to263, lm317, "U7") == []
+    assert rules([({"1": "3", "3": "1"}.get(n, n), x, y, t) for n, x, y, t in to263], lm317) == ["fit.pin_order"]
+
+
+def test_bottom_side_pads_must_be_read_unmirrored():
+    # H007: U3 (RSM0032A, B.Cu). The board file stores a bottom footprint's pads mirrored; read as
+    # IPC gives them (x negated) the footprint fits, read raw it looks like a mirror image.
+    library = ([(str(1 + i), -2.0575, -1.4 + 0.4 * i) for i in range(8)] + [(str(9 + i), -1.4 + 0.4 * i, 2.0574) for i in range(8)]
+               + [(str(17 + i), 2.0573, 1.4 - 0.4 * i) for i in range(8)] + [(str(25 + i), 1.4 - 0.4 * i, -2.0574) for i in range(8)])
+    part = cached("C179743", "BQ40Z50RSMR-R1", [[n, x, y, False, 0.17] for n, x, y in library] + [["33", 0.0, 0.0, False, 1.96]])
+    stored = [(n, x, -y, False) for n, x, y in library] + [("33", 0.0, 0.0, True), ("33", 0.0, 0.0, False)]
+    assert [f.title for f in compare("U3", stored, part)] == ["U3 footprint is a mirror image of C179743 BQ40Z50RSMR-R1"]
+    assert rules([(n, -x, y, t) for n, x, y, t in stored], part) == []
+
+
 def test_cached_rows_with_and_without_pad_area():
     from velatrace.part_lookup import _from_row, _row
     part = real("C16106")
