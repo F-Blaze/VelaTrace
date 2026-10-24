@@ -376,6 +376,7 @@ class Router:
         self._electrical()
         self.virtual, self.trunks, self.escapes = set(), {}, []   # fixed copper the engine adds
         self._escape()
+        self._fanout()
         self._couple()
 
     def _stop_if_cancelled(self):
@@ -790,6 +791,91 @@ class Router:
                 self.escapes.append(f"escape {ref}.{pad.number}: {found or 'none fits'}")
                 self._say(self.escapes[-1])
 
+    def _fanout(self):
+        """Order-preserving via fan-out of fine-pitch rows whose signal nets must change layer.
+
+        A dual- or quad-row part (rows of 5+ pins at 0.5 mm pitch or finer) whose signal pins all
+        have partners on another copper layer needs a via per pin, and vias do not fit side by side
+        at that pitch; placed one net at a time, the late nets find every via spot taken. So the
+        vias of a row are planned together, as a designer fans out a fine-pitch part (idea from
+        KiCadRoutingTools' fanout): each pin goes straight out, then at 45 degrees to its own slot
+        in one column of vias spaced for via plus clearance, slots assigned in pin order so no two
+        fan tracks cross. Each piece is checked exactly and laid as fixed copper; a row that fits
+        at no distance, and any pin whose piece fails, is left to the router.
+
+        ponytail: axis-aligned straight rows and one via column; staggered columns and BGAs (_escape) not done.
+        """
+        board, rows, lanes = self.board, {}, {}
+        for index, pad in enumerate(board.pads):
+            if pad.ref and pad.net in self.nets and not pad.drill and len(pad.layers) == 1:
+                for axis in (0, 1):
+                    rows.setdefault((pad.ref, pad.layers[0], axis, round((pad.x, pad.y)[axis], 2)), []).append(index)
+        for (ref, layer, axis, at), indexes in rows.items():
+            along = lambda i: (board.pads[i].x, board.pads[i].y)[1 - axis]
+            run = []
+            for i in sorted(indexes, key=along) + [None]:
+                if run and (i is None or along(i) - along(run[-1]) > 0.51):
+                    if len(run) >= 5:
+                        lanes.setdefault(ref, []).append((layer, axis, at, run))
+                    run = []
+                if i is not None:
+                    run.append(i)
+        for ref, found in lanes.items():
+            if len(found) >= 2:
+                centre = np.mean([(p.x, p.y) for p in board.pads if p.ref == ref], 0)
+                for layer, axis, at, run in found:
+                    self._fan_row(ref, layer, axis, at, run, 1 if at > centre[axis] else -1)
+
+    def _fan_row(self, ref, layer, axis, at, run, direction):
+        board = self.board
+        spot = lambda c, out: (at + direction * out, c) if axis == 0 else (c, at + direction * out)
+        pins = [(i, board.pads[i], self.nets[board.pads[i].net]) for i in run]
+        fan = {i for i, pad, net in pins if not net.plane_layers and len(net.pads) > 1
+               and all(layer not in board.pads[j].layers for j in net.pads if j != i)}
+        if len(fan) < 5:   # fewer vias find their own spots; a lone via near the pin is often not wanted
+            return
+        step = max(max(c.via_diameter + c.clearance, 1.42 * (c.via_diameter / 2 + c.clearance + c.width / 2) + 0.05)
+                   for c in (net.cls for _, _, net in pins))
+        a = [(pad.x, pad.y)[1 - axis] for _, pad, _ in pins]
+        slots = [(a[0] + a[-1]) / 2 + (k - (len(a) - 1) / 2) * step for k in range(len(a))]
+        base = max(abs(b - c) for b, c in zip(slots, a)) + 0.6
+
+        def lay(out, partial):
+            laid, left = [], []
+            for (i, pad, net), c, b in zip(pins, a, slots):
+                if i not in fan:
+                    continue
+                way = [(pad.x, pad.y), spot(c, out - abs(b - c)), spot(b, out)]
+                way = [q for k, q in enumerate(way) if k == 0 or math.dist(q, way[k - 1]) > 1e-6]
+                for width in sorted({net.cls.width, max(self.neck_width, net.cls.min_width)}, reverse=True):
+                    if self._via_clear(net, *way[-1]) and all(
+                            self._link_clear(net, layer, p, q, width, routed=False) for p, q in zip(way, way[1:])):
+                        self._add_via(net, *way[-1], kind="fan")
+                        laid.append((net, len(board.pads) - 1))
+                        if len(way) > 1:
+                            laid.append((net, self._add_trunk(net.name, way, layer, width)))
+                        break
+                else:
+                    left.append(pad.number)
+                    if not partial:
+                        break
+            if left and not partial:
+                for net, index in reversed(laid):
+                    self._drop_trunk(net, index)
+            return laid, left
+        for out in [base + 0.25 * k for k in range(9)]:
+            laid, left = lay(out, False)
+            if not left:
+                break
+        else:
+            out = base
+            laid, left = lay(out, True)
+        pins_fanned = [pad.number for i, pad, _ in pins if i in fan and pad.number not in left]
+        self.escapes.append(f"fanout {ref} {board.layers[layer]} {'xy'[axis]}={at:g}: pins {','.join(pins_fanned) or 'none'} "
+                            f"to a via column {out:.2f} mm out at {step:.2f} mm"
+                            + (f"; left to the router: {','.join(left)}" if left else ""))
+        self._say(self.escapes[-1])
+
     def _walled_in(self, index, box):
         """Whether the grid can lead a pad neither out of ``box`` (y0, y1, x0, x1) on its own
         layer nor to a cell where a via of its net fits."""
@@ -841,10 +927,12 @@ class Router:
                     return f"{size:g} mm dog-bone via, {width:g} mm track"
         return None
 
-    def _add_via(self, net, x, y):
+    def _add_via(self, net, x, y, kind="escape"):
         size = net.cls.via_diameter
-        self._fix(Pad("", "escape", net.name, x, y, 0.0, (("rrect", 0.0, 0.0, size, size, size / 2),),
-                      tuple(range(self.L)), net.cls.via_drill))
+        index = self._fix(Pad("", kind, net.name, x, y, 0.0, (("rrect", 0.0, 0.0, size, size, size / 2),),
+                              tuple(range(self.L)), net.cls.via_drill))
+        if kind == "fan":   # routes join a fan via on its centre cell only, so no track ends off-centre inside it
+            self.pad_cells[index] = np.array([int(round((y - self.y0) / self.p)) * self.W + int(round((x - self.x0) / self.p))])
 
     def _via_clear(self, net, x, y):
         """Exact check of a via of the net's class at (x, y): copper, hole and keep-out rules."""
@@ -926,7 +1014,7 @@ class Router:
 
     def _drop_trunk(self, net, index):
         net.pads.remove(index)
-        self.board.pads[index] = replace(self.board.pads[index], net="", shapes=(), layers=())   # no copper left
+        self.board.pads[index] = replace(self.board.pads[index], net="", shapes=(), layers=(), drill=0.0)   # no copper or hole left
         self.virtual.discard(index)
         for k, cells in enumerate(self.trunks.pop(index)):
             self.hardf[k][cells] -= 1
@@ -2374,14 +2462,27 @@ class Router:
                 previous = cell
         for layer, a, b, width in net.links:
             segments.add((layer, min(a, b), max(a, b), width))
+        centres = [(round(pad.x, 6), round(pad.y, 6)) for index in self.virtual.intersection(net.pads)
+                   if (pad := self.board.pads[index]).drill]
+        if centres:   # KiCad wants a track that ends in a via to end on its centre: move such ends there
+            snap = lambda p: next((c for c in centres if p != c and math.dist(p, c) < net.cls.via_diameter / 2), p)
+            segments = {(layer, min(snap(a), snap(b)), max(snap(a), snap(b)), width) for layer, a, b, width in segments}
+            segments = {segment for segment in segments if segment[1] != segment[2]}
         for index in self.virtual.intersection(net.pads):   # a pair's coupled trunk, an escape
             pad = self.board.pads[index]
             if pad.drill:
-                vias.add((round(pad.x, 6), round(pad.y, 6)))
                 continue
             for _, x1, y1, x2, y2, width in pad.shapes:
                 a, b = (round(pad.x + x1, 6), round(pad.y + y1, 6)), (round(pad.x + x2, 6), round(pad.y + y2, 6))
                 segments.add((pad.layers[0], min(a, b), max(a, b), width))
+        poured = net.plane_layers or any(zone.net == net.name for zone in self.board.zones)
+        for index in self.virtual.intersection(net.pads):
+            pad = self.board.pads[index]
+            at = (round(pad.x, 6), round(pad.y, 6))
+            # a fan-out via that ends up with copper on one layer only is left out (KiCad: dangling)
+            if pad.drill and (pad.number != "fan" or poured
+                              or len({layer for layer, a, b, _ in segments if min(math.dist(a, at), math.dist(b, at)) < 1e-4}) > 1):
+                vias.add(at)
         return sorted(segments), sorted(vias)
 
     def copper(self):
