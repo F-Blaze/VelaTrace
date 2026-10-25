@@ -58,11 +58,14 @@ _GENERIC_VALUE = re.compile(
     r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
     r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*", re.IGNORECASE)
 # For these kinds the symbol is generic, so a value equal to the symbol name was never set.
-# Not for ICs, transistors, modules or diodes, whose symbol name is the part number itself.
+# Not for ICs, transistors, modules, diodes or "other" parts, whose symbol name is often the part number
+# (a connector or antenna valued KH-5220-A56_U.FL); not for switches and battery holders, which are commodity.
 _GENERIC_SYMBOL_KINDS = {"resistor", "resistor_array", "potentiometer", "capacitor", "inductor", "ferrite",
-                         "led", "fuse", "crystal", "switch", "battery", "other"}
-# Not parts to value: fiducials, logos, net-ties (testpoints and mounting holes come from part_kind).
-_NOT_A_PART = re.compile(r"FIDUCIAL|LOGO|NET_?TIE|^SYMBOL:", re.IGNORECASE)
+                         "led", "fuse", "crystal"}
+# Not parts to value: fiducials, logos, net-ties, solder jumpers and PCB trace antennas (copper, not orderable;
+# testpoints and mounting holes come from part_kind).
+_NOT_A_PART = re.compile(r"FIDUCIAL|LOGO|NET_?TIE|^SYMBOL:|SOLDER_?JUMPER|SOLDER_?BRIDGE|MEANDER|PCB_?ANTENNA",
+                         re.IGNORECASE)
 _NOT_A_PART_REF = re.compile(r"(?:#|FID|NT|LOGO|MK)")
 # Project-specific stock/inventory/internal-part-number fields identify a part like an MPN does.
 _STOCK_FIELD = re.compile(r"stock|inventor|ipn|internal|ust.?id", re.IGNORECASE)

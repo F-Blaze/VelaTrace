@@ -375,13 +375,13 @@ def test_zero_ohm_short_and_unset_values():
                         part("NT1", "~", "NetTie:NetTie-2_SMD_Pad0.5mm", ("1", "A"), ("2", "B"))), "value") == []
 
 
-def missing(*parts):
+def values_missing(*parts):
     return [(f.severity, f.refs) for f in rules(design(ic(), cap(), *parts), "value.missing")]
 
 
 def test_value_missing_covers_more_kinds_and_symbol_names():
     bare = "Package_SO:SOIC-8"
-    found = missing(
+    found = values_missing(
         part("U2", "~", bare, ("1", "A")),
         part("J1", "~", "Connector_RJ:RJ45", ("1", "A")),
         part("K1", "Relay_SPDT", "Relay_THT:Relay", ("1", "A")),
@@ -396,6 +396,20 @@ def test_value_missing_covers_more_kinds_and_symbol_names():
     assert found == [(Severity.WARNING, ("D2", "F1", "FB1", "J1", "K1", "R3", "R4", "R5", "U2", "Y1"))]
 
 
+def test_value_missing_skips_copper_parts_and_part_number_symbols():
+    # Solder jumpers and PCB trace antennas are copper, not orderable parts.
+    assert values_missing(
+        part("JP1", "SolderJumper_2_Open", "Jumper:SolderJumper-2_P1.3mm_Open", ("1", "A")),
+        part("AE1", "Antenna", "footprints:2.4GHz-meander-antenna-v2", ("1", "A")),
+        # A connector or switch whose symbol name is its part number / a commodity generic name.
+        part("AE2", "KH-5220-A56_U.FL", "otter:KH-5220-A56", ("1", "A"), fields={"lib_id": "otter:KH-5220-A56_U.FL"}),
+        part("SW1", "SW_Push", "Button_Switch_SMD:SW_SPST_TL3342", ("1", "A"),
+             fields={"lib_id": "Switch:SW_Push"})) == []
+    # Still flagged when the value is empty.
+    assert values_missing(part("SW2", "~", "Button_Switch_SMD:SW_SPST_TL3342", ("1", "A"))) == [
+        (Severity.WARNING, ("SW2",))]
+
+
 def test_value_missing_order_code_only_is_softer():
     found = rules(design(ic(), cap(), part("R1", "R_Small", "Resistor_SMD:R_0402", ("1", "A"),
                                            fields={"LCSC": "C12345"}),
@@ -408,11 +422,11 @@ def test_value_missing_order_code_only_is_softer():
 
 def test_value_missing_generic_value_with_mpn_or_stock_id_is_fine():
     named = lambda ref, fields: part(ref, "LED", "LED_SMD:LED_0603", ("1", "A"), fields=fields)  # noqa: E731
-    assert missing(named("D1", {"MPN": "19-217/GHC"}), named("D2", {"UST_ID": "42"}),
+    assert values_missing(named("D1", {"MPN": "19-217/GHC"}), named("D2", {"UST_ID": "42"}),
                    named("D3", {"Stock": "S-7"})) == []
-    assert missing(named("D4", {"UST_ID": ""})) == [(Severity.WARNING, ("D4",))]
+    assert values_missing(named("D4", {"UST_ID": ""})) == [(Severity.WARNING, ("D4",))]
     # An empty value stays missing whatever else identifies the part.
-    assert missing(part("D5", "~", "LED_SMD:LED_0603", ("1", "A"), fields={"MPN": "19-217"})) == [
+    assert values_missing(part("D5", "~", "LED_SMD:LED_0603", ("1", "A"), fields={"MPN": "19-217"})) == [
         (Severity.WARNING, ("D5",))]
 
 
