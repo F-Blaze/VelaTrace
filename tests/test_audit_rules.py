@@ -245,9 +245,52 @@ def test_zero_ohm_short_and_unset_values():
     unset = design(ic(), cap("C1", value="C"), res("R2", "A", "B", "R"))
     found = rules(unset, "value")
     assert [(f.rule, f.severity, f.refs) for f in found] == [("value.missing", Severity.WARNING, ("C1", "R2"))]
-    ordered = design(ic(), part("C1", "C", "Capacitor_SMD:C_0402", ("1", "+3V3"), ("2", "GND"),
-                                fields={"LCSC": "C1525"}))
-    assert rules(ordered, "value") == []
+    assert rules(design(ic(), cap("C1", value="100nF"), res("R2", "A", "B", "10k"),
+                        part("TP1", "~", "TestPoint:TestPoint_Pad_D1.0mm", ("1", "A")),
+                        part("H1", "~", "MountingHole:MountingHole_3.2mm_M3", ("1", "")),
+                        part("FID1", "~", "Fiducial:Fiducial_1mm_Mask2mm"),
+                        part("NT1", "~", "NetTie:NetTie-2_SMD_Pad0.5mm", ("1", "A"), ("2", "B"))), "value") == []
+
+
+def missing(*parts):
+    return [(f.severity, f.refs) for f in rules(design(ic(), cap(), *parts), "value.missing")]
+
+
+def test_value_missing_covers_more_kinds_and_symbol_names():
+    bare = "Package_SO:SOIC-8"
+    found = missing(
+        part("U2", "~", bare, ("1", "A")),
+        part("J1", "~", "Connector_RJ:RJ45", ("1", "A")),
+        part("K1", "Relay_SPDT", "Relay_THT:Relay", ("1", "A")),
+        part("Y1", "Crystal", "Crystal:Crystal_SMD", ("1", "A")),
+        part("F1", "Polyfuse", "Fuse:Fuse_1206", ("1", "A")),
+        part("FB1", "FerriteBead", "Inductor_SMD:L_0603", ("1", "A")),
+        part("R3", "R_Small_US", "Resistor_SMD:R_0402", ("1", "A")),
+        part("D2", "D_Schottky", "Diode_SMD:D_SOD-123", ("1", "A")),
+        part("R4", "Rset", "Resistor_SMD:R_0402", ("1", "A")),
+        part("R5", "Custom_Sym", "Resistor_SMD:R_0402", ("1", "A"), fields={"lib_id": "Device:Custom_Sym"}),
+        part("U3", "LM358", bare, ("1", "A"), fields={"lib_id": "Amplifier_Operational:LM358"}))
+    assert found == [(Severity.WARNING, ("D2", "F1", "FB1", "J1", "K1", "R3", "R4", "R5", "U2", "Y1"))]
+
+
+def test_value_missing_order_code_only_is_softer():
+    found = rules(design(ic(), cap(), part("R1", "R_Small", "Resistor_SMD:R_0402", ("1", "A"),
+                                           fields={"LCSC": "C12345"}),
+                         part("R2", "~", "Resistor_SMD:R_0402", ("1", "A"), fields={"LCSC": "C999"}),
+                         part("R3", "10k", "Resistor_SMD:R_0402", ("1", "A"), fields={"LCSC": "C25744"})),
+                  "value.missing")
+    assert [(f.severity, f.refs) for f in found] == [(Severity.INFO, ("R1", "R2"))]
+    assert "only the order code identifies it" in found[0].evidence and "C12345" in found[0].evidence
+
+
+def test_value_missing_generic_value_with_mpn_or_stock_id_is_fine():
+    named = lambda ref, fields: part(ref, "LED", "LED_SMD:LED_0603", ("1", "A"), fields=fields)  # noqa: E731
+    assert missing(named("D1", {"MPN": "19-217/GHC"}), named("D2", {"UST_ID": "42"}),
+                   named("D3", {"Stock": "S-7"})) == []
+    assert missing(named("D4", {"UST_ID": ""})) == [(Severity.WARNING, ("D4",))]
+    # An empty value stays missing whatever else identifies the part.
+    assert missing(part("D5", "~", "LED_SMD:LED_0603", ("1", "A"), fields={"MPN": "19-217"})) == [
+        (Severity.WARNING, ("D5",))]
 
 
 def test_coverage_note_when_no_ground_is_named():

@@ -27,6 +27,7 @@ from math import dist
 import re
 from typing import Callable, Iterable
 
+from .bom import lcsc_code, mpn_of
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
 
@@ -45,15 +46,26 @@ _SUPPLY = re.compile(
     r"VMOT|VPP|VLED|VSUPPLY|VREG|V\+)(?:[_\-.]?[A-Z0-9.]*)")
 _SIGNAL_TOKENS = {"EN", "ENA", "PG", "PGOOD", "SENSE", "SNS", "DET", "OK", "FB", "SW", "ON", "OFF",
                   "CTRL", "CTL", "MON", "ADC", "FLT", "FAULT", "ALERT", "INT", "STAT", "DIV", "LVL"}
-_ORDER_FIELDS = {"mpn", "manufacturer part number", "manufacturer_part_number", "lcsc", "lcsc part",
-                 "lcsc part #", "part number", "digikey", "digi-key_pn", "mouser"}
+_ORDER_FIELDS = {"lcsc", "lcsc part", "lcsc part #", "digikey", "digi-key_pn", "mouser"}
 _I2C = {"SDA": re.compile(r"(?:I2C\d*)?SDA\d*"), "SCL": re.compile(r"(?:I2C\d*)?SCL\d*")}
 _GPIO_PIN = re.compile(r"(?:GPIO\d+|IO\d+|P[A-K]\d{1,2}|P\d{1,2}[._]\d{1,2}|D\d{1,2}|RA\d|RB\d|RC\d)",
                        re.IGNORECASE)
 _PROTECTION_VALUE = re.compile(r"TVS|ESD|USBLC|PRTR|TPD\d|SMAJ|SMBJ|PESD|SS\d{2}|1N58|B5819|POLYFUSE|PTC",
                                re.IGNORECASE)
-_PLACEHOLDER_VALUES = {"", "~", "?", "R", "C", "L", "D", "LED", "R_SMALL", "C_SMALL", "L_SMALL",
-                       "C_POLARIZED", "CP", "R_US", "C_US", "VAL", "VALUE", "D_SMALL"}
+_EMPTY_VALUES = {"", "~", "?"}
+# Generic KiCad symbol names (R_Small_US, D_Schottky, C_Polarized...) and template text left as a value.
+_GENERIC_VALUE = re.compile(
+    r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
+    r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*", re.IGNORECASE)
+# For these kinds the symbol is generic, so a value equal to the symbol name was never set.
+# Not for ICs, transistors, modules or diodes, whose symbol name is the part number itself.
+_GENERIC_SYMBOL_KINDS = {"resistor", "resistor_array", "potentiometer", "capacitor", "inductor", "ferrite",
+                         "led", "fuse", "crystal", "switch", "battery", "other"}
+# Not parts to value: fiducials, logos, net-ties (testpoints and mounting holes come from part_kind).
+_NOT_A_PART = re.compile(r"FIDUCIAL|LOGO|NET_?TIE|^SYMBOL:", re.IGNORECASE)
+_NOT_A_PART_REF = re.compile(r"(?:#|FID|NT|LOGO|MK)")
+# Project-specific stock/inventory/internal-part-number fields identify a part like an MPN does.
+_STOCK_FIELD = re.compile(r"stock|inventor|ipn|internal|ust.?id", re.IGNORECASE)
 _PREFIX_KINDS = {"R": "resistor", "RN": "resistor_array", "RA": "resistor_array",
                  "RV": "potentiometer", "C": "capacitor", "CP": "capacitor", "CE": "capacitor",
                  "L": "inductor", "FB": "ferrite", "D": "diode", "ZD": "diode", "TVS": "diode",
@@ -843,10 +855,27 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
                 (supply[0], ground[0]),
                 f"{res.reference} value '{res.value}' connects {supply[0]} directly to {ground[0]}.",
                 f"Give {res.reference} its intended value, or remove it if it is a leftover jumper."))
-    unset = sorted(comp.reference for comp in design.of_kind("resistor", "capacitor", "inductor", "led", "diode")
-                   if comp.value.strip().upper() in _PLACEHOLDER_VALUES and not any(
-                       name.strip().casefold() in _ORDER_FIELDS and text.strip()
-                       for name, text in comp.fields.items()))
+    unset, order_only = [], {}
+    for comp in snapshot.components:
+        value, kind = comp.value.strip(), design.kind[comp.reference]
+        if (kind in {"testpoint", "mounting"} or _NOT_A_PART.search(comp.footprint)
+                or _NOT_A_PART_REF.match(comp.reference.upper())):
+            continue
+        symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
+        empty = value in _EMPTY_VALUES
+        if not (empty or _GENERIC_VALUE.fullmatch(value)
+                or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol)):
+            continue
+        if not empty and (mpn_of(comp) or any(_STOCK_FIELD.search(name) and text.strip()
+                                              for name, text in comp.fields.items())):
+            continue  # a generic value ("LED") is fine while an MPN or stock ID names the part
+        code = lcsc_code(comp) or next((text.strip() for name, text in comp.fields.items()
+                                        if name.strip().casefold() in _ORDER_FIELDS and text.strip()), "")
+        if code and not mpn_of(comp):
+            order_only[comp.reference] = code
+        else:
+            unset.append(comp.reference)
+    unset.sort()
     if unset:
         shown = ", ".join(f"{ref} '{design.parts[ref].value}'" for ref in unset[:8])
         findings.append(Finding(
@@ -856,6 +885,17 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             tuple(unset), (),
             f"Values still show the symbol default: {shown}" + (" …" if len(unset) > 8 else "") + ".",
             "Set each value (e.g. 100nF, 10k) so the BOM can be ordered without guessing."))
+    if order_only:
+        refs = sorted(order_only)
+        shown = ", ".join(f"{ref} '{design.parts[ref].value}' (only {order_only[ref]})" for ref in refs[:8])
+        findings.append(Finding(
+            "value.missing", Severity.INFO,
+            f"{len(refs)} part{'s have' if len(refs) > 1 else ' has'} a placeholder value, identified "
+            f"only by an order code ({', '.join(refs[:6])}" + (", …)" if len(refs) > 6 else ")"),
+            tuple(refs), (),
+            f"Value is a placeholder; only the order code identifies it: {shown}" + (" …" if len(refs) > 8 else "")
+            + ".",
+            "Set a readable value so the BOM makes sense to people and other assemblers, not just to LCSC."))
     return findings
 
 
