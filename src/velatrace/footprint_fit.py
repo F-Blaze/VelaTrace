@@ -23,7 +23,8 @@ Library differences that are not wrong parts, and how they are left alone:
   can cluster differently on the two sides.
 - Pin order: only numbers both sides use count, and not numbers the footprint repeats (joined legs),
   so a tab numbered 2 in KiCad and 4 at LCSC is a name, not a swap. When the pad nets are known, a
-  swap whose pins share a net (a mirrored header with paired pins) changes nothing and is skipped.
+  swap whose pins share a net (a mirrored header with paired pins) or whose pin is unconnected
+  (a trimmer used as a rheostat) changes nothing and is skipped.
 """
 from __future__ import annotations
 
@@ -273,10 +274,12 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
 
     wrong = []
     for _, _, nearest, _, mirrored in fits:
-        bad = [(fp[i][0], part[j][0]) for i, j in enumerate(nearest)
-               if fp[i][0] != part[j][0] and fp[i][0] in shared and part[j][0] in shared
-               and (mirrored or nets is None or net(fp[i][0]) != net(part[j][0]))]
-        if not bad and not mirrored:
+        swapped = [(fp[i][0], part[j][0]) for i, j in enumerate(nearest)
+                   if fp[i][0] != part[j][0] and fp[i][0] in shared and part[j][0] in shared]
+        # A swap with an unconnected pad has no electrical effect.
+        bad = [(a, b) for a, b in swapped
+               if nets is None or (net(a) and net(b) and (mirrored or net(a) != net(b)))]
+        if not bad and (swapped or not mirrored):
             return []
         wrong.append(bad)
     bad = min(wrong, key=len)
