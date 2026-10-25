@@ -111,7 +111,7 @@ def glass_stylesheet(t: dict) -> str:
         QPushButton#danger:enabled {{color:#D45A67; border-color:#D45A67}}
         QPushButton#textButton {{border:0; color:{ACCENT}; padding:4px 0px; background:transparent}}
         QPushButton#textButton:disabled {{color:{t['muted']}}}
-        QPushButton#seg {{padding:4px 14px; border-radius:9px}}
+        QPushButton#seg {{min-width:64px; padding:4px 14px; border-radius:9px}}
         QPushButton#seg:checked {{background:{gloss}; color:white; font-weight:600; border:1px solid rgba(255,255,255,90)}}
         QCheckBox::indicator {{width:14px; height:14px; border:1px solid {t['muted']}; border-radius:4px; background:{t['field']}}}
         QCheckBox::indicator:checked {{background:{ACCENT}; border-color:{ACCENT}}}
