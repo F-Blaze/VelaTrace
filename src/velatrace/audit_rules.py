@@ -73,9 +73,13 @@ _OPEN_OK_PIN = {"SWCLK", "SWDIO", "SWO", "SWDCK", "TCK", "TMS", "TDI", "TDO", "D
                 "INT2", "IRQ", "ALERT"}
 _UNUSED_USB_PIN = re.compile(r"SBU\d")  # USB-C sideband pins: unused on USB 2.0
 _LED_PART = re.compile(r"7.?SEG|SEVEN.?SEG|(?:^|\s)(?:LED|DISPLAY)")  # on "value footprint"
-# Connectors that never bring power in: memory-card/SIM sockets, M.2, SWD/JTAG/Tag-Connect pads.
-_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|M\.2|TAG-?CONNECT|TC20\d0|SWD|JTAG|"
-                              r"FPC|FFC|BOARD.?TO.?BOARD|MEZZANINE|CASTELLAT|STAMP")
+# Connectors that never bring power in: memory-card/SIM sockets, M.2, debug/programming pads
+# (their VTref comes from the probe), board-to-board and module sockets.
+_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|(?<![A-Z0-9])(?:SD|TF)(?![A-Z0-9])|M\.2|TAG-?CONNECT|TC20\d0|"
+                              r"SWD|JTAG|DEBUG|CORTEX|ICSP|FPC|FFC|BOARD.?TO.?BOARD|MEZZANINE|"
+                              r"CASTELLAT|STAMP")
+# Pin names that take a supply in (untyped netlists): VIN/VCC/VDD/VBUS..., IN, 3V3, V+.
+_SUPPLY_PIN = re.compile(r"IN\d*|VI|DC|ADAPTER|V\+|[AD]?P?V(?:CC|DD|IN|BUS|BAT|SYS|MOT|S|M|P)\w*")
 SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
@@ -757,7 +761,7 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
                 verdict[net] = (
                     any(_powers_ic(design, n) for n in group)
                     # Battery terminals take power in even where a charger also drives them.
-                    and ("BAT" in net_label(net) or not _drives(design, group))
+                    and ("BAT" in net_label(net) or not _drives(design, _fed_group(design, group)))
                     and not any(design.kind[part.reference] in protective or _PROTECTION_VALUE.search(part.value)
                                 for part in parts))
             if verdict[net]:
@@ -795,6 +799,26 @@ def _rail_group(design: _Design, net: str) -> set[str]:
     return group
 
 
+def _fed_group(design: _Design, group: set[str]) -> set[str]:
+    """group plus the supply nets reached through a series resistor (≤100 Ω), ferrite, fuse or diode,
+    and supply nets of the same name: a rail that something on the board feeds, however lossy the link."""
+    labels = {net_label(n) for n in group} - {""}
+    fed, todo = set(group), list(group)
+    while todo:
+        current = todo.pop()
+        near = [net for net in design.supplies if net_label(net) in labels and net not in fed]
+        for comp, _ in design.nodes[current]:
+            nets = two_terminal_nets(comp)
+            if nets and current in nets and (_series_link(design, comp, 100) or design.kind[comp.reference] == "diode"):
+                near.append(nets[1] if nets[0] == current else nets[0])
+        for other in near:
+            if other in design.supplies and other not in fed:
+                fed.add(other)
+                labels.add(net_label(other))
+                todo.append(other)
+    return fed
+
+
 def _drives(design: _Design, group: set[str]) -> bool:
     """A regulator, PMIC or load-switch output drives the rail: a power_out pin (not a switch
     node) or a VOUT/OUT pin on it, or an inductor from a converter's switch pin whose own supply
@@ -804,7 +828,7 @@ def _drives(design: _Design, group: set[str]) -> bool:
             kind = design.kind[comp.reference]
             if kind == "connector":
                 continue
-            if kind == "ic" and _OUT_PIN.fullmatch(pin.name.upper()):
+            if kind in {"ic", "module"} and _OUT_PIN.fullmatch(pin.name.upper()):
                 return True
             if _base_type(pin) == "power_out" and not _NOT_SUPPLY_PIN.fullmatch(pin.name.upper()):
                 return True
@@ -822,8 +846,11 @@ def _drives(design: _Design, group: set[str]) -> bool:
 
 
 def _powers_ic(design: _Design, net: str) -> bool:
-    """The rail reaches an IC or module at all (a divider tap or card socket does not)."""
-    return any(design.kind[comp.reference] in {"ic", "module"} for comp, _ in design.nodes[net])
+    """The rail reaches a supply-input pin of an IC or module (a divider tap or card socket does not)."""
+    return any(design.kind[comp.reference] in {"ic", "module"} and (
+        _base_type(pin) in {"power_in", "power_out"} or is_supply_name(pin.name)
+        or _SUPPLY_PIN.fullmatch(pin.name.upper()))
+        for comp, pin in design.nodes[net])
 
 
 def check_values(snapshot: DesignSnapshot) -> list[Finding]:

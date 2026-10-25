@@ -237,6 +237,52 @@ def test_connector_power_protection_note():
     assert driven == []
 
 
+def ldo(out="+3V3"):
+    return part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "VIN", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", out, "VOUT", "power_out"))
+
+
+def test_connector_sending_a_rail_out_is_not_a_power_input():
+    header = part("J2", "Out", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+3V3"), ("2", "GND"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(ldo(), header, load, cap(), cap("C2", "VIN")), "connector") == []
+    # Module with a power_out pin and no regulator part: the pin produces the rail.
+    module = part("U3", "PSU", "Module:PSU", ("1", "+3V3", "3V3", "power_out"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(module, header, load, cap()), "connector") == []
+
+
+def test_debug_connector_is_not_a_power_input():
+    swd = part("J3", "Conn_ARM_JTAG_SWD_10", "Connector_PinHeader_1.27mm:PinHeader_2x05",
+               ("1", "+3V3"), ("2", "SWDIO"), ("3", "GND"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(swd, load, cap()), "connector") == []
+
+
+def test_connector_net_fed_through_a_series_resistor_is_driven():
+    sensor = part("J4", "Sensor", "Connector_JST:JST_PH_B3B", ("1", "+3V3_S"), ("2", "GND"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3_S", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    feed = res("R1", "+3V3", "+3V3_S", "4.7")
+    assert rules(design(ldo(), sensor, load, feed, cap(), cap("C2", "+3V3_S")), "connector") == []
+    # The same connector with nothing feeding the rail is still a power input.
+    assert [f.nets for f in rules(design(sensor, load, cap("C2", "+3V3_S")), "connector")] == [("+3V3_S",)]
+
+
+def test_screw_terminal_into_a_regulator_without_protection_is_flagged():
+    terminal = part("J1", "Screw", "TerminalBlock:TerminalBlock_1x02", ("1", "+12V"), ("2", "GND"))
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+12V", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    found = rules(design(terminal, reg, cap(), cap("C2", "+12V")), "connector")
+    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("+12V",))]
+
+
+def test_battery_connector_into_a_charger_without_protection_is_flagged():
+    batt = part("J5", "Battery", "Connector_JST:JST_PH_B2B", ("1", "VBAT"), ("2", "GND"))
+    charger = part("U4", "Charger", "Package_SO:SOIC-8", ("1", "VBAT", "BAT", "power_out"),
+                   ("2", "VBUS", "IN", "power_in"), ("3", "GND", "GND", "power_in"))
+    found = rules(design(batt, charger, cap("C1", "VBAT")), "connector")
+    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("VBAT",))]
+
+
 def test_zero_ohm_short_and_unset_values():
     short = design(ic(), cap(), res("R1", "+3V3", "GND", "0"))
     assert [(f.rule, f.severity) for f in rules(short, "value")] == [("value.zero_ohm_short", Severity.ERROR)]
