@@ -117,6 +117,83 @@ def test_decoupling_far_uses_pad_positions():
     assert rules(design(ic(), cap()), "decoupling") == []
 
 
+def missing(*parts):
+    return [(f.refs, f.nets) for f in rules(design(*parts), "decoupling.missing")]
+
+
+def typed_chip(*pins, ref="U1", value="CHIP"):
+    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins)
+
+
+def test_decoupling_op_amp_and_mcu_supply_without_a_capacitor_is_still_flagged():
+    opamp = typed_chip(("1", "+5V", "V+", "power_in"), ("2", "OUT", "OUT", "output"), value="LM358")
+    assert missing(opamp) == [(("U1",), ("+5V",))]
+    assert missing(ic()) == [(("U1",), ("+3V3",))]
+    assert missing(ic(), cap("C1", "+3V3", "GND", "100nF")) == []
+
+
+def test_decoupling_pins_that_are_not_supply_inputs_are_ignored():
+    # Switch node, enable and reference/charge-pump pins typed power, however they are named.
+    chip = typed_chip(("1", "Net-(U1-SW)", "SW_NODE", "power_in"), ("2", "+5V", "~{SHDN}", "power_in"),
+                      ("3", "Net-(U1-VREF)", "VREF_OUT", "power_out"), ("4", "Net-(U1-VCP)", "VCP", "power_in"),
+                      ("5", "+3V3", "CAP1", "power_in"))
+    assert missing(chip) == []
+    # An internal-LDO output that is named like a rail still is not a supply input.
+    ldo_pin = typed_chip(("1", "+1V8", "VDD_LDO", "power_out"))
+    load = part("J1", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+1V8"), ("2", "GND"))
+    assert missing(ldo_pin, load) == []
+
+
+def test_decoupling_ignores_pins_on_return_nets_and_pins_strapped_to_ground():
+    protector = typed_chip(("1", "B-", "VM", "power_in"), ("2", "Net-(U1-VCC)", "VCC", "power_in"))
+    assert missing(protector, cap("C1", "Net-(U1-VCC)", "B-")) == []
+    strapped = typed_chip(("1", "Net-(U1-VDD2)", "VDD2", "power_in"))
+    assert missing(strapped, res("R1", "Net-(U1-VDD2)", "GND", "470")) == []
+    assert missing(strapped, res("R1", "Net-(U1-VDD2)", "+5V", "470")) == [(("U1",), ("Net-(U1-VDD2)",))]
+
+
+def test_decoupling_through_series_fuse_or_ferrite_from_a_reservoir():
+    reg = typed_chip(("1", "/VIN_P", "VIN", "power_in"))
+    reservoir = cap("C1", "/VIN_RAW", value="470uF")
+    fuse = part("F1", "2A", "Fuse:Fuse_1206", ("1", "/VIN_RAW"), ("2", "/VIN_P"))
+    assert missing(reg, reservoir, fuse) == []
+    bead = part("FB1", "BLM18", "Inductor_SMD:L_0603", ("1", "/VIN_RAW"), ("2", "/VIN_P"))
+    assert missing(reg, reservoir, bead) == []
+    assert missing(reg, fuse) == [(("U1",), ("/VIN_P",))]
+
+
+def test_decoupling_cap_between_stacked_rails_counts():
+    stacked = typed_chip(("1", "+12V", "VDDH", "power_in"), ("2", "+5V", "VDDL", "power_in"))
+    assert missing(stacked) == [(("U1",), ("+12V",)), (("U1",), ("+5V",))]
+    assert missing(stacked, cap("C1", "+12V", "+5V")) == []
+
+
+def pixel(ref, rail="+5V", pos=None, footprint="LED_SMD:LED_SK6812MINI"):
+    a = lambda n: (pos or {}).get(n)
+    return part(ref, "SK6812", footprint, ("1", rail, "VDD", "power_in", a(1)),
+                ("2", f"Net-({ref}-DOUT)", "DOUT", "output"), ("3", "GND", "VSS", "power_in"),
+                ("4", f"Net-({ref}-DIN)", "DIN", "input"))
+
+
+def test_addressable_leds_without_any_capacitor_are_one_finding_per_rail():
+    # D* and RGB* references alike, found by value or footprint, one finding for the whole rail.
+    plain = part("RGB3", "LED_RGB", "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm", ("1", "+5V", "VDD"),
+                 ("2", "GND", "VSS"), ("3", "Net-(RGB3-DIN)", "DIN"), ("4", "Net-(RGB3-DOUT)", "DOUT"))
+    assert missing(pixel("D1"), pixel("D2"), plain) == [(("D1", "D2", "RGB3"), ("+5V",))]
+    assert missing(pixel("D1"), pixel("D2"), cap("C1", "+5V")) == []
+    assert missing(pixel("D1", "+3V3"), pixel("D2"), cap("C1", "+5V")) == [(("D1",), ("+3V3",))]
+
+
+def test_addressable_leds_far_from_the_capacitor_are_one_finding_per_rail():
+    leds = [pixel(f"D{n}", pos={1: (50.0 * n, 0.0)}) for n in (1, 2)]
+    near_d1 = cap("C1", "+5V", pin_pos=((51.0, 0.0), (52.0, 0.0)))
+    found = rules(design(*leds, near_d1), "decoupling")
+    assert [(f.rule, f.refs) for f in found] == [("decoupling.far", ("D2",))]
+    both_far = cap("C1", "+5V", pin_pos=((500.0, 0.0), (501.0, 0.0)))
+    found = rules(design(*leds, both_far), "decoupling")
+    assert [(f.rule, f.refs, f.nets) for f in found] == [("decoupling.far", ("D1", "D2"), ("+5V",))]
+
+
 # --- I2C pull-ups -----------------------------------------------------------------------
 
 def bus(*extra):
