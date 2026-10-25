@@ -62,8 +62,8 @@ Before routing, see [Details](#details) for the few settings it needs. Try it on
 
 - It is an **alpha**. Expect rough edges.
 - **KiCad 10 only**, and **tested on Windows only**.
-- It is a first pass, not a design review. On 12 boards it had never seen, about **44%** of its warnings were right. The judges were AI reviewers, not human engineers.
-- It finds only a minority of what a reviewer would raise. Treat every result as a hint.
+- It is a first pass, not a design review. On the latest test, 12 fresh boards it had never seen, **10 of 13** warnings the reviewers agreed on were right (77%). The judges were AI reviewers, not human engineers, and the sample is small.
+- It finds only about **4 in 10** of the problems the reviewers found. Treat every result as a hint.
 - I built it with AI help. That is exactly why I measured it. Numbers and method: [Details](#details).
 
 ## Feedback
@@ -98,7 +98,7 @@ The optional JLCPCB data files carry no licence statement, and the live lookup u
 
 **Optional AI explanations.** Bring your own key (Gemini or any OpenAI-compatible endpoint) in **Setup**. Token counts and a hard call budget are shown first; the key stays in memory. Setup values: [docs/install.md](docs/install.md).
 
-**How accuracy was measured.** The reviewers and the judge were AI agents (Claude Opus), not human experts; I decided 5 borderline cases. 44% of findings were judged correct on 12 open-source boards (27% if unjudged findings count as wrong). Four rules that were wrong too often (`decoupling.missing`, `i2c.pullup.missing`, `net.single_pin`, `pin.input_floating`) show as Info notes only.
+**How accuracy was measured.** The reviewers and the judge were AI agents (Claude Opus), not human experts. First test: on 12 open-source boards it had never seen, 44% of findings were judged correct (27% if unjudged findings count as wrong); I decided 5 borderline cases. I then fixed the rules that caused the wrong findings. Second test: 12 new public boards, answer key from 4 AI reviewers who did not see VelaTrace's output, written before scoring. 10 of the 13 findings they agreed on were correct (77%), 12 more were disputed and left out (as in the first test), and it found 38% of the problems they found. The fixes changed no finding on those new boards, so v0.1.0-alpha.2 scores the same there. Four rules that were wrong too often (`decoupling.missing`, `i2c.pullup.missing`, `net.single_pin`, `pin.input_floating`) show as Info notes only.
 
 **JLCPCB parts list.** Opt-in download of about 181 MB (800 MB on disk), from the public data of the kicad-jlcpcb-tools project. It gives an offline table with tier, stock and price, flags mismatched LCSC numbers, writes the LCSC field to the board in one undoable step, and exports JLCPCB BOM, placement and Gerber files. It cannot edit the schematic (a KiCad 10 limit).
 
