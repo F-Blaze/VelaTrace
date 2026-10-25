@@ -47,7 +47,7 @@ def test_mode_buttons_fit_bold_labels_in_both_themes():
                     bold_font.setWeight(QFont.Weight.DemiBold)
                     text_width = QFontMetrics(bold_font).horizontalAdvance(button.text())
                     # Stylesheet uses horizontal padding of 14px on each side.
-                    assert button.width() >= text_width + 28
+                    assert button.width() >= max(text_width, 64) + 28
     finally:
         container.close()
         container.deleteLater()
