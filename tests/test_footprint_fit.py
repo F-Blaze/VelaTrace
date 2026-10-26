@@ -298,11 +298,22 @@ def test_mirrored_pinout_that_joins_the_same_nets_is_harmless():
     assert rules(pads, part) == ["fit.pin_order"]                       # nets unknown: still a mirror image
     assert compare("P8", pads, part, paired) == []
     paired["1"] = "unconnected-(P8-Pin_1-Pad1)"
+    assert compare("P8", pads, part, paired) == []                      # pin 1 unconnected: swapping it changes nothing
+    paired["1"] = "N9"
     assert [f.rule for f in compare("P8", pads, part, paired)] == ["fit.pin_order"]
     # A real mirror-image pinout on distinct nets is still caught.
     soic_part = real("C7593")
     mirrored = [(p.number, -p.x_mm, p.y_mm, p.through_hole) for p in soic_part.pads]
     assert [f.rule for f in compare("U1", mirrored, soic_part, {str(n): f"N{n}" for n in range(1, 9)})] == ["fit.pin_order"]
+
+
+def test_mirrored_pot_with_an_unconnected_end_pin_is_harmless():
+    # A trimmer wired as a rheostat leaves pin 1 open; the part numbers its legs the other way round.
+    pot = cached("C1", "TRIMMER", [["3", 0.0, 0.0, True, 2.0], ["2", 2.54, -2.0, True, 2.0], ["1", 5.08, 0.0, True, 2.0]])
+    pads = [("1", 0.0, 0.0, True), ("2", 2.54, -2.0, True), ("3", 5.08, 0.0, True)]
+    assert [f.rule for f in compare("RV1", pads, pot, {"1": "", "2": "W", "3": "B"})] == []
+    assert [f.rule for f in compare("RV1", pads, pot, {"1": "unconnected-(RV1-Pad1)", "2": "W", "3": "B"})] == []
+    assert [f.rule for f in compare("RV1", pads, pot, {"1": "A", "2": "W", "3": "B"})] == ["fit.pin_order"]
 
 
 def test_sot23_land_pattern_and_tab_names_are_not_misfits():

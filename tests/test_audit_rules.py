@@ -117,6 +117,83 @@ def test_decoupling_far_uses_pad_positions():
     assert rules(design(ic(), cap()), "decoupling") == []
 
 
+def missing(*parts):
+    return [(f.refs, f.nets) for f in rules(design(*parts), "decoupling.missing")]
+
+
+def typed_chip(*pins, ref="U1", value="CHIP"):
+    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins)
+
+
+def test_decoupling_op_amp_and_mcu_supply_without_a_capacitor_is_still_flagged():
+    opamp = typed_chip(("1", "+5V", "V+", "power_in"), ("2", "OUT", "OUT", "output"), value="LM358")
+    assert missing(opamp) == [(("U1",), ("+5V",))]
+    assert missing(ic()) == [(("U1",), ("+3V3",))]
+    assert missing(ic(), cap("C1", "+3V3", "GND", "100nF")) == []
+
+
+def test_decoupling_pins_that_are_not_supply_inputs_are_ignored():
+    # Switch node, enable and reference/charge-pump pins typed power, however they are named.
+    chip = typed_chip(("1", "Net-(U1-SW)", "SW_NODE", "power_in"), ("2", "+5V", "~{SHDN}", "power_in"),
+                      ("3", "Net-(U1-VREF)", "VREF_OUT", "power_out"), ("4", "Net-(U1-VCP)", "VCP", "power_in"),
+                      ("5", "+3V3", "CAP1", "power_in"))
+    assert missing(chip) == []
+    # An internal-LDO output that is named like a rail still is not a supply input.
+    ldo_pin = typed_chip(("1", "+1V8", "VDD_LDO", "power_out"))
+    load = part("J1", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+1V8"), ("2", "GND"))
+    assert missing(ldo_pin, load) == []
+
+
+def test_decoupling_ignores_pins_on_return_nets_and_pins_strapped_to_ground():
+    protector = typed_chip(("1", "B-", "VM", "power_in"), ("2", "Net-(U1-VCC)", "VCC", "power_in"))
+    assert missing(protector, cap("C1", "Net-(U1-VCC)", "B-")) == []
+    strapped = typed_chip(("1", "Net-(U1-VDD2)", "VDD2", "power_in"))
+    assert missing(strapped, res("R1", "Net-(U1-VDD2)", "GND", "470")) == []
+    assert missing(strapped, res("R1", "Net-(U1-VDD2)", "+5V", "470")) == [(("U1",), ("Net-(U1-VDD2)",))]
+
+
+def test_decoupling_through_series_fuse_or_ferrite_from_a_reservoir():
+    reg = typed_chip(("1", "/VIN_P", "VIN", "power_in"))
+    reservoir = cap("C1", "/VIN_RAW", value="470uF")
+    fuse = part("F1", "2A", "Fuse:Fuse_1206", ("1", "/VIN_RAW"), ("2", "/VIN_P"))
+    assert missing(reg, reservoir, fuse) == []
+    bead = part("FB1", "BLM18", "Inductor_SMD:L_0603", ("1", "/VIN_RAW"), ("2", "/VIN_P"))
+    assert missing(reg, reservoir, bead) == []
+    assert missing(reg, fuse) == [(("U1",), ("/VIN_P",))]
+
+
+def test_decoupling_cap_between_stacked_rails_counts():
+    stacked = typed_chip(("1", "+12V", "VDDH", "power_in"), ("2", "+5V", "VDDL", "power_in"))
+    assert missing(stacked) == [(("U1",), ("+12V",)), (("U1",), ("+5V",))]
+    assert missing(stacked, cap("C1", "+12V", "+5V")) == []
+
+
+def pixel(ref, rail="+5V", pos=None, footprint="LED_SMD:LED_SK6812MINI"):
+    a = lambda n: (pos or {}).get(n)
+    return part(ref, "SK6812", footprint, ("1", rail, "VDD", "power_in", a(1)),
+                ("2", f"Net-({ref}-DOUT)", "DOUT", "output"), ("3", "GND", "VSS", "power_in"),
+                ("4", f"Net-({ref}-DIN)", "DIN", "input"))
+
+
+def test_addressable_leds_without_any_capacitor_are_one_finding_per_rail():
+    # D* and RGB* references alike, found by value or footprint, one finding for the whole rail.
+    plain = part("RGB3", "LED_RGB", "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm", ("1", "+5V", "VDD"),
+                 ("2", "GND", "VSS"), ("3", "Net-(RGB3-DIN)", "DIN"), ("4", "Net-(RGB3-DOUT)", "DOUT"))
+    assert missing(pixel("D1"), pixel("D2"), plain) == [(("D1", "D2", "RGB3"), ("+5V",))]
+    assert missing(pixel("D1"), pixel("D2"), cap("C1", "+5V")) == []
+    assert missing(pixel("D1", "+3V3"), pixel("D2"), cap("C1", "+5V")) == [(("D1",), ("+3V3",))]
+
+
+def test_addressable_leds_far_from_the_capacitor_are_one_finding_per_rail():
+    leds = [pixel(f"D{n}", pos={1: (50.0 * n, 0.0)}) for n in (1, 2)]
+    near_d1 = cap("C1", "+5V", pin_pos=((51.0, 0.0), (52.0, 0.0)))
+    found = rules(design(*leds, near_d1), "decoupling")
+    assert [(f.rule, f.refs) for f in found] == [("decoupling.far", ("D2",))]
+    both_far = cap("C1", "+5V", pin_pos=((500.0, 0.0), (501.0, 0.0)))
+    found = rules(design(*leds, both_far), "decoupling")
+    assert [(f.rule, f.refs, f.nets) for f in found] == [("decoupling.far", ("D1", "D2"), ("+5V",))]
+
+
 # --- I2C pull-ups -----------------------------------------------------------------------
 
 def bus(*extra):
@@ -237,6 +314,52 @@ def test_connector_power_protection_note():
     assert driven == []
 
 
+def ldo(out="+3V3"):
+    return part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "VIN", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", out, "VOUT", "power_out"))
+
+
+def test_connector_sending_a_rail_out_is_not_a_power_input():
+    header = part("J2", "Out", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+3V3"), ("2", "GND"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(ldo(), header, load, cap(), cap("C2", "VIN")), "connector") == []
+    # Module with a power_out pin and no regulator part: the pin produces the rail.
+    module = part("U3", "PSU", "Module:PSU", ("1", "+3V3", "3V3", "power_out"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(module, header, load, cap()), "connector") == []
+
+
+def test_debug_connector_is_not_a_power_input():
+    swd = part("J3", "Conn_ARM_JTAG_SWD_10", "Connector_PinHeader_1.27mm:PinHeader_2x05",
+               ("1", "+3V3"), ("2", "SWDIO"), ("3", "GND"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(swd, load, cap()), "connector") == []
+
+
+def test_connector_net_fed_through_a_series_resistor_is_driven():
+    sensor = part("J4", "Sensor", "Connector_JST:JST_PH_B3B", ("1", "+3V3_S"), ("2", "GND"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3_S", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    feed = res("R1", "+3V3", "+3V3_S", "4.7")
+    assert rules(design(ldo(), sensor, load, feed, cap(), cap("C2", "+3V3_S")), "connector") == []
+    # The same connector with nothing feeding the rail is still a power input.
+    assert [f.nets for f in rules(design(sensor, load, cap("C2", "+3V3_S")), "connector")] == [("+3V3_S",)]
+
+
+def test_screw_terminal_into_a_regulator_without_protection_is_flagged():
+    terminal = part("J1", "Screw", "TerminalBlock:TerminalBlock_1x02", ("1", "+12V"), ("2", "GND"))
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+12V", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    found = rules(design(terminal, reg, cap(), cap("C2", "+12V")), "connector")
+    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("+12V",))]
+
+
+def test_battery_connector_into_a_charger_without_protection_is_flagged():
+    batt = part("J5", "Battery", "Connector_JST:JST_PH_B2B", ("1", "VBAT"), ("2", "GND"))
+    charger = part("U4", "Charger", "Package_SO:SOIC-8", ("1", "VBAT", "BAT", "power_out"),
+                   ("2", "VBUS", "IN", "power_in"), ("3", "GND", "GND", "power_in"))
+    found = rules(design(batt, charger, cap("C1", "VBAT")), "connector")
+    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("VBAT",))]
+
+
 def test_zero_ohm_short_and_unset_values():
     short = design(ic(), cap(), res("R1", "+3V3", "GND", "0"))
     assert [(f.rule, f.severity) for f in rules(short, "value")] == [("value.zero_ohm_short", Severity.ERROR)]
@@ -245,9 +368,66 @@ def test_zero_ohm_short_and_unset_values():
     unset = design(ic(), cap("C1", value="C"), res("R2", "A", "B", "R"))
     found = rules(unset, "value")
     assert [(f.rule, f.severity, f.refs) for f in found] == [("value.missing", Severity.WARNING, ("C1", "R2"))]
-    ordered = design(ic(), part("C1", "C", "Capacitor_SMD:C_0402", ("1", "+3V3"), ("2", "GND"),
-                                fields={"LCSC": "C1525"}))
-    assert rules(ordered, "value") == []
+    assert rules(design(ic(), cap("C1", value="100nF"), res("R2", "A", "B", "10k"),
+                        part("TP1", "~", "TestPoint:TestPoint_Pad_D1.0mm", ("1", "A")),
+                        part("H1", "~", "MountingHole:MountingHole_3.2mm_M3", ("1", "")),
+                        part("FID1", "~", "Fiducial:Fiducial_1mm_Mask2mm"),
+                        part("NT1", "~", "NetTie:NetTie-2_SMD_Pad0.5mm", ("1", "A"), ("2", "B"))), "value") == []
+
+
+def values_missing(*parts):
+    return [(f.severity, f.refs) for f in rules(design(ic(), cap(), *parts), "value.missing")]
+
+
+def test_value_missing_covers_more_kinds_and_symbol_names():
+    bare = "Package_SO:SOIC-8"
+    found = values_missing(
+        part("U2", "~", bare, ("1", "A")),
+        part("J1", "~", "Connector_RJ:RJ45", ("1", "A")),
+        part("K1", "Relay_SPDT", "Relay_THT:Relay", ("1", "A")),
+        part("Y1", "Crystal", "Crystal:Crystal_SMD", ("1", "A")),
+        part("F1", "Polyfuse", "Fuse:Fuse_1206", ("1", "A")),
+        part("FB1", "FerriteBead", "Inductor_SMD:L_0603", ("1", "A")),
+        part("R3", "R_Small_US", "Resistor_SMD:R_0402", ("1", "A")),
+        part("D2", "D_Schottky", "Diode_SMD:D_SOD-123", ("1", "A")),
+        part("R4", "Rset", "Resistor_SMD:R_0402", ("1", "A")),
+        part("R5", "Custom_Sym", "Resistor_SMD:R_0402", ("1", "A"), fields={"lib_id": "Device:Custom_Sym"}),
+        part("U3", "LM358", bare, ("1", "A"), fields={"lib_id": "Amplifier_Operational:LM358"}))
+    assert found == [(Severity.WARNING, ("D2", "F1", "FB1", "J1", "K1", "R3", "R4", "R5", "U2", "Y1"))]
+
+
+def test_value_missing_skips_copper_parts_and_part_number_symbols():
+    # Solder jumpers and PCB trace antennas are copper, not orderable parts.
+    assert values_missing(
+        part("JP1", "SolderJumper_2_Open", "Jumper:SolderJumper-2_P1.3mm_Open", ("1", "A")),
+        part("AE1", "Antenna", "footprints:2.4GHz-meander-antenna-v2", ("1", "A")),
+        # A connector or switch whose symbol name is its part number / a commodity generic name.
+        part("AE2", "KH-5220-A56_U.FL", "otter:KH-5220-A56", ("1", "A"), fields={"lib_id": "otter:KH-5220-A56_U.FL"}),
+        part("SW1", "SW_Push", "Button_Switch_SMD:SW_SPST_TL3342", ("1", "A"),
+             fields={"lib_id": "Switch:SW_Push"})) == []
+    # Still flagged when the value is empty.
+    assert values_missing(part("SW2", "~", "Button_Switch_SMD:SW_SPST_TL3342", ("1", "A"))) == [
+        (Severity.WARNING, ("SW2",))]
+
+
+def test_value_missing_order_code_only_is_softer():
+    found = rules(design(ic(), cap(), part("R1", "R_Small", "Resistor_SMD:R_0402", ("1", "A"),
+                                           fields={"LCSC": "C12345"}),
+                         part("R2", "~", "Resistor_SMD:R_0402", ("1", "A"), fields={"LCSC": "C999"}),
+                         part("R3", "10k", "Resistor_SMD:R_0402", ("1", "A"), fields={"LCSC": "C25744"})),
+                  "value.missing")
+    assert [(f.severity, f.refs) for f in found] == [(Severity.INFO, ("R1", "R2"))]
+    assert "only the order code identifies it" in found[0].evidence and "C12345" in found[0].evidence
+
+
+def test_value_missing_generic_value_with_mpn_or_stock_id_is_fine():
+    named = lambda ref, fields: part(ref, "LED", "LED_SMD:LED_0603", ("1", "A"), fields=fields)  # noqa: E731
+    assert values_missing(named("D1", {"MPN": "19-217/GHC"}), named("D2", {"UST_ID": "42"}),
+                   named("D3", {"Stock": "S-7"})) == []
+    assert values_missing(named("D4", {"UST_ID": ""})) == [(Severity.WARNING, ("D4",))]
+    # An empty value stays missing whatever else identifies the part.
+    assert values_missing(part("D5", "~", "LED_SMD:LED_0603", ("1", "A"), fields={"MPN": "19-217"})) == [
+        (Severity.WARNING, ("D5",))]
 
 
 def test_coverage_note_when_no_ground_is_named():

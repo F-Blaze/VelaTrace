@@ -27,6 +27,7 @@ from math import dist
 import re
 from typing import Callable, Iterable
 
+from .bom import lcsc_code, mpn_of
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
 
@@ -45,15 +46,29 @@ _SUPPLY = re.compile(
     r"VMOT|VPP|VLED|VSUPPLY|VREG|V\+)(?:[_\-.]?[A-Z0-9.]*)")
 _SIGNAL_TOKENS = {"EN", "ENA", "PG", "PGOOD", "SENSE", "SNS", "DET", "OK", "FB", "SW", "ON", "OFF",
                   "CTRL", "CTL", "MON", "ADC", "FLT", "FAULT", "ALERT", "INT", "STAT", "DIV", "LVL"}
-_ORDER_FIELDS = {"mpn", "manufacturer part number", "manufacturer_part_number", "lcsc", "lcsc part",
-                 "lcsc part #", "part number", "digikey", "digi-key_pn", "mouser"}
+_ORDER_FIELDS = {"lcsc", "lcsc part", "lcsc part #", "digikey", "digi-key_pn", "mouser"}
 _I2C = {"SDA": re.compile(r"(?:I2C\d*)?SDA\d*"), "SCL": re.compile(r"(?:I2C\d*)?SCL\d*")}
 _GPIO_PIN = re.compile(r"(?:GPIO\d+|IO\d+|P[A-K]\d{1,2}|P\d{1,2}[._]\d{1,2}|D\d{1,2}|RA\d|RB\d|RC\d)",
                        re.IGNORECASE)
 _PROTECTION_VALUE = re.compile(r"TVS|ESD|USBLC|PRTR|TPD\d|SMAJ|SMBJ|PESD|SS\d{2}|1N58|B5819|POLYFUSE|PTC",
                                re.IGNORECASE)
-_PLACEHOLDER_VALUES = {"", "~", "?", "R", "C", "L", "D", "LED", "R_SMALL", "C_SMALL", "L_SMALL",
-                       "C_POLARIZED", "CP", "R_US", "C_US", "VAL", "VALUE", "D_SMALL"}
+_EMPTY_VALUES = {"", "~", "?"}
+# Generic KiCad symbol names (R_Small_US, D_Schottky, C_Polarized...) and template text left as a value.
+_GENERIC_VALUE = re.compile(
+    r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
+    r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*", re.IGNORECASE)
+# For these kinds the symbol is generic, so a value equal to the symbol name was never set.
+# Not for ICs, transistors, modules, diodes or "other" parts, whose symbol name is often the part number
+# (a connector or antenna valued KH-5220-A56_U.FL); not for switches and battery holders, which are commodity.
+_GENERIC_SYMBOL_KINDS = {"resistor", "resistor_array", "potentiometer", "capacitor", "inductor", "ferrite",
+                         "led", "fuse", "crystal"}
+# Not parts to value: fiducials, logos, net-ties, solder jumpers and PCB trace antennas (copper, not orderable;
+# testpoints and mounting holes come from part_kind).
+_NOT_A_PART = re.compile(r"FIDUCIAL|LOGO|NET_?TIE|^SYMBOL:|SOLDER_?JUMPER|SOLDER_?BRIDGE|MEANDER|PCB_?ANTENNA",
+                         re.IGNORECASE)
+_NOT_A_PART_REF = re.compile(r"(?:#|FID|NT|LOGO|MK)")
+# Project-specific stock/inventory/internal-part-number fields identify a part like an MPN does.
+_STOCK_FIELD = re.compile(r"stock|inventor|ipn|internal|ust.?id", re.IGNORECASE)
 _PREFIX_KINDS = {"R": "resistor", "RN": "resistor_array", "RA": "resistor_array",
                  "RV": "potentiometer", "C": "capacitor", "CP": "capacitor", "CE": "capacitor",
                  "L": "inductor", "FB": "ferrite", "D": "diode", "ZD": "diode", "TVS": "diode",
@@ -65,6 +80,12 @@ _PREFIX_KINDS = {"R": "resistor", "RN": "resistor_array", "RA": "resistor_array"
 _ADDRESSABLE_LED = re.compile(r"WS28\d\d|SK6\d{3}|APA1\d\d|SK98\d\d", re.IGNORECASE)
 # Pins typed power that are switch nodes or control inputs, never decoupled rails.
 _NOT_SUPPLY_PIN = re.compile(r"(?:SW|LX|PH|DCC\w*|EN|PG|PGOOD|BOOT|BST)\d*")
+# Name tokens of pins that are never an external supply input, whatever their type says: switch
+# nodes, enable/shutdown, boot, references, charge-pump and internal-regulator capacitor pins.
+_NOT_SUPPLY_TOKEN = re.compile(
+    r"(?:SW|LX|PH|PHASE|DCC\w*|N?EN|PG|PGOOD|BOOT|BST|VCP|CP|CAP|VCAP|CFLY)\d*|SWITCH|N?ENABLE|SHDN|SHUTDOWN|"
+    r"RUN|UVLO|V?REF\w*")
+_LED_VDD_PIN = re.compile(r"V?DD|VCC|V\+")
 # Op-amp offset-null/trim and compensation pins: left open when unused, per datasheets.
 _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
 # Input-typed pins that may stay open: debug pins with internal pulls, and flag outputs
@@ -73,9 +94,13 @@ _OPEN_OK_PIN = {"SWCLK", "SWDIO", "SWO", "SWDCK", "TCK", "TMS", "TDI", "TDO", "D
                 "INT2", "IRQ", "ALERT"}
 _UNUSED_USB_PIN = re.compile(r"SBU\d")  # USB-C sideband pins: unused on USB 2.0
 _LED_PART = re.compile(r"7.?SEG|SEVEN.?SEG|(?:^|\s)(?:LED|DISPLAY)")  # on "value footprint"
-# Connectors that never bring power in: memory-card/SIM sockets, M.2, SWD/JTAG/Tag-Connect pads.
-_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|M\.2|TAG-?CONNECT|TC20\d0|SWD|JTAG|"
-                              r"FPC|FFC|BOARD.?TO.?BOARD|MEZZANINE|CASTELLAT|STAMP")
+# Connectors that never bring power in: memory-card/SIM sockets, M.2, debug/programming pads
+# (their VTref comes from the probe), board-to-board and module sockets.
+_NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|(?<![A-Z0-9])(?:SD|TF)(?![A-Z0-9])|M\.2|TAG-?CONNECT|TC20\d0|"
+                              r"SWD|JTAG|DEBUG|CORTEX|ICSP|FPC|FFC|BOARD.?TO.?BOARD|MEZZANINE|"
+                              r"CASTELLAT|STAMP")
+# Pin names that take a supply in (untyped netlists): VIN/VCC/VDD/VBUS..., IN, 3V3, V+.
+_SUPPLY_PIN = re.compile(r"IN\d*|VI|DC|ADAPTER|V\+|[AD]?P?V(?:CC|DD|IN|BUS|BAT|SYS|MOT|S|M|P)\w*")
 SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
@@ -113,6 +138,10 @@ def i2c_line(net: str) -> str | None:
     return None
 
 
+def _is_addressable(comp: Component) -> bool:
+    return bool(_ADDRESSABLE_LED.search(f"{comp.footprint} {comp.value}"))
+
+
 def part_kind(comp: Component) -> str:
     prefix = (re.match(r"[A-Za-z]+", comp.reference) or [""])[0].upper()
     library = comp.footprint.split(":", 1)[0].upper()
@@ -122,7 +151,7 @@ def part_kind(comp: Component) -> str:
     if (library.startswith("MODULE") or library.startswith("RF_MODULE") or "MODULE" in comp.value.upper()
             or re.search(r"MODULE|DEV[-_]?KIT", comp.footprint.split(":", 1)[-1].upper())):
         return "module"
-    if _ADDRESSABLE_LED.search(comp.value):
+    if _is_addressable(comp):
         return "ic"
     if prefix == "LED" or library.startswith("LED") or (prefix == "D" and "LED" in text):
         return "led"
@@ -225,26 +254,33 @@ def _ground_name(design: _Design) -> str:
     return "GND" if "GND" in design.grounds else sorted(design.grounds)[0]
 
 
+def _is_return(design: _Design, net: str) -> bool:
+    return net in design.grounds or bool(_RETURN.fullmatch(net_label(net)))
+
+
 def _supply_pins(design: _Design, ic: Component) -> dict[str, list[Pin]]:
     """Pins of an IC that need decoupling, by net.
 
-    Typed netlists: power_in pins, and power_out pins that drive a named rail feeding something
-    beyond resistors (so an internal-regulator pin such as AXP209 VINT is not a rail).
-    Switch nodes (SW/LX/PH/DCC*), EN/PG/BOOT pins typed power, and ground-named pins never are."""
+    Typed netlists: power_in pins, and a power_out regulator output (VOUT/OUT) on a named rail
+    feeding something beyond resistors; other outputs (references, charge pumps, internal LDOs
+    such as AXP209 VINT) are not supply inputs. Addressable LEDs also count their VDD pin.
+    Pins on a ground/return net, ground-named pins, and switch-node/enable/boot/reference/
+    charge-pump pins typed power never are."""
     typed = any(pin.electrical_type for pin in ic.pins)
+    led = _is_addressable(ic)
     result: dict[str, list[Pin]] = defaultdict(list)
     for pin in ic.pins:
-        name = pin.name.upper()
-        if (not pin.net or pin.net in design.grounds or pin.no_connect
-                or _NOT_SUPPLY_PIN.fullmatch(name) or _GROUND.fullmatch(name)):
+        name = re.sub(r"[~{}]", "", pin.name.upper())
+        if (not pin.net or _is_return(design, pin.net) or pin.no_connect or _GROUND.fullmatch(name)
+                or any(_NOT_SUPPLY_TOKEN.fullmatch(token) for token in re.split(r"[^A-Z0-9]+", name))):
             continue
         if not typed:
             wanted = is_supply_name(pin.net)
         elif _base_type(pin) == "power_out":
-            wanted = is_supply_name(pin.net) and any(
+            wanted = bool(_OUT_PIN.fullmatch(name)) and is_supply_name(pin.net) and any(
                 design.kind[comp.reference] != "resistor" for comp, _ in design.nodes[pin.net] if comp is not ic)
         else:
-            wanted = _base_type(pin) == "power_in"
+            wanted = _base_type(pin) == "power_in" or (led and bool(_LED_VDD_PIN.fullmatch(name)))
         if wanted:
             result[pin.net].append(pin)
     return result
@@ -276,7 +312,7 @@ def _decoupled(design: _Design, net: str, cap_ends: dict[str, set[str]], returns
 def _not_a_rail(design: _Design, ic: Component, net: str) -> bool:
     """Battery terminals need no decoupling, nor pins whose only other connection is one resistor
     that is ≥1 kΩ (a bias/set pin such as AXP209 VINT, nothing can be powered through it) or
-    ≤100 Ω to ground (a pin strapped off, e.g. an eFuse supply never programmed)."""
+    goes to ground/return (a pin strapped off, e.g. an eFuse supply never programmed)."""
     others = [comp for comp, _ in design.nodes[net] if comp is not ic]
     if any(design.kind[comp.reference] == "battery" for comp in others):
         return True
@@ -285,7 +321,7 @@ def _not_a_rail(design: _Design, ic: Component, net: str) -> bool:
     nets, ohms = two_terminal_nets(others[0]), parse_resistance(others[0].value)
     if not nets or ohms is None:
         return False
-    return ohms >= 1000 or (ohms <= 100 and any(n in design.grounds for n in nets))
+    return ohms >= 1000 or any(_is_return(design, n) for n in nets)
 
 
 def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
@@ -309,12 +345,14 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
             cap_ends[nets[0]].add(nets[1])
             cap_ends[nets[1]].add(nets[0])
     missing: dict[str, list[tuple[Component, list[Pin]]]] = defaultdict(list)
+    far_leds: dict[str, list[tuple[Component, str, float]]] = defaultdict(list)  # one finding per rail
+    base_returns = design.grounds | {net for net in design.nodes if _is_return(design, net)}
     findings = []
     for ic in design.of_kind("ic"):
         supply_pins = _supply_pins(design, ic)
         # A capacitor to any of the IC's own power/ground pin nets also decouples: stacked
         # domains (cap to the neighbouring rail), protection ICs on a local ground (DW01 B-).
-        returns = design.grounds | {pin.net for pin in ic.pins if pin.net and (
+        returns = base_returns | {pin.net for pin in ic.pins if pin.net and (
             _base_type(pin) in {"power_in", "power_out"} or _GROUND.fullmatch(pin.name.upper()))}
         for net, pins in sorted(supply_pins.items()):
             if not caps.get(net):
@@ -332,7 +370,9 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
                 distances += [(dist(a, b), cap.reference) for a in points for b in cap_points]
             if distances:
                 nearest, ref = min(distances)
-                if nearest > DECOUPLING_NEAR_MM:
+                if nearest > DECOUPLING_NEAR_MM and _is_addressable(ic):
+                    far_leds[net].append((ic, ref, nearest))
+                elif nearest > DECOUPLING_NEAR_MM:
                     findings.append(Finding(
                         "decoupling.far", Severity.WARNING,
                         f"{ic.reference}'s nearest {net} capacitor ({ref}) is {nearest:.1f} mm away",
@@ -343,6 +383,15 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
                         f"Move {ref} (or add a 100 nF) within ~{DECOUPLING_NEAR_MM:g} mm of "
                         f"{ic.reference} {_pin_text(pins[0])}, with a short path to ground."))
     ground = _ground_name(design)
+    for net, rows in sorted(far_leds.items()):
+        refs = tuple(ic.reference for ic, _, _ in rows)
+        worst = max(rows, key=lambda row: row[2])
+        findings.append(Finding(
+            "decoupling.far", Severity.WARNING,
+            f"{', '.join(refs)}: no {net} capacitor within {DECOUPLING_NEAR_MM:g} mm", refs, (net,),
+            f"Addressable LEDs {', '.join(refs)} on {net}; the farthest, {worst[0].reference}, is "
+            f"{worst[2]:.1f} mm from its closest capacitor to ground ({worst[1]}) in the current placement.",
+            f"Place a 100 nF from {net} to ground within ~{DECOUPLING_NEAR_MM:g} mm of each LED's supply pin."))
     for net, rows in sorted(missing.items()):
         refs = tuple(ic.reference for ic, _ in rows)
         who = refs[0] + " has" if len(refs) == 1 else ", ".join(refs) + " have"
@@ -813,7 +862,7 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
                 verdict[net] = (
                     any(_powers_ic(design, n) for n in group)
                     # Battery terminals take power in even where a charger also drives them.
-                    and ("BAT" in net_label(net) or not _drives(design, group))
+                    and ("BAT" in net_label(net) or not _drives(design, _fed_group(design, group)))
                     and not any(design.kind[part.reference] in protective or _PROTECTION_VALUE.search(part.value)
                                 for part in parts))
             if verdict[net]:
@@ -851,6 +900,26 @@ def _rail_group(design: _Design, net: str) -> set[str]:
     return group
 
 
+def _fed_group(design: _Design, group: set[str]) -> set[str]:
+    """group plus the supply nets reached through a series resistor (≤100 Ω), ferrite, fuse or diode,
+    and supply nets of the same name: a rail that something on the board feeds, however lossy the link."""
+    labels = {net_label(n) for n in group} - {""}
+    fed, todo = set(group), list(group)
+    while todo:
+        current = todo.pop()
+        near = [net for net in design.supplies if net_label(net) in labels and net not in fed]
+        for comp, _ in design.nodes[current]:
+            nets = two_terminal_nets(comp)
+            if nets and current in nets and (_series_link(design, comp, 100) or design.kind[comp.reference] == "diode"):
+                near.append(nets[1] if nets[0] == current else nets[0])
+        for other in near:
+            if other in design.supplies and other not in fed:
+                fed.add(other)
+                labels.add(net_label(other))
+                todo.append(other)
+    return fed
+
+
 def _drives(design: _Design, group: set[str]) -> bool:
     """A regulator, PMIC or load-switch output drives the rail: a power_out pin (not a switch
     node) or a VOUT/OUT pin on it, or an inductor from a converter's switch pin whose own supply
@@ -860,7 +929,7 @@ def _drives(design: _Design, group: set[str]) -> bool:
             kind = design.kind[comp.reference]
             if kind == "connector":
                 continue
-            if kind == "ic" and _OUT_PIN.fullmatch(pin.name.upper()):
+            if kind in {"ic", "module"} and _OUT_PIN.fullmatch(pin.name.upper()):
                 return True
             if _base_type(pin) == "power_out" and not _NOT_SUPPLY_PIN.fullmatch(pin.name.upper()):
                 return True
@@ -878,8 +947,11 @@ def _drives(design: _Design, group: set[str]) -> bool:
 
 
 def _powers_ic(design: _Design, net: str) -> bool:
-    """The rail reaches an IC or module at all (a divider tap or card socket does not)."""
-    return any(design.kind[comp.reference] in {"ic", "module"} for comp, _ in design.nodes[net])
+    """The rail reaches a supply-input pin of an IC or module (a divider tap or card socket does not)."""
+    return any(design.kind[comp.reference] in {"ic", "module"} and (
+        _base_type(pin) in {"power_in", "power_out"} or is_supply_name(pin.name)
+        or _SUPPLY_PIN.fullmatch(pin.name.upper()))
+        for comp, pin in design.nodes[net])
 
 
 def check_values(snapshot: DesignSnapshot) -> list[Finding]:
@@ -899,10 +971,27 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
                 (supply[0], ground[0]),
                 f"{res.reference} value '{res.value}' connects {supply[0]} directly to {ground[0]}.",
                 f"Give {res.reference} its intended value, or remove it if it is a leftover jumper."))
-    unset = sorted(comp.reference for comp in design.of_kind("resistor", "capacitor", "inductor", "led", "diode")
-                   if comp.value.strip().upper() in _PLACEHOLDER_VALUES and not any(
-                       name.strip().casefold() in _ORDER_FIELDS and text.strip()
-                       for name, text in comp.fields.items()))
+    unset, order_only = [], {}
+    for comp in snapshot.components:
+        value, kind = comp.value.strip(), design.kind[comp.reference]
+        if (kind in {"testpoint", "mounting"} or _NOT_A_PART.search(comp.footprint)
+                or _NOT_A_PART_REF.match(comp.reference.upper())):
+            continue
+        symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
+        empty = value in _EMPTY_VALUES
+        if not (empty or _GENERIC_VALUE.fullmatch(value)
+                or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol)):
+            continue
+        if not empty and (mpn_of(comp) or any(_STOCK_FIELD.search(name) and text.strip()
+                                              for name, text in comp.fields.items())):
+            continue  # a generic value ("LED") is fine while an MPN or stock ID names the part
+        code = lcsc_code(comp) or next((text.strip() for name, text in comp.fields.items()
+                                        if name.strip().casefold() in _ORDER_FIELDS and text.strip()), "")
+        if code and not mpn_of(comp):
+            order_only[comp.reference] = code
+        else:
+            unset.append(comp.reference)
+    unset.sort()
     if unset:
         shown = ", ".join(f"{ref} '{design.parts[ref].value}'" for ref in unset[:8])
         findings.append(Finding(
@@ -912,6 +1001,17 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             tuple(unset), (),
             f"Values still show the symbol default: {shown}" + (" …" if len(unset) > 8 else "") + ".",
             "Set each value (e.g. 100nF, 10k) so the BOM can be ordered without guessing."))
+    if order_only:
+        refs = sorted(order_only)
+        shown = ", ".join(f"{ref} '{design.parts[ref].value}' (only {order_only[ref]})" for ref in refs[:8])
+        findings.append(Finding(
+            "value.missing", Severity.INFO,
+            f"{len(refs)} part{'s have' if len(refs) > 1 else ' has'} a placeholder value, identified "
+            f"only by an order code ({', '.join(refs[:6])}" + (", …)" if len(refs) > 6 else ")"),
+            tuple(refs), (),
+            f"Value is a placeholder; only the order code identifies it: {shown}" + (" …" if len(refs) > 8 else "")
+            + ".",
+            "Set a readable value so the BOM makes sense to people and other assemblers, not just to LCSC."))
     return findings
 
 

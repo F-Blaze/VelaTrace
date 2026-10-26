@@ -61,6 +61,9 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
             raise ValidationError("Netlist contains missing or duplicate component references.")
         references.add(ref)
         fields = {item.get("name", ""): item.text or "" for item in comp.findall("./fields/field")}
+        source = comp.find("libsource")  # the symbol this part was placed from, e.g. Device:R_Small
+        if source is not None and source.get("part"):
+            fields.setdefault("lib_id", f"{source.get('lib', '')}:{source.get('part')}")
         components.append(Component(ref, comp.findtext("value", ""), comp.findtext("footprint", ""),
                                     tuple(by_ref.get(ref, ())), fields))
     if set(by_ref) - references:
