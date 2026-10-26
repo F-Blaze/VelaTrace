@@ -782,6 +782,62 @@ def check_duplicate_parts(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+def check_usbc_cc(snapshot: DesignSnapshot) -> list[Finding]:
+    """Flag missing USB-C sink CC pull-downs only when netlist evidence is clear.
+
+    Unknown pin names, a CC/PD controller, resistor networks, and potential source
+    ports are intentionally excluded to avoid misleading advice.
+    """
+    design = _Design(snapshot)
+    if not design.grounds:
+        return []
+    findings = []
+    for conn in design.of_kind("connector"):
+        if "USB_C" not in f"{conn.value} {conn.footprint}".upper():
+            continue
+        cc_pins = [pin for pin in conn.pins if pin.name.strip().upper() in {"CC1", "CC2"}]
+        # Duplicate, unnamed, disconnected, or shorted CC pins are ambiguous.
+        if (len(cc_pins) != 2 or {pin.name.strip().upper() for pin in cc_pins} != {"CC1", "CC2"}
+                or not all(pin.net for pin in cc_pins) or cc_pins[0].net == cc_pins[1].net):
+            continue
+        supplies = {pin.net for pin in conn.pins if pin.net and (
+            is_supply_name(pin.net) or pin.name.strip().upper().startswith("VBUS"))}
+        if any(_base_type(pin) == "power_out" for net in supplies
+               for part, pin in design.nodes[net] if part.reference != conn.reference):
+            continue  # likely host/source, not a sink
+        cc_nets = {pin.name.strip().upper(): pin.net for pin in cc_pins}
+        if any(design.kind[part.reference] in {"ic", "module", "resistor_array"}
+               for net in cc_nets.values() for part, _ in design.nodes[net]
+               if part.reference != conn.reference):
+            continue  # an active CC controller or resistor network may implement Rd
+        missing = []
+        for cc_name in ("CC1", "CC2"):
+            net = cc_nets[cc_name]
+            pulled_down = False
+            for part, _ in design.nodes[net]:
+                if design.kind[part.reference] != "resistor":
+                    continue
+                ends = two_terminal_nets(part)
+                if (ends and net in ends and any(end in design.grounds for end in ends)
+                        and parse_resistance(part.value) != 0):
+                    pulled_down = True
+                    break
+            if not pulled_down:
+                missing.append(cc_name)
+        if missing:
+            refs = (conn.reference,)
+            nets = tuple(cc_nets[name] for name in missing)
+            findings.append(Finding(
+                "connector.usbc_cc_missing", Severity.WARNING,
+                f"{conn.reference} USB-C CC pull-down missing on {', '.join(missing)}",
+                refs, nets,
+                f"{conn.reference} has named {', '.join(missing)} pins on {', '.join(nets)}, "
+                "but no non-zero resistor connects those nets to ground.",
+                "For a USB-C sink/device port, add a separate 5.1 kΩ resistor from each "
+                "CC pin to ground; verify the port role and PD-controller requirements.",
+                PASSIVE_USD * len(missing)))
+    return findings
+
 def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
     """Connectors carrying a supply and ground with no protection part on that supply."""
     design = _Design(snapshot)
@@ -1200,6 +1256,7 @@ RULES: dict[str, Check] = {
     "pin": check_floating_inputs,
     "duplicate": check_duplicate_parts,
     "connector": check_connector_protection,
+    "connector.usbc_cc_missing": check_usbc_cc,
     "value": check_values,
     "coverage": check_coverage,
 }
