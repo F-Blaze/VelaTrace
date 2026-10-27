@@ -65,7 +65,8 @@ def read_xml_netlist(path: Path) -> DesignSnapshot:
         if source is not None and source.get("part"):
             fields.setdefault("lib_id", f"{source.get('lib', '')}:{source.get('part')}")
         components.append(Component(ref, comp.findtext("value", ""), comp.findtext("footprint", ""),
-                                    tuple(by_ref.get(ref, ())), fields))
+                                    tuple(by_ref.get(ref, ())), fields,
+                                    dnp=comp.find("./property[@name='dnp']") is not None))
     if set(by_ref) - references:
         raise ValidationError("Netlist connectivity refers to unknown components.")
     return DesignSnapshot(tuple(components), "kicad-xml-netlist", path)

@@ -687,6 +687,11 @@ def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
                 "Use a global label (or hierarchical label + sheet pin) on both sides so they join, "
                 "or rename one if they are meant to be different signals."))
             continue
+        # Keep label-scope diagnostics above, but an unpopulated part alone
+        # does not make a useful single-pin warning. Keep every node in the
+        # design so DNP metadata cannot hide findings about fitted parts.
+        if comp.dnp:
+            continue
         quiet = design.kind[comp.reference] in {"connector", "testpoint", "mounting"}
         findings.append(Finding(
             "net.single_pin", Severity.INFO if quiet else Severity.WARNING,

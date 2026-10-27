@@ -72,6 +72,7 @@ class KiCadReader:
                 fields=fields,
                 position_mm=(fp.position.x / 1_000_000, fp.position.y / 1_000_000),
                 uuid=fp.id.value,
+                dnp=fp.attributes.do_not_populate,
             ))
         warnings = ["Footprint positions are geometry, not proof that placement is complete."]
         try:

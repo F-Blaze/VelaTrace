@@ -39,6 +39,7 @@ class Component:
     position_mm: tuple[float, float] | None = None
     kind: str = "unknown"
     uuid: str = ""
+    dnp: bool = False
 
     @property
     def nets(self) -> frozenset[str]:
