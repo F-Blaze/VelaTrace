@@ -4,7 +4,7 @@ One switch (set_motion) turns every animation off. Static decorations stay.
 No effect runs a timer while its widget is hidden or idle."""
 from __future__ import annotations
 
-from PySide6.QtCore import (QEasingCurve, QEvent, QPointF, QPropertyAnimation, QRectF, Qt, QTimer,
+from PySide6.QtCore import (QEasingCurve, QEvent, QObject, QPointF, QPropertyAnimation, QRectF, Qt, QTimer,
                             QVariantAnimation, QPauseAnimation, QSequentialAnimationGroup)
 from PySide6.QtGui import (QColor, QImage, QLinearGradient, QPainter, QPen, QPolygonF, QBrush,
                            QRadialGradient)
@@ -273,3 +273,102 @@ class ShimmerLabel(QLabel):
         painter.setPen(QPen(QBrush(gradient), 1))
         painter.setFont(self.font())
         painter.drawText(area, int(self.alignment()) | Qt.TextFlag.TextWordWrap, self.text())
+
+
+class Ease(QObject):
+    """Moves a float property of its parent widget toward a target in 120 ms, repainting each
+    step. Motion off (or a hidden widget) snaps. Runs only between a transition's start and end."""
+    def __init__(self, widget, name, duration=120):
+        super().__init__(widget)
+        self.setObjectName(name)
+        self.anim = QVariantAnimation(self)
+        self.anim.setDuration(duration)
+        self.anim.valueChanged.connect(self._set)
+
+    def go(self, target):
+        widget = self.parent()
+        self.anim.stop()
+        if _motion and widget.isVisible():
+            self.anim.setStartValue(float(widget.property(self.objectName()) or 0.0))
+            self.anim.setEndValue(float(target))
+            self.anim.start()
+        else:
+            self._set(target)
+
+    def _set(self, value):
+        widget = self.parent()
+        widget.setProperty(self.objectName(), float(value))
+        widget.update()
+
+
+def progress(widget, name="vtHover"):
+    """The widget's current eased value, or None if it is not tracked."""
+    value = widget.property(name) if widget is not None else None
+    return float(value) if value is not None else None
+
+
+class Hover(QObject):
+    """Event filter easing `vtHover` to 1 on Enter and 0 on Leave. With follow=True it also
+    repaints on mouse moves while hovered (mouse tracking is on only then), for cursor lights."""
+    def __init__(self, widget, follow=False):
+        super().__init__(widget)
+        self.setObjectName("vtHoverFilter")
+        self.follow = follow
+        self.ease = Ease(widget, "vtHover")
+        widget.setProperty("vtHover", 0.0)
+        widget.installEventFilter(self)
+
+    def _watch(self, on):
+        widget = self.parent()
+        for child in (widget, *widget.findChildren(QWidget)):
+            child.setMouseTracking(on)
+            if child is not widget:
+                child.installEventFilter(self) if on else child.removeEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        kind = event.type()
+        if obj is self.parent() and kind in (QEvent.Type.Enter, QEvent.Type.Leave):
+            on = kind == QEvent.Type.Enter
+            self.ease.go(1.0 if on else 0.0)
+            if self.follow and (_motion or not on):
+                self._watch(on)
+        elif kind == QEvent.Type.MouseMove and self.follow and _motion:
+            self.parent().update()
+        return False
+
+
+def track_hover(widget, follow=False):
+    hover = widget.findChild(Hover, "vtHoverFilter")
+    if hover is None:
+        hover = Hover(widget, follow)
+    hover.follow = follow
+    return hover
+
+
+def untrack_hover(widget):
+    hover = widget.findChild(Hover, "vtHoverFilter")
+    if hover is not None:
+        hover._watch(False)
+        widget.removeEventFilter(hover)
+        hover.ease.anim.stop()
+        hover.setParent(None)
+        hover.deleteLater()
+        widget.setProperty("vtHover", None)
+
+
+def track_check(widget):
+    """Eases `vtCheck` with the checked state, for the self-drawing tick."""
+    if widget.findChild(Ease, "vtCheck") is None:
+        ease = Ease(widget, "vtCheck", 140)
+        widget.setProperty("vtCheck", 1.0 if widget.isChecked() else 0.0)
+        widget.toggled.connect(lambda on: ease.go(1.0 if on else 0.0))
+
+
+def untrack_check(widget):
+    ease = widget.findChild(Ease, "vtCheck")
+    if ease is not None:
+        ease.anim.stop()
+        ease.setParent(None)
+        ease.deleteLater()
+        widget.setProperty("vtCheck", None)
+

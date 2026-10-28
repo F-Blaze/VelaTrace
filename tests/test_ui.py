@@ -978,8 +978,12 @@ class SetupUsabilityTests(unittest.TestCase):
 
     def test_disabled_inputs_look_disabled_and_window_is_on_screen(self):
         window = self.launch(accept=False)
-        for selector in ("QCheckBox:disabled", "QLineEdit:disabled", "QTextEdit:disabled", "QPushButton#primary:disabled"):
-            self.assertIn(selector, window.styleSheet())
+        # Controls are painted by VelaStyle from the palette: disabled text must be the muted colour.
+        from PySide6.QtGui import QColor, QPalette
+        from velatrace.ui import theme_tokens
+        muted = QColor(theme_tokens(window._dark)["muted"])
+        for role in (QPalette.ColorRole.Text, QPalette.ColorRole.WindowText, QPalette.ColorRole.ButtonText):
+            self.assertEqual(QApplication.palette().color(QPalette.ColorGroup.Disabled, role), muted)
         screen = QApplication.primaryScreen().availableGeometry()
         if window.frameGeometry().width() <= screen.width():
             self.assertLessEqual(window.frameGeometry().right(), screen.right())

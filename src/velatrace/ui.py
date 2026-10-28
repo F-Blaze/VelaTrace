@@ -55,8 +55,9 @@ from .sexpr import parse
 from .tokens import LocalChatTokenizer
 from .theme import saved_kicad_theme
 from .write_safety import BoardSafety, SafeBoardWriter
-from .ui_effects import (ACCENT, EdgeFade, EmptyState, ShimmerLabel, StepStrip, paint_dot_grid,
-                         reveal, set_motion)
+from .ui_effects import (ACCENT, EdgeFade, EmptyState, ShimmerLabel, StepStrip,
+                         paint_dot_grid, reveal, set_motion)
+from .ui_style import SegmentedSwitch, SpotlightCard, install, system_dark
 
 BUCKET_COLORS = {"critical": "#F87171", "important": "#FBBF24",
                  "nice-to-have": "#60A5FA", "redundant": "#A78BFA"}
@@ -76,56 +77,32 @@ def theme_tokens(dark: bool) -> dict:
     as near-opaque grey. Popups and dialogs stay solid for legibility."""
     if dark:
         tokens = dict(fg="#F5F3FF", muted="#B7B1CF", solid="#1C1930", rim="rgba(255,255,255,40)",
-                      card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)",
+                      edge="rgba(255,255,255,40)", focus=ACCENT, accent_soft="rgba(139,92,246,64)",
+                      shadow="rgba(0,0,0,110)", card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)",
                       field="rgba(255,255,255,14)",
                       frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #251F45, stop:1 #120F22)")
     else:
-        tokens = dict(fg="#1E1933", muted="#5E5874", solid="#F6F3FF", rim="rgba(255,255,255,230)",
-                      card="rgba(255,255,255,150)", card_hover="rgba(255,255,255,200)",
+        tokens = dict(fg="#1E1933", muted="#5E5874", solid="#F6F3FF", rim="rgba(30,25,51,40)",
+                      edge="rgba(30,25,51,48)", focus=ACCENT, accent_soft="rgba(139,92,246,56)",
+                      shadow="rgba(30,25,51,60)", card="rgba(255,255,255,150)", card_hover="rgba(255,255,255,200)",
                       field="rgba(255,255,255,170)",
                       frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #F7F4FF, stop:1 #E4DDFB)")
     return tokens
 
 
 def glass_stylesheet(t: dict) -> str:
-    gloss = ("qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #B79CFF, stop:0.48 #8B5CF6, "
-             "stop:0.52 #7A48EE, stop:1 #6A36E0)")
+    """Colours, font, card glass and labels. Controls are painted by VelaStyle (ui_style.py)."""
     return f"""
         QMainWindow {{background:{t['solid']}}}
-        QWidget {{background:transparent; color:{t['fg']}; font-family:'Segoe UI Variable Text','Segoe UI'; font-size:12px}}
+        QWidget {{font-family:'Segoe UI Variable Text','Segoe UI'; font-size:12px}}
         QWidget#glassRoot {{background:{t['frost']}}}
         QDialog, QMessageBox {{background:{t['frost']}}}
         QLabel#muted {{color:{t['muted']}}}
         QLabel#title {{font-size:20px; font-weight:700; color:{t['fg']}}}
         QLabel#error {{color:#D45A67}}
-        QFrame#card {{background:{t['card']}; border:1px solid {t['rim']}; border-radius:14px}}
-        QFrame#card:hover {{background:{t['card_hover']}}}
-        QFrame#card QLabel {{background:transparent}}
-        QPushButton {{background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 {t['card_hover']}, stop:1 {t['card']});
-                      border:1px solid {t['rim']}; border-radius:10px; padding:8px 12px}}
-        QPushButton:hover {{border-color:{ACCENT}}}
-        QPushButton:pressed {{background:{t['card']}}}
-        QPushButton:disabled {{color:{t['muted']}}}
-        QPushButton#primary {{background:{gloss}; color:white; border:1px solid rgba(255,255,255,90); font-weight:600}}
-        QPushButton#primary:hover {{border-color:white}}
-        QPushButton#primary:disabled {{background:{t['card']}; color:{t['muted']}; border:1px solid {t['rim']}}}
-        QPushButton#danger:enabled {{color:#D45A67; border-color:#D45A67}}
-        QPushButton#textButton {{border:0; color:{ACCENT}; padding:4px 0px; background:transparent}}
-        QPushButton#textButton:disabled {{color:{t['muted']}}}
-        QPushButton#seg {{min-width:64px; padding:4px 14px; border-radius:9px}}
-        QPushButton#seg:checked {{background:{gloss}; color:white; font-weight:600; border:1px solid rgba(255,255,255,90)}}
-        QCheckBox::indicator {{width:14px; height:14px; border:1px solid {t['muted']}; border-radius:4px; background:{t['field']}}}
-        QCheckBox::indicator:checked {{background:{ACCENT}; border-color:{ACCENT}}}
-        QLineEdit,QTextEdit,QComboBox,QSpinBox,QDoubleSpinBox,QListWidget {{background:{t['field']};
-                      border:1px solid {t['rim']}; border-radius:9px; padding:6px}}
-        QLineEdit:focus,QTextEdit:focus,QComboBox:focus {{border-color:{ACCENT}}}
-        QComboBox QAbstractItemView, QToolTip {{background:{t['solid']}; color:{t['fg']}; border:1px solid {ACCENT}}}
-        QScrollArea {{border:0}} QCheckBox {{spacing:7px}}
-        QScrollBar:vertical {{width:8px; background:transparent}}
-        QScrollBar::handle:vertical {{background:{t['rim']}; border-radius:4px; min-height:30px}}
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{height:0}}
-        QLineEdit:disabled,QTextEdit:disabled,QComboBox:disabled,QSpinBox:disabled,QDoubleSpinBox:disabled,QListWidget:disabled {{color:{t['muted']}; background:transparent}}
-        QCheckBox:disabled,QLabel:disabled {{color:{t['muted']}}}
+        QScrollArea {{border:0}}
+        QTextEdit > QWidget {{background:transparent}}
+        QLabel:disabled {{color:{t['muted']}}}
     """
 
 
@@ -357,7 +334,7 @@ class SettingsDialog(QDialog):
                         cap=self.cap.value(), output_cap=self.output_cap.value(), motion=self.motion.isChecked())
 
 
-class ComponentCard(QFrame):
+class ComponentCard(SpotlightCard):
     """Plain text throughout, including model-supplied text and source fields."""
     def __init__(self, component, function=None, verdict=None, price=None, flag=None,
                  editable=False, parent=None):
@@ -415,7 +392,7 @@ class ComponentCard(QFrame):
         super().mouseReleaseEvent(event)
 
 
-class FindingCard(QFrame):
+class FindingCard(SpotlightCard):
     """One rule finding: the title up front; evidence, fix and cost when expanded.
 
     `locate` is the hook for zooming KiCad to the involved parts; no button is
@@ -597,6 +574,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, *, demo=False, config_dir=None):
         super().__init__()
+        install()
         self.call_on_ui.connect(self.run_on_ui)
         self.setWindowTitle("VelaTrace")
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
@@ -670,14 +648,13 @@ class MainWindow(QMainWindow):
         header.addWidget(title)
         header.addSpacing(8)
         self.mode_buttons = {}
+        self.mode_switch = SegmentedSwitch()
         for mode, text, keys in ((Mode.AUDIT, "Audit", "Ctrl+1"), (Mode.ROUTING, "Route", "Ctrl+2")):
-            button = tip(QPushButton(text), f"{text} mode ({keys})")
-            button.setObjectName("seg")
-            button.setCheckable(True)
+            button = tip(self.mode_switch.add(text), f"{text} mode ({keys})")
             button.clicked.connect(lambda _=False, target=mode: self.switch_mode(target))
             QShortcut(QKeySequence(keys), self, activated=button.click)
-            header.addWidget(button)
             self.mode_buttons[mode] = button
+        header.addWidget(self.mode_switch)
         self.set_mode_buttons(Mode.AUDIT)
         header.addStretch()
         self.theme = QComboBox()
@@ -726,6 +703,9 @@ class MainWindow(QMainWindow):
         self.card_layout.setSpacing(6)
         self.card_layout.addStretch()
         self.scroll.setWidget(self.card_container)
+        for area, inner in ((self.scroll, self.card_container),):
+            area.viewport().setAutoFillBackground(False)  # QScrollArea paints Window; let the frost show
+            inner.setAutoFillBackground(False)
         self.edge_fade = EdgeFade(self.scroll)
         self.empty = EmptyState(self.scroll)
         audit_layout.addWidget(self.scroll, 1)
@@ -843,6 +823,8 @@ class MainWindow(QMainWindow):
         self.route_scroll = QScrollArea()
         self.route_scroll.setWidgetResizable(True)
         self.route_scroll.setWidget(self.route_page)
+        self.route_scroll.viewport().setAutoFillBackground(False)
+        self.route_page.setAutoFillBackground(False)
         route_box = QWidget()
         route_box_layout = QVBoxLayout(route_box)
         route_box_layout.setContentsMargins(0, 0, 0, 0)
@@ -893,14 +875,21 @@ class MainWindow(QMainWindow):
     def apply_theme(self, choice):
         if choice == "KiCad":
             choice = (saved_kicad_theme(*self.reader.version[:2]) if self.reader else None) or "System"
-        self._dark = choice == "Dark" or (choice == "System" and QApplication.palette().window().color().lightness() < 128)
+        self._dark = choice == "Dark" or (choice == "System" and system_dark())
         tokens = theme_tokens(self._dark)
-        palette = self.palette()
+        palette = QApplication.palette()
         for role, value in ((QPalette.ColorRole.Window, tokens["solid"]), (QPalette.ColorRole.Base, tokens["solid"]),
-                            (QPalette.ColorRole.Text, tokens["fg"]), (QPalette.ColorRole.WindowText, tokens["fg"])):
+                            (QPalette.ColorRole.Text, tokens["fg"]), (QPalette.ColorRole.WindowText, tokens["fg"]),
+                            (QPalette.ColorRole.ButtonText, tokens["fg"]), (QPalette.ColorRole.Button, tokens["solid"]),
+                            (QPalette.ColorRole.Highlight, ACCENT), (QPalette.ColorRole.HighlightedText, "#FFFFFF"),
+                            (QPalette.ColorRole.ToolTipBase, tokens["solid"]), (QPalette.ColorRole.ToolTipText, tokens["fg"]),
+                            (QPalette.ColorRole.PlaceholderText, tokens["muted"])):
             palette.setColor(role, QColor(value))
-        self.setPalette(palette)
+        for role in (QPalette.ColorRole.Text, QPalette.ColorRole.WindowText, QPalette.ColorRole.ButtonText):
+            palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(tokens["muted"]))
+        QApplication.setPalette(palette)
         self.setStyleSheet(glass_stylesheet(tokens))
+        install().set_tokens(tokens)  # after the stylesheet: it restores widget palettes when it repolishes
         self._tokens = tokens
         for effect in (self.step_strip, self.edge_fade, self.empty):
             effect.set_tokens(tokens)
@@ -1924,6 +1913,7 @@ def launch(*, demo=False, screenshot: Path | None = None):
     font_path = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / "segoeui.ttf"
     if font_path.is_file():
         QFontDatabase.addApplicationFont(str(font_path))
+    install()
     app.setApplicationName("VelaTrace")
     app.setOrganizationName("F-Blaze")
     if not demo:
