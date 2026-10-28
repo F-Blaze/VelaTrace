@@ -815,6 +815,10 @@ def check_usbc_cc(snapshot: DesignSnapshot) -> list[Finding]:
                for net in cc_nets.values() for part, _ in design.nodes[net]
                if part.reference != conn.reference):
             continue  # an active CC controller or resistor network may implement Rd
+        if any(design.kind[part.reference] == "resistor" and (ends := two_terminal_nets(part)) and net in ends
+               and any(end in supplies or is_supply_name(end) for end in ends if end != net)
+               for net in cc_nets.values() for part, _ in design.nodes[net]):
+            continue  # Rp pull-up to a supply: a source port, where Rd pull-downs would be wrong
         missing = []
         for cc_name in ("CC1", "CC2"):
             net = cc_nets[cc_name]
@@ -1117,7 +1121,11 @@ def check_pair_vias(snapshot: DesignSnapshot) -> list[Finding]:
 # Fast nets are copper.find_high_speed name guesses plus likely differential pairs, minus
 # crystal/RTC nets (XTAL, XIN/XOUT, OSC, HSE/LSE, 32k): those are usually slow sine-ish
 # oscillator lines where a return-path note is noise. No data rate or edge rate is known,
-# so every finding is an estimate. Plane split/gap crossing is not checked.
+# so every finding is an estimate. Gaps are judged from stored fills sampled along each track.
+GAP_MM = 3.0             # a stretch of fast route this long with no reference fill under it is reported
+#                          (issue #62's rule of thumb, not measured)
+GAP_STEP_MM = 0.5        # sample spacing along a track for the fill check
+VIA_HOLE_MM = 0.5        # samples this close to one of the net's own vias sit in its antipad: skipped
 RETURN_VIA_MM = 3.0      # return via must sit this close to the signal via. Layout guides ask for
 #                          ~1 mm; 3 mm only catches clearly missing ones (rule of thumb, not measured).
 STITCH_CAP_MM = 5.0      # a capacitor between two different reference nets this close counts as the return
@@ -1135,18 +1143,99 @@ def _fast_nets(copper) -> dict[str, str]:
     return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net))}
 
 
+def _inside(points, polygon):
+    """Even-odd ray cast of (k, 2) points against one fill outline. KiCad bridges a fill's holes
+    into its outline, so points in an antipad or cut-out come out as outside."""
+    import numpy as np
+    a, b = polygon, np.roll(polygon, -1, axis=0)
+    x, y = points[:, :1], points[:, 1:]
+    dy = b[:, 1] - a[:, 1]
+    cross = ((a[:, 1] > y) != (b[:, 1] > y)) & (
+        x < a[:, 0] + (y - a[:, 1]) * (b[:, 0] - a[:, 0]) / np.where(dy == 0, 1e-12, dy))
+    return cross.sum(1) % 2 == 1
+
+
+def _gaps(seg, polygons, holes) -> list[tuple[float, tuple[float, float]]]:
+    """(length, start) of each stretch of ``seg`` longer than GAP_MM with no fill polygon under it.
+
+    ponytail: per segment and along the chord for arcs, so a gap that starts on one track and
+    ends on the next is two stretches; chain segments if that misses real crossings."""
+    import numpy as np
+    n = max(int(seg.length_mm / GAP_STEP_MM), 1)
+    pts = np.array(seg.start) + np.outer((np.arange(n) + 0.5) / n, np.subtract(seg.end, seg.start))
+    covered = np.zeros(n, bool)
+    for lo, hi, polygon in polygons:
+        box = np.all((pts >= lo) & (pts <= hi), axis=1) & ~covered
+        if box.any():
+            covered[box] = _inside(pts[box], polygon)
+    skip = np.zeros(n, bool)
+    for hole in holes:
+        skip |= np.hypot(*(pts - hole).T) <= VIA_HOLE_MM
+    step, stretches, run, start = seg.length_mm / n, [], 0, None
+    for i in range(n + 1):
+        if i < n and skip[i]:
+            continue
+        if i < n and not covered[i]:
+            start = start if run else tuple(float(v) for v in pts[i])
+            run += 1
+            continue
+        if run * step > GAP_MM:
+            stretches.append((run * step, start))
+        run = 0
+    return stretches
+
+
 def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
-    """Fast nets routed on a layer with no reference plane anywhere in the stack."""
+    """Fast nets with a stretch of route that has no ground/supply fill under it (issue #62).
+
+    The reference is the nearest plane layer; when the board has no plane, the nearest layer
+    with any ground/supply fill (a local pour under a USB pair counts). A layer that is a plane
+    by KiCad type but has no stored fill is trusted, and tracks on a plane layer are skipped."""
+    import numpy as np
     copper = snapshot.copper
     if copper is None or not copper.models:
         return []
     nets = _fast_nets(copper)
+    fills: dict[str, list] = defaultdict(list)
+    for zone in copper.zones:
+        if is_ground(zone.net) or is_supply_name(zone.net):
+            outline = np.array(zone.points, dtype=float)
+            fills[zone.layer].append((outline.min(0), outline.max(0), outline))
+    holes: dict[str, list] = defaultdict(list)
+    for via in copper.vias:
+        holes[via.net].append(via.position)
     lengths: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    gaps: dict[str, list] = defaultdict(list)
     for seg in copper.segments:
         model = copper.models.get(seg.layer)
-        if seg.net in nets and model is not None and model.kind == "unreferenced":
-            lengths[seg.net][seg.layer] += seg.length_mm
+        if seg.net not in nets or model is None or seg.layer in copper.planes:
+            continue
+        if model.kind == "unreferenced":
+            refs = _nearest(copper, seg.layer, [name for name in fills if name != seg.layer])
+            if not refs:
+                lengths[seg.net][seg.layer] += seg.length_mm
+                continue
+        else:
+            refs = _references(copper, seg.layer)
+        polygons = [polygon for ref in refs for polygon in fills.get(ref, ())]
+        for length, start in _gaps(seg, polygons, holes[seg.net]) if polygons else ():
+            gaps[seg.net].append((seg.layer, refs, length, start))
     findings = []
+    for net, rows in sorted(gaps.items()):
+        total = sum(row[2] for row in rows)
+        layer, refs, longest, (x, y) = max(rows, key=lambda row: row[2])
+        findings.append(Finding(
+            "hs.return.no_plane", Severity.WARNING,
+            f"{net_label(net) or net} ({nets[net]}) runs {total:.1f} mm with no reference fill under it",
+            nets=(net,),
+            evidence=f"{len(rows)} stretch{'es' if len(rows) > 1 else ''} longer than {GAP_MM:g} mm "
+                     f"{'have' if len(rows) > 1 else 'has'} no ground/supply fill on "
+                     f"{', '.join(sorted(refs, key=copper.layers.index))} under it; the longest, "
+                     f"{longest:.1f} mm on {layer}, starts at {x:.2f}, {y:.2f} mm. The return current "
+                     f"has to detour around the gap. {_STALE_FILL} Estimate from net names; the data "
+                     "rate is not known.",
+            fix="Extend the ground pour under the whole route, or move the line over solid copper. If it "
+                "must cross a split between two planes, add a stitching capacitor across it next to the line."))
     for net, layers in sorted(lengths.items()):
         shown = ", ".join(f"{layer} {length:.1f} mm" for layer, length in sorted(layers.items()))
         findings.append(Finding(
@@ -1166,9 +1255,14 @@ def _references(copper, layer: str) -> frozenset[str]:
     """Nearest plane layer(s) by layer order (ties keep both); a plane layer references itself."""
     if layer in copper.planes:
         return frozenset([layer])
+    return _nearest(copper, layer, copper.planes)
+
+
+def _nearest(copper, layer: str, candidates) -> frozenset[str]:
+    """Candidate layer(s) nearest ``layer`` by layer order (ties keep both); empty when none."""
     index = copper.layers.index(layer)
-    gaps = {plane: abs(copper.layers.index(plane) - index) for plane in copper.planes}
-    return frozenset(plane for plane, gap in gaps.items() if gap == min(gaps.values()))
+    gaps = {name: abs(copper.layers.index(name) - index) for name in candidates}
+    return frozenset(name for name, gap in gaps.items() if gap == min(gaps.values()))
 
 
 def _fill_net(copper, layer: str, point, cache: dict) -> str | None:
@@ -1299,7 +1393,9 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_
                         "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",
                         # Footprint-fit checks: starting tolerances, not yet measured.
                         "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order",
-                        "fit.unverified"})
+                        "fit.unverified",
+                        # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
+                        "connector.usbc_cc_missing"})
 
 
 def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable[Check]) -> list[Finding]:

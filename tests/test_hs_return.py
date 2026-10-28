@@ -1,4 +1,5 @@
 """High-speed return-path checks: missing reference plane and layer change without a return via."""
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -64,6 +65,57 @@ class NoPlaneTests(unittest.TestCase):
     def test_no_copper_means_no_findings(self):
         self.assertEqual(check_return_plane(snap(None)), [])
         self.assertEqual(check_return_vias(snap(None)), [])
+
+    def test_local_fill_on_other_side_counts(self):
+        # Round 4 (openshock): no layer is a plane, but a stored GND fill on B.Cu covers the route.
+        def board(*fills):
+            return replace(two_layer("unreferenced"), zones=fills)
+        self.assertEqual(check_return_plane(snap(board(FilledZone("GND", "B.Cu", SQUARE)))), [])
+        part = check_return_plane(snap(board(FilledZone("GND", "B.Cu", ((-1, -1), (4, -1), (4, 1), (-1, 1))))))
+        self.assertEqual(len(part), 1)
+        self.assertIn("runs 6.0 mm", part[0].title)
+        self.assertIn("B.Cu", part[0].evidence)
+        # A fill on the track's own layer is not a reference.
+        own = check_return_plane(snap(board(FilledZone("GND", "F.Cu", SQUARE))))
+        self.assertIn("no reference plane under it", own[0].title)
+
+
+def usb_over(*fills, vias=()):
+    """USB_D+ / USB_D- on F.Cu from x=0 to 40 (y=5 / 6), referenced to the In1.Cu plane."""
+    kinds = {"F.Cu": "microstrip", "In1.Cu": "plane", "In2.Cu": "plane", "B.Cu": "microstrip"}
+    return BoardCopper(FOUR, 1.6, (seg("USB_D+", "F.Cu", (0, 5), (40, 5)), seg("USB_D-", "F.Cu", (0, 6), (40, 6))),
+                       vias, fills, frozenset({"In1.Cu", "In2.Cu"}),
+                       {name: model(name, kind) for name, kind in kinds.items()}, {})
+
+
+def with_hole(x0, x1, y0, y1):
+    """Plane outline -1..41 x 0..10 with a rectangular hole bridged in from y=0, as KiCad saves it."""
+    return FilledZone("GND", "In1.Cu", ((-1, 0), (x0, 0), (x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0),
+                                        (x0, 0), (41, 0), (41, 10), (-1, 10)))
+
+
+class PlaneGapTests(unittest.TestCase):   # issue #62
+    def test_full_fill_passes(self):
+        self.assertEqual(check_return_plane(snap(usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (41, 0), (41, 10), (-1, 10)))))), [])
+
+    def test_gap_is_reported_with_its_length(self):
+        found = check_return_plane(snap(usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))),
+                                                 FilledZone("GND", "In1.Cu", ((30, 0), (41, 0), (41, 10), (30, 10))))))
+        self.assertEqual([f.nets for f in found], [("USB_D+",), ("USB_D-",)])
+        self.assertIn("runs 20.0 mm", found[0].title)
+        self.assertIn("10.25, 5.00 mm", found[0].evidence)
+
+    def test_bridged_hole_under_one_line(self):
+        found = check_return_plane(snap(usb_over(with_hole(18, 23, 4.6, 5.4))))
+        self.assertEqual([f.nets for f in found], [("USB_D+",)])
+        self.assertIn("runs 5.0 mm", found[0].title)
+
+    def test_antipad_at_own_via_passes(self):
+        self.assertEqual(check_return_plane(snap(usb_over(with_hole(19.6, 20.4, 4.6, 5.4),
+                                                          vias=(Via("USB_D+", (20, 5), FOUR),)))), [])
+
+    def test_plane_by_layer_type_without_fill_is_trusted(self):
+        self.assertEqual(check_return_plane(snap(usb_over())), [])
 
 
 class ReturnViaTests(unittest.TestCase):
