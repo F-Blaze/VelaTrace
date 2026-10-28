@@ -41,7 +41,7 @@ def test_both_cc_pulldowns_missing_warns():
     found = cc_findings(usb_c())
     assert len(found) == 1
     finding = found[0]
-    assert finding.severity == Severity.WARNING
+    assert finding.severity == Severity.INFO   # in BETA_RULES until measured
     assert finding.refs == ("J1",)
     assert finding.nets == ("USB_CC1", "USB_CC2")
     assert "5.1 kΩ" in finding.fix
@@ -97,3 +97,10 @@ def test_no_named_ground_stays_silent():
                           ("A5", "USB_CC1", "CC1"), ("B5", "USB_CC2", "CC2"),
                           ("A4", "VBUS", "VBUS"))
     assert cc_findings(design(connector)) == []
+
+
+def test_source_port_with_pullups_is_silent():
+    # Round 4 (liion-charger-kesting): 56k Rp pull-ups to the port's own 5 V make it a source.
+    assert cc_findings(usb_c(resistor("R5", "VBUS", "USB_CC1", "56k"),
+                              resistor("R6", "VBUS", "USB_CC2", "56k"))) == []
+    assert cc_findings(usb_c(resistor("R5", "+5V", "USB_CC1", "56k"))) == []

@@ -39,6 +39,20 @@ class FileReaderTests(unittest.TestCase):
         # KiCad 10 inline net names read the same as KiCad 9 net codes.
         self.assertEqual({s.net for s in c.segments}, {"/USB_D+", "/USB_D-"})
 
+    def test_mask_opening_tracks_and_malformed_items(self):
+        # Round 4 crash (bldcm-power-tmc6300): KiCad 9+ writes a track with a solder-mask
+        # opening as (layers "B.Cu" "B.Mask"); a broken item is skipped, not fatal.
+        c = parse_copper("""(kicad_pcb (version 20241229) (generator "pcbnew")
+  (layers (0 "F.Cu" signal) (2 "B.Cu" signal) (39 "B.Mask" user))
+  (net 0 "") (net 1 "VM")
+  (segment (start 0 0) (end 10 0) (width 1) (layers "B.Cu" "B.Mask") (net 1))
+  (segment (start 0 1) (width 0.2) (layer "F.Cu") (net 1))
+  (segment (start 0 2) (end 3 2) (width 0.2) (net 1))
+  (via (size 0.6) (layers "F.Cu" "B.Cu") (net 1))
+  (segment (start 0 3) (end 5 3) (width 0.2) (layer "F.Cu") (net 1)))""")
+        self.assertEqual([(s.layer, s.length_mm) for s in c.segments], [("B.Cu", 10.0), ("F.Cu", 5.0)])
+        self.assertEqual(c.vias, ())
+
     def test_via_spans_zones_and_planes(self):
         c = self.copper
         through, blind = c.vias
@@ -107,13 +121,16 @@ class FinderTests(unittest.TestCase):
                                ("HDMI_D0+", "hdmi"), ("TMDS_CLK_N", "hdmi"), ("MIPI_CSI_D0_P", "lvds/mipi"),
                                ("LVDS_CLK+", "lvds/mipi"), ("DSI_D1_N", "lvds/mipi"), ("EPHY_RX_P", "ethernet"), ("SD_CLK", "sdio/sd"), ("SDIO_D2", "sdio/sd"),
                                ("QSPI_SCLK", "qspi"), ("/QSPI_SD0", "qspi"), ("RF_OUT", "rf"), ("ANT1", "rf"),
+                               ("LORA_RF", "rf"), ("RF_IN1", "rf"), ("/WIFI_ANT", "rf"), ("ANT_FEED", "rf"),
                                ("XTAL_IN", "clock"), ("XIN", "clock"), ("REFCLK_P", "clock")]:
             self.assertEqual(interface_guess(net), interface, net)
 
     def test_true_negatives(self):
         for net in ["MOTOR_P", "MOTOR_N", "LED_P", "SW_P", "USB_VBUS", "VBUS", "USB_CC1", "HDMI_CEC",
                     "HDMI_HPD", "ETH_LED", "SPI_CLK", "I2S_SD", "GND", "Net-(U1-D+)", "RFID_EN", "DP", "MIPI_PWDN",
-                    "MIPI_SDA", "CAN_P", "USB_PRESS"]:
+                    "MIPI_SDA", "CAN_P", "USB_PRESS",
+                    # Round 4: a 433 MHz module's supply and its slow OOK data lines.
+                    "RF_Power", "RF_Shifted", "RF_Signal", "RF_VCC", "RF_EN", "RF_TX"]:
             self.assertIsNone(interface_guess(net), net)
 
     def test_pairs_need_a_fast_hint(self):

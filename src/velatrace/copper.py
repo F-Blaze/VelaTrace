@@ -149,21 +149,30 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
         item = _first(node, name)
         return float(item[1]), float(item[2])
 
+    # A malformed item is skipped (TypeError/ValueError/IndexError) rather than failing the whole read.
     segments = []
     for node in children(root, "segment") + children(root, "arc"):
-        layer = str(_first(node, "layer")[1])
-        if layer not in layers:
+        try:
+            # KiCad 9+ saves a track with a solder-mask opening as (layers "B.Cu" "B.Mask").
+            names = (_first(node, "layer") or _first(node, "layers") or [])[1:]
+            layer = next((str(n) for n in names if str(n) in layers), None)
+            if layer is None:
+                continue
+            start, end = xy(node, "start"), xy(node, "end")
+            length = (_polyline_length(_outline(["gr_arc", *node[1:]], lambda x, y: (x, y)))
+                      if node[0] == "arc" else math.dist(start, end))
+            segments.append(Segment(_net_name(node, codes), layer, start, end,
+                                    float(_first(node, "width")[1]), length))
+        except (TypeError, ValueError, IndexError):
             continue
-        start, end = xy(node, "start"), xy(node, "end")
-        length = (_polyline_length(_outline(["gr_arc", *node[1:]], lambda x, y: (x, y)))
-                  if node[0] == "arc" else math.dist(start, end))
-        segments.append(Segment(_net_name(node, codes), layer, start, end,
-                                float(_first(node, "width")[1]), length))
     vias = []
     for node in children(root, "via"):
-        ends = [layers.index(str(n)) for n in (_first(node, "layers") or [])[1:] if str(n) in layers]
-        span = layers[min(ends):max(ends) + 1] if len(ends) == 2 else layers
-        vias.append(Via(_net_name(node, codes), xy(node, "at"), span))
+        try:
+            ends = [layers.index(str(n)) for n in (_first(node, "layers") or [])[1:] if str(n) in layers]
+            span = layers[min(ends):max(ends) + 1] if len(ends) == 2 else layers
+            vias.append(Via(_net_name(node, codes), xy(node, "at"), span))
+        except (TypeError, ValueError, IndexError):
+            continue
     zones = []
     for parent in [root, *children(root, "footprint")]:
         for node in children(parent, "zone"):
@@ -247,7 +256,9 @@ _INTERFACES = (
     ("lvds/mipi", re.compile(r"(?:\w*_)?(?:LVDS|MIPI|CSI\d?|DSI\d?)(?:_\w+?)?_(?:D\d+|CK|CLK|DATA\d*|[TR]X\d*)_?[+\-PN]?")),
     ("sdio/sd", re.compile(r"(?:\w*_)?(?:SDIO|SDMMC|E?MMC|SDC?\d?)\d?_(?:CLK|CMD|D\d|DAT\d)\w*")),
     ("qspi", re.compile(r"(?:\w*_)?[QO]SPI\d?_\w+")),
-    ("rf", re.compile(r"(?:\w*_)?(?:RF|ANT\d?|ANTENNA|LNA)(?:_?(?:IN|OUT|P|N|\d))?(?:_\w*)?")),
+    # Closed suffix list: RF_POWER, RF_EN, RF_TX, RF_SIGNAL ... are usually a module's supply,
+    # control or slow data lines, not the RF feed itself.
+    ("rf", re.compile(r"(?:\w*_)?(?:RF|ANT\d?|ANTENNA|LNA)(?:_?(?:IN|OUT|P|N|FEED))?\d*")),
     ("clock", re.compile(r"(?:\w*_)?(?:CLK|REFCLK|MCLK|CLKIN|CLKOUT|XTAL\d?|XIN|XOUT|OSC\d?|OSC_?(?:IN|OUT)"
                          r"|HSE_?(?:IN|OUT))(?:_?[+\-PN]|\d|_\w*)?")),
 )
