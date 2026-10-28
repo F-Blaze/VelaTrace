@@ -55,8 +55,9 @@ from .sexpr import parse
 from .tokens import LocalChatTokenizer
 from .theme import saved_kicad_theme
 from .write_safety import BoardSafety, SafeBoardWriter
+from .ui_effects import (ACCENT, EdgeFade, EmptyState, ShimmerLabel, StepStrip, paint_dot_grid,
+                         reveal, set_motion)
 
-ACCENT = "#8B5CF6"
 BUCKET_COLORS = {"critical": "#F87171", "important": "#FBBF24",
                  "nice-to-have": "#60A5FA", "redundant": "#A78BFA"}
 SEVERITY_COLORS = {Severity.ERROR: "#F87171", Severity.WARNING: "#FBBF24",
@@ -210,6 +211,7 @@ class Settings:
     output_cap: int = 4096
     digikey_id: str = ""
     digikey_secret: str = field(default="", repr=False)
+    motion: bool = True
 
     def digikey_login(self):
         return DigiKeyLogin(self.digikey_id, self.digikey_secret) if self.digikey_id and self.digikey_secret else None
@@ -340,6 +342,9 @@ class SettingsDialog(QDialog):
         self.output_cap.setRange(1, 65536)
         self.output_cap.setValue(settings.output_cap)
         advanced.addRow("Output tokens per analysis", self.output_cap)
+        self.motion = QCheckBox("Animations")
+        self.motion.setChecked(settings.motion)
+        advanced.addRow(self.motion)
         layout.addStretch()
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
@@ -349,7 +354,7 @@ class SettingsDialog(QDialog):
     def value(self):
         values = {name: field.text().strip() for name, field in self.fields.items()}
         return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(),
-                        cap=self.cap.value(), output_cap=self.output_cap.value())
+                        cap=self.cap.value(), output_cap=self.output_cap.value(), motion=self.motion.isChecked())
 
 
 class ComponentCard(QFrame):
@@ -473,6 +478,9 @@ class RouteCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), self.palette().base())
+        dots = QColor(self.palette().text().color())
+        dots.setAlpha(36)
+        paint_dot_grid(painter, self.rect(), dots)
         if not self.plan:
             painter.setPen(self.palette().text().color())
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Route preview")
@@ -604,6 +612,7 @@ class MainWindow(QMainWindow):
                                  model=os.environ.get("VELATRACE_MODEL", ""))
         if not demo:
             self.settings.load(self.config_dir / "settings.json")
+        set_motion(self.settings.motion)
         self._setup_error = ""
         self.audit = self.pricing = self.routing = self.router = None
         self.reader = self.safety = self.validator = self.writer = None
@@ -717,6 +726,8 @@ class MainWindow(QMainWindow):
         self.card_layout.setSpacing(6)
         self.card_layout.addStretch()
         self.scroll.setWidget(self.card_container)
+        self.edge_fade = EdgeFade(self.scroll)
+        self.empty = EmptyState(self.scroll)
         audit_layout.addWidget(self.scroll, 1)
         self.totals = tip(label(muted=True), NO_REMOVAL)
         self.totals.hide()
@@ -790,6 +801,8 @@ class MainWindow(QMainWindow):
         edit.clicked.connect(self.open_constraints)
         constraints.addWidget(edit, alignment=Qt.AlignmentFlag.AlignTop)
         route_layout.addLayout(constraints)
+        self.step_strip = StepStrip()
+        route_layout.addWidget(self.step_strip)
         # One click reads the open board, checks it, exports its DSN and routes it.
         self.route_button = tip(QPushButton("Route board"),
                                 "Reads the open board, checks it, exports the DSN and routes it with "
@@ -844,7 +857,7 @@ class MainWindow(QMainWindow):
         self.cancel_button = QPushButton("Cancel routing")
         self.cancel_button.clicked.connect(self.cancel_route)
         layout.addWidget(self.cancel_button)
-        self.status = label("Ready.")
+        self.status = ShimmerLabel("Ready.")
         self.usage_label = label(muted=True)
         self.usage_label.hide()
         layout.addWidget(self.status)
@@ -888,6 +901,9 @@ class MainWindow(QMainWindow):
             palette.setColor(role, QColor(value))
         self.setPalette(palette)
         self.setStyleSheet(glass_stylesheet(tokens))
+        self._tokens = tokens
+        for effect in (self.step_strip, self.edge_fade, self.empty):
+            effect.set_tokens(tokens)
 
     def refresh_badge(self):
         """The constraint list shown beside Generate; clicking Generate confirms it."""
@@ -958,6 +974,11 @@ class MainWindow(QMainWindow):
             RoutingStage.PREVIEW, RoutingStage.SHORTFALL, RoutingStage.NEEDS_REASON, RoutingStage.VALIDATING}
             else "No preview to reject.")
         set_primary(self.route_button, not approvable)
+        # Current step: 4 once approval is possible; 3 while DRC runs or blocks; 2 while the preview
+        # is drawn; otherwise 1 (idle, exporting or routing).
+        staged = session.stage if session is not None else None
+        self.step_strip.set_step(4 if approvable else 3 if self.preview_shown and staged in (
+            RoutingStage.VALIDATING, RoutingStage.PREVIEW) else 2 if staged == RoutingStage.VALIDATING else 1)
 
     def check_design(self, snapshot):
         """Built-in rules plus BOM savings; the cached parts list is used only if downloaded."""
@@ -1008,6 +1029,7 @@ class MainWindow(QMainWindow):
             return
         self.status.setStyleSheet("")
         self.status.setToolTip("Keep KiCad unchanged until this finishes.")
+        self.status.start()
         self._work_title = title
         self._work_started = time.monotonic()
         self.update_work_status()
@@ -1031,6 +1053,7 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def work_error(self, message):
         self.work_timer.stop()
+        self.status.stop()
         self.show_error(message)
         if self._failure:
             self._failure(message)
@@ -1052,6 +1075,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def work_finished(self):
         self.work_timer.stop()
+        self.status.stop()
         self._work_started = None
         self.worker = None
         if not self.status.styleSheet():
@@ -1075,6 +1099,7 @@ class MainWindow(QMainWindow):
 
     def apply_settings(self, settings, *, save=True):
         self.settings = settings  # Reopening Setup after a failure shows what was typed.
+        set_motion(settings.motion)
         # An AI audit owns its provider and key. Retire it as soon as new settings
         # are accepted, even if independent router verification later fails.
         # Local rule findings stay: they never depended on the provider.
@@ -1457,6 +1482,14 @@ class MainWindow(QMainWindow):
                 self.cards[reference] = card
                 self.card_layout.addWidget(card)
         self.card_layout.addStretch()
+        self.empty.setVisible(self.audit_snapshot is None and not self.cards)
+        # Fade in only what is new since the last render, so the eye lands on new results.
+        stage = self.audit.stage if self.audit else None
+        keyed = [(card.finding.title, card) for card in self.finding_cards]
+        keyed += [((reference, stage), card) for reference, card in self.cards.items()]
+        shown = getattr(self, "_shown_cards", set())
+        reveal([card for key, card in keyed if key not in shown])
+        self._shown_cards = {key for key, _ in keyed}
 
     def price_parts(self):
         try:
