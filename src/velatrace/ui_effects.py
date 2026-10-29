@@ -82,7 +82,7 @@ class StepStrip(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        muted = QColor(self._tokens.get("muted", "#A3B1C2"))
+        muted = QColor(self._tokens.get("muted", "#9DB7CC"))
         fg = QColor(self._tokens.get("fg", "#EEF4FA"))
         accent = QColor(ACCENT)
         faint = QColor(muted)
@@ -209,7 +209,7 @@ class EmptyState(_Overlay):
         dots.end()
         painter = QPainter(self)
         painter.drawImage(0, 0, image)
-        painter.setPen(QColor(self.tokens.get("muted", "#A3B1C2")))
+        painter.setPen(QColor(self.tokens.get("muted", "#9DB7CC")))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Findings will appear here after Check design.")
 
 

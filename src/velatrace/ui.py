@@ -58,10 +58,10 @@ from .write_safety import BoardSafety, SafeBoardWriter
 from .ui_effects import (ACCENT, AuroraBackground, EdgeFade, EmptyState, ShimmerLabel, StepStrip,
                          paint_dot_grid, reveal, set_motion)
 from .ui_micro import GlideSelect, LatticeLoader
-from .ui_style import SegmentedSwitch, SpotlightCard, install, system_dark
+from .ui_style import SegmentedSwitch, SpotlightCard, install, qcolor, system_dark
 
 BUCKET_COLORS = {"critical": "#F87171", "important": "#FBBF24",
-                 "nice-to-have": "#60A5FA", "redundant": "#A78BFA"}
+                 "nice-to-have": "#60A5FA", "redundant": "#67E8F9"}
 SEVERITY_COLORS = {Severity.ERROR: "#F87171", Severity.WARNING: "#FBBF24",
                    Severity.SAVING: "#34D399", Severity.INFO: "#60A5FA"}
 SEVERITY_GROUPS = ((Severity.ERROR, "Errors"), (Severity.WARNING, "Warnings"),
@@ -77,13 +77,13 @@ def theme_tokens(dark: bool) -> dict:
     stay-on-top windows (VelaTrace stays above KiCad), and dark Acrylic renders
     as near-opaque grey. Popups and dialogs stay solid for legibility."""
     if dark:
-        tokens = dict(fg="#EEF4FA", muted="#A3B1C2", solid="#101826", rim="rgba(255,255,255,36)",
+        tokens = dict(fg="#EEF4FA", muted="#9DB7CC", disabled="rgba(157,183,204,170)", solid="#101826", rim="rgba(255,255,255,36)",
                       edge="rgba(255,255,255,36)", focus="#2DD4BF", accent_soft="rgba(45,212,191,56)",
                       shadow="rgba(0,0,0,110)", card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)",
                       field="rgba(255,255,255,14)",
                       frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #16213A, stop:1 #0A0F1A)")
     else:
-        tokens = dict(fg="#0F1B2A", muted="#4B5B6E", solid="#F4F8FA", rim="rgba(15,27,42,40)",
+        tokens = dict(fg="#0F1B2A", muted="#46627B", disabled="rgba(70,98,123,170)", solid="#F4F8FA", rim="rgba(15,27,42,40)",
                       edge="rgba(15,27,42,48)", focus=ACCENT, accent_soft="rgba(15,118,110,46)",
                       shadow="rgba(15,27,42,60)", card="rgba(255,255,255,150)", card_hover="rgba(255,255,255,200)",
                       field="rgba(255,255,255,170)",
@@ -102,7 +102,7 @@ def glass_stylesheet(t: dict) -> str:
         QLabel#error {{color:#D45A67}}
         QScrollArea {{border:0}}
         QTextEdit > QWidget {{background:transparent}}
-        QLabel:disabled {{color:{t['muted']}}}
+        QLabel:disabled {{color:{t['disabled']}}}
     """
 
 
@@ -893,7 +893,7 @@ class MainWindow(QMainWindow):
                             (QPalette.ColorRole.PlaceholderText, tokens["muted"])):
             palette.setColor(role, QColor(value))
         for role in (QPalette.ColorRole.Text, QPalette.ColorRole.WindowText, QPalette.ColorRole.ButtonText):
-            palette.setColor(QPalette.ColorGroup.Disabled, role, QColor(tokens["muted"]))
+            palette.setColor(QPalette.ColorGroup.Disabled, role, qcolor(tokens["disabled"]))  # see-through: takes the backdrop hue
         QApplication.setPalette(palette)
         self.setStyleSheet(glass_stylesheet(tokens))
         install().set_tokens(tokens)  # after the stylesheet: it restores widget palettes when it repolishes

@@ -16,10 +16,11 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QHBox
 
 from .ui_effects import ACCENT, motion_enabled, progress, track_check, track_hover, untrack_check, untrack_hover
 
-DEFAULTS = dict(fg="#EEF4FA", muted="#A3B1C2", solid="#101826", edge="rgba(255,255,255,36)", focus="#2DD4BF",
+DEFAULTS = dict(fg="#EEF4FA", muted="#9DB7CC", solid="#101826", edge="rgba(255,255,255,36)", focus="#2DD4BF",
                 card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)", field="rgba(255,255,255,14)",
                 accent_soft="rgba(45,212,191,56)", shadow="rgba(0,0,0,90)")
 DANGER = QColor("#D45A67")
+PILL = "#2563EB"  # rubber switch thumb: deep blue, white text on it stays >= 4.5:1
 _OUT, _BACK = QEasingCurve(QEasingCurve.Type.OutCubic), QEasingCurve(QEasingCurve.Type.OutBack)
 S = QStyle.StateFlag
 _current = None
@@ -90,9 +91,9 @@ def _chevron(painter, rect, color, up=False, size=3.5):
                           QPointF(centre.x() + size, centre.y() - sign * size / 2)])
 
 
-def _specular(painter, rect, path, hover, down, cursor=None):
+def _specular(painter, rect, path, hover, down, cursor=None, colour=ACCENT):
     """Accent gradient (smooth, no hard stop), a 1 px top highlight and, when hovered, a light spot."""
-    top = QColor(ACCENT)
+    top = QColor(colour)
     gradient = QLinearGradient(0, rect.top(), 0, rect.bottom())
     gradient.setColorAt(0, top)
     gradient.setColorAt(1, top.darker(130))
@@ -191,7 +192,7 @@ class VelaStyle(QProxyStyle):
         """Label colour by role: white on primary and on the checked pill, accent links, red danger."""
         name = button.objectName()
         if name == "seg" and button.isChecked():
-            return _tint(button, "white", "#E6FFFA")  # stays ≥4.5:1 on the pill even while locked
+            return _tint(button, "white", "#EAF1FF")  # stays ≥4.5:1 on the pill even while locked
         _tint(button, {"primary": "white", "textButton": self._link(), "danger": DANGER}.get(name))
 
     def _link(self):
@@ -367,14 +368,14 @@ class VelaStyle(QProxyStyle):
             cursor = widget.mapFromGlobal(QCursor.pos()) if hover and motion_enabled() else None
             _specular(painter, QRectF(option.rect), path, hover, down, cursor)
         else:
-            painter.fillPath(path, _fade(_mix(c["card"], c["card_hover"], hover), 1 if on else .6))
+            painter.fillPath(path, _fade(_mix(c["card"], c["card_hover"], hover), 1 if on else .8))
             if down and on:
                 painter.fillPath(path, QColor(0, 0, 0, 40))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             if hover:  # border glow: soft accent ring just inside the edge
                 painter.setPen(QPen(_fade(c["focus"], .3 * hover), 2.5))
                 painter.drawPath(_path(option.rect.adjusted(1, 1, -1, -1), 8))
-            edge = DANGER if name == "danger" and on else _mix(_fade(c["edge"], 1 if on else .5), c["focus"], .8 * hover)
+            edge = DANGER if name == "danger" and on else _mix(_fade(c["edge"], 1 if on else .7), c["focus"], .8 * hover)
             painter.setPen(QPen(edge, 1))
             painter.drawPath(path)
         painter.restore()
@@ -490,7 +491,7 @@ class SegmentedSwitch(QWidget):
         if not self.pill.isEmpty():
             pill = QPainterPath()
             pill.addRoundedRect(self.pill, 7, 7)
-            _specular(painter, self.pill, pill, 0, False)
+            _specular(painter, self.pill, pill, 0, False, colour=PILL)
 
 
 class SpotlightCard(QFrame):
