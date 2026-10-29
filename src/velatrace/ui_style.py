@@ -6,10 +6,9 @@ ui_effects, so set_motion(False) snaps every state."""
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPointF, QRect, QRectF, QSize, Qt, QVariantAnimation
-from PySide6.QtGui import (QBrush, QColor, QCursor, QFontDatabase, QLinearGradient, QPainter, QPainterPath,
+from PySide6.QtGui import (QBrush, QColor, QCursor, QLinearGradient, QPainter, QPainterPath,
                            QPalette, QPen, QRadialGradient)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QHBoxLayout, QListWidget, QProxyStyle,
                                QPushButton, QScrollBar, QStyle, QStyleOptionViewItem,
@@ -17,9 +16,9 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QHBox
 
 from .ui_effects import ACCENT, motion_enabled, progress, track_check, track_hover, untrack_check, untrack_hover
 
-DEFAULTS = dict(fg="#F5F3FF", muted="#B7B1CF", solid="#1C1930", edge="rgba(255,255,255,40)",
+DEFAULTS = dict(fg="#EEF4FA", muted="#A3B1C2", solid="#101826", edge="rgba(255,255,255,36)", focus="#2DD4BF",
                 card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)", field="rgba(255,255,255,14)",
-                accent_soft="rgba(139,92,246,64)", shadow="rgba(0,0,0,90)")
+                accent_soft="rgba(45,212,191,56)", shadow="rgba(0,0,0,90)")
 DANGER = QColor("#D45A67")
 _OUT, _BACK = QEasingCurve(QEasingCurve.Type.OutCubic), QEasingCurve(QEasingCurve.Type.OutBack)
 S = QStyle.StateFlag
@@ -44,13 +43,11 @@ def system_dark():
 
 
 def install():
-    """Install VelaStyle and the bundled Geist font (SIL OFL 1.1, fonts/OFL.txt) app-wide once; returns it."""
+    """Install VelaStyle app-wide once; returns it."""
     global _system_dark
     app = QApplication.instance()
     if not isinstance(app.style(), VelaStyle):
         _system_dark = app.palette().window().color().lightness() < 128
-        for font in sorted((Path(__file__).parent / "fonts").glob("*.ttf")):
-            QFontDatabase.addApplicationFont(str(font))
         app.setStyle(VelaStyle())
     return app.style()
 
@@ -95,10 +92,10 @@ def _chevron(painter, rect, color, up=False, size=3.5):
 
 def _specular(painter, rect, path, hover, down, cursor=None):
     """Accent gradient (smooth, no hard stop), a 1 px top highlight and, when hovered, a light spot."""
-    top = QColor(ACCENT).darker(105)
+    top = QColor(ACCENT)
     gradient = QLinearGradient(0, rect.top(), 0, rect.bottom())
     gradient.setColorAt(0, top)
-    gradient.setColorAt(1, top.darker(140))
+    gradient.setColorAt(1, top.darker(130))
     painter.fillPath(path, QBrush(gradient))
     if hover > 0:
         spot = QColor(255, 255, 255, int(34 * hover))
@@ -194,12 +191,12 @@ class VelaStyle(QProxyStyle):
         """Label colour by role: white on primary and on the checked pill, accent links, red danger."""
         name = button.objectName()
         if name == "seg" and button.isChecked():
-            return _tint(button, "white", "#F3EEFF")  # stays ≥4.5:1 on the pill even while locked
+            return _tint(button, "white", "#E6FFFA")  # stays ≥4.5:1 on the pill even while locked
         _tint(button, {"primary": "white", "textButton": self._link(), "danger": DANGER}.get(name))
 
     def _link(self):
         """Accent for text buttons, shifted per theme so it keeps 4.5:1 on the glass."""
-        return "#A78BFA" if self.c["fg"].lightness() > 128 else "#6D3FE0"
+        return "#5EEAD4" if self.c["fg"].lightness() > 128 else "#0F766E"
 
     def polish(self, obj):
         super().polish(obj)
@@ -285,7 +282,7 @@ class VelaStyle(QProxyStyle):
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.fillPath(_path(option.rect, 7), c["solid"])
-            painter.setPen(QPen(_mix(c["edge"], QColor(ACCENT), .6), 1))
+            painter.setPen(QPen(_mix(c["edge"], c["focus"], .6), 1))
             painter.drawPath(_path(option.rect, 7))
             painter.restore()
             return None
@@ -293,7 +290,7 @@ class VelaStyle(QProxyStyle):
             if option.state & S.State_KeyboardFocusChange:
                 painter.save()
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-                painter.setPen(QPen(QColor(ACCENT), 1.5))
+                painter.setPen(QPen(c["focus"], 1.5))
                 painter.drawPath(_path(option.rect.adjusted(-1, -1, 1, 1), 6))
                 painter.restore()
             return None
@@ -351,8 +348,8 @@ class VelaStyle(QProxyStyle):
         if focus and on:
             painter.setPen(QPen(c["accent_soft"], 3))
             painter.drawPath(_path(option.rect.adjusted(1, 1, -1, -1), 8))
-        painter.setPen(QPen(QColor(ACCENT) if focus and on else _mix(_fade(c["edge"], 1 if on else .5),
-                                                                       QColor(ACCENT), .7 * hover if on else 0), 1))
+        painter.setPen(QPen(c["focus"] if focus and on else _mix(_fade(c["edge"], 1 if on else .5),
+                                                                   c["focus"], .7 * hover if on else 0), 1))
         painter.drawPath(path)
         painter.restore()
 
@@ -375,9 +372,9 @@ class VelaStyle(QProxyStyle):
                 painter.fillPath(path, QColor(0, 0, 0, 40))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             if hover:  # border glow: soft accent ring just inside the edge
-                painter.setPen(QPen(_fade(QColor(ACCENT), .3 * hover), 2.5))
+                painter.setPen(QPen(_fade(c["focus"], .3 * hover), 2.5))
                 painter.drawPath(_path(option.rect.adjusted(1, 1, -1, -1), 8))
-            edge = DANGER if name == "danger" and on else _mix(_fade(c["edge"], 1 if on else .5), QColor(ACCENT), .8 * hover)
+            edge = DANGER if name == "danger" and on else _mix(_fade(c["edge"], 1 if on else .5), c["focus"], .8 * hover)
             painter.setPen(QPen(edge, 1))
             painter.drawPath(path)
         painter.restore()
@@ -488,7 +485,7 @@ class SegmentedSwitch(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         track = _path(self.rect(), 10)
         painter.fillPath(track, c["field"])
-        painter.setPen(QPen(QColor(ACCENT) if self.hasFocus() and self.keyboard else c["edge"], 1))
+        painter.setPen(QPen(c["focus"] if self.hasFocus() and self.keyboard else c["edge"], 1))
         painter.drawPath(track)
         if not self.pill.isEmpty():
             pill = QPainterPath()
@@ -511,11 +508,11 @@ class SpotlightCard(QFrame):
         painter.fillPath(path, _mix(c["card"], c["card_hover"], hover))
         if hover > 0 and motion_enabled():
             light = QRadialGradient(QPointF(self.mapFromGlobal(QCursor.pos())), 150)
-            light.setColorAt(0, QColor(139, 92, 246, int(52 * hover)))
-            light.setColorAt(1, QColor(139, 92, 246, 0))
+            light.setColorAt(0, _fade(c["focus"], .2 * hover))
+            light.setColorAt(1, _fade(c["focus"], 0))
             painter.save()
             painter.setClipPath(path)
             painter.fillRect(self.rect(), QBrush(light))
             painter.restore()
-        painter.setPen(QPen(_mix(c["edge"], QColor(ACCENT), .5 * hover), 1))
+        painter.setPen(QPen(_mix(c["edge"], c["focus"], .5 * hover), 1))
         painter.drawPath(path)

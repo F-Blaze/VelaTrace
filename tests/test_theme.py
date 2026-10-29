@@ -28,7 +28,7 @@ class GlassThemeTests(unittest.TestCase):
                 tokens = theme_tokens(dark)
                 sheet = glass_stylesheet(tokens)
                 self.assertIn("qlineargradient", tokens["frost"])  # painted frosted backdrop
-                self.assertIn(f"QWidget#glassRoot {{background:{tokens['frost']}}}", sheet)
+                self.assertIn(f"QDialog, QMessageBox {{background:{tokens['frost']}}}", sheet)
                 # Dropdown lists and tooltips are painted solid by VelaStyle from tokens["solid"].
                 self.assertNotIn("{", tokens["solid"])
                 self.assertTrue(tokens["solid"].startswith("#"))

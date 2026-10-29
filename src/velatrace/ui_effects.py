@@ -6,12 +6,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import (QEasingCurve, QEvent, QObject, QPointF, QPropertyAnimation, QRectF, Qt, QTimer,
                             QVariantAnimation, QPauseAnimation, QSequentialAnimationGroup)
-from PySide6.QtGui import (QColor, QImage, QLinearGradient, QPainter, QPen, QPolygonF, QBrush,
+from PySide6.QtGui import (QColor, QImage, QLinearGradient, QPainter, QPen, QPixmap, QPolygonF, QBrush,
                            QRadialGradient)
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
 
-ACCENT = "#8B5CF6"  # ui.py imports it from here
+ACCENT = "#0F766E"  # deep teal fills: white text on it stays >= 4.5:1; ui.py imports it from here
 _motion = True
+_grain = None
 
 
 def motion_enabled():
@@ -81,8 +82,8 @@ class StepStrip(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        muted = QColor(self._tokens.get("muted", "#B7B1CF"))
-        fg = QColor(self._tokens.get("fg", "#F5F3FF"))
+        muted = QColor(self._tokens.get("muted", "#A3B1C2"))
+        fg = QColor(self._tokens.get("fg", "#EEF4FA"))
         accent = QColor(ACCENT)
         faint = QColor(muted)
         faint.setAlpha(90)
@@ -175,7 +176,7 @@ class EdgeFade(_Overlay):
 
     def paintEvent(self, event):
         bar = self._bar
-        solid = QColor(self.tokens.get("solid", "#1C1930"))
+        solid = QColor(self.tokens.get("solid", "#101826"))
         solid.setAlpha(200)
         clear = QColor(solid)
         clear.setAlpha(0)
@@ -197,7 +198,7 @@ class EmptyState(_Overlay):
         image.setDevicePixelRatio(ratio)
         image.fill(Qt.GlobalColor.transparent)
         dots = QPainter(image)
-        dot = QColor(self.tokens.get("fg", "#F5F3FF"))
+        dot = QColor(self.tokens.get("fg", "#EEF4FA"))
         dot.setAlpha(90)
         paint_dot_grid(dots, self.rect(), dot)
         mask = QRadialGradient(QPointF(self.rect().center()), max(self.width(), self.height()) / 2)
@@ -208,7 +209,7 @@ class EmptyState(_Overlay):
         dots.end()
         painter = QPainter(self)
         painter.drawImage(0, 0, image)
-        painter.setPen(QColor(self.tokens.get("muted", "#B7B1CF")))
+        painter.setPen(QColor(self.tokens.get("muted", "#A3B1C2")))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Findings will appear here after Check design.")
 
 
@@ -372,3 +373,61 @@ def untrack_check(widget):
         ease.deleteLater()
         widget.setProperty("vtCheck", None)
 
+
+
+class AuroraBackground(QWidget):
+    """Soft aurora backdrop (the React Bits Soft Aurora / Grainient look, self-written): large
+    teal and blue glows and fine grain over the theme gradient. Rendered into a pixmap once per
+    size and theme, never animated, so it costs nothing while idle."""
+    BASE = {True: ("#16213A", "#0A0F1A"), False: ("#F6FAFC", "#DDEBF0")}
+    GLOWS = {True: ((.1, -.1, .7, (45, 212, 191, 84)), (.95, 0, .55, (59, 130, 246, 72)), (.55, 1.2, .8, (20, 184, 166, 48))),
+             False: ((.1, -.1, .7, (45, 212, 191, 72)), (.95, 0, .55, (56, 189, 248, 60)), (.55, 1.2, .8, (16, 185, 129, 40)))}
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
+        self.dark, self._cache = True, None
+
+    def set_tokens(self, tokens):
+        self.dark, self._cache = QColor(tokens["fg"]).lightness() > 128, None
+        self.update()
+
+    def resizeEvent(self, event):
+        self._cache = None
+        super().resizeEvent(event)
+
+    def paintEvent(self, event):
+        if self._cache is None:
+            self._cache = self._render()
+        QPainter(self).drawPixmap(0, 0, self._cache)
+
+    def _render(self):
+        global _grain
+        if _grain is None:  # fixed seed: the same grain every run
+            import random
+            noise = QImage(random.Random(7).randbytes(128 * 128), 128, 128, 128, QImage.Format.Format_Grayscale8)
+            _grain = QPixmap.fromImage(noise.copy())
+        ratio = self.devicePixelRatioF()
+        pixmap = QPixmap(max(1, round(self.width() * ratio)), max(1, round(self.height() * ratio)))
+        pixmap.setDevicePixelRatio(ratio)
+        rect = QRectF(self.rect())
+        painter = QPainter(pixmap)
+        top, bottom = self.BASE[self.dark]
+        base = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        base.setColorAt(0, QColor(top))
+        base.setColorAt(1, QColor(bottom))
+        painter.fillRect(rect, base)
+        span = max(rect.width(), rect.height())
+        for x, y, radius, rgba in self.GLOWS[self.dark]:
+            glow = QRadialGradient(QPointF(rect.width() * x, rect.height() * y), span * radius)
+            colour = QColor(*rgba)
+            glow.setColorAt(0, colour)
+            colour.setAlpha(rgba[3] // 3)
+            glow.setColorAt(.55, colour)
+            colour.setAlpha(0)
+            glow.setColorAt(1, colour)
+            painter.fillRect(rect, glow)
+        painter.setOpacity(.045 if self.dark else .03)
+        painter.drawTiledPixmap(rect, _grain)
+        painter.end()
+        return pixmap

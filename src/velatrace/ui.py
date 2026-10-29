@@ -55,7 +55,7 @@ from .sexpr import parse
 from .tokens import LocalChatTokenizer
 from .theme import saved_kicad_theme
 from .write_safety import BoardSafety, SafeBoardWriter
-from .ui_effects import (ACCENT, EdgeFade, EmptyState, ShimmerLabel, StepStrip,
+from .ui_effects import (ACCENT, AuroraBackground, EdgeFade, EmptyState, ShimmerLabel, StepStrip,
                          paint_dot_grid, reveal, set_motion)
 from .ui_micro import GlideSelect, LatticeLoader
 from .ui_style import SegmentedSwitch, SpotlightCard, install, system_dark
@@ -77,17 +77,17 @@ def theme_tokens(dark: bool) -> dict:
     stay-on-top windows (VelaTrace stays above KiCad), and dark Acrylic renders
     as near-opaque grey. Popups and dialogs stay solid for legibility."""
     if dark:
-        tokens = dict(fg="#F5F3FF", muted="#B7B1CF", solid="#1C1930", rim="rgba(255,255,255,40)",
-                      edge="rgba(255,255,255,40)", focus=ACCENT, accent_soft="rgba(139,92,246,64)",
+        tokens = dict(fg="#EEF4FA", muted="#A3B1C2", solid="#101826", rim="rgba(255,255,255,36)",
+                      edge="rgba(255,255,255,36)", focus="#2DD4BF", accent_soft="rgba(45,212,191,56)",
                       shadow="rgba(0,0,0,110)", card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)",
                       field="rgba(255,255,255,14)",
-                      frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #251F45, stop:1 #120F22)")
+                      frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #16213A, stop:1 #0A0F1A)")
     else:
-        tokens = dict(fg="#1E1933", muted="#5E5874", solid="#F6F3FF", rim="rgba(30,25,51,40)",
-                      edge="rgba(30,25,51,48)", focus=ACCENT, accent_soft="rgba(139,92,246,56)",
-                      shadow="rgba(30,25,51,60)", card="rgba(255,255,255,150)", card_hover="rgba(255,255,255,200)",
+        tokens = dict(fg="#0F1B2A", muted="#4B5B6E", solid="#F4F8FA", rim="rgba(15,27,42,40)",
+                      edge="rgba(15,27,42,48)", focus=ACCENT, accent_soft="rgba(15,118,110,46)",
+                      shadow="rgba(15,27,42,60)", card="rgba(255,255,255,150)", card_hover="rgba(255,255,255,200)",
                       field="rgba(255,255,255,170)",
-                      frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #F7F4FF, stop:1 #E4DDFB)")
+                      frost="qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #F6FAFC, stop:1 #DDEBF0)")
     return tokens
 
 
@@ -95,8 +95,7 @@ def glass_stylesheet(t: dict) -> str:
     """Colours, font, card glass and labels. Controls are painted by VelaStyle (ui_style.py)."""
     return f"""
         QMainWindow {{background:{t['solid']}}}
-        QWidget {{font-family:'Geist','Segoe UI Variable Text','Segoe UI'; font-size:12px}}
-        QWidget#glassRoot {{background:{t['frost']}}}
+        QWidget {{font-family:'Segoe UI'; font-size:12px}}
         QDialog, QMessageBox {{background:{t['frost']}}}
         QLabel#muted {{color:{t['muted']}}}
         QLabel#title {{font-size:20px; font-weight:700; color:{t['fg']}}}
@@ -219,10 +218,17 @@ class Settings:
 
 
 class SettingsDialog(QDialog):
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.backdrop.setGeometry(self.rect())
+
     def __init__(self, settings, parent):
         super().__init__(parent)
         self.setWindowTitle("VelaTrace setup")
         self.setMinimumWidth(560)
+        self.backdrop = AuroraBackground(self)  # same backdrop as the main window, behind every field
+        self.backdrop.set_tokens(getattr(parent, "_tokens", None) or theme_tokens(True))
+        self.backdrop.lower()
         layout = QVBoxLayout(self)
         self.fields = {}
 
@@ -635,7 +641,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(0, lambda: self.apply_settings(self.settings, save=False))
 
     def build_ui(self):
-        central = QWidget()
+        central = self.backdrop = AuroraBackground()
         central.setObjectName("glassRoot")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(20, 16, 20, 14)
@@ -892,7 +898,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(glass_stylesheet(tokens))
         install().set_tokens(tokens)  # after the stylesheet: it restores widget palettes when it repolishes
         self._tokens = tokens
-        for effect in (self.step_strip, self.edge_fade, self.empty):
+        for effect in (self.backdrop, self.step_strip, self.edge_fade, self.empty):
             effect.set_tokens(tokens)
 
     def refresh_badge(self):

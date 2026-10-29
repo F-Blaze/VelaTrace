@@ -132,10 +132,16 @@ class UiStyleTests(unittest.TestCase):
                 outside = image.pixelColor(left.x() - 4, left.y())
                 self.assertGreaterEqual(abs(luminance(edge) - luminance(outside)), 12)
 
-    def test_geist_font_is_bundled_and_used(self):
-        from PySide6.QtGui import QFontDatabase
-        self.assertIn("Geist", QFontDatabase.families())
-        self.assertEqual(self.window.status.fontInfo().family(), "Geist")
+    def test_aurora_backdrop_follows_the_theme(self):
+        window, backdrop = self.window, self.window.backdrop
+        window.resize(600, 400)
+        window.show()
+        samples = {}
+        for choice in ("Light", "Dark"):
+            window.theme.setCurrentText(choice)
+            self.app.processEvents()
+            samples[choice] = luminance(backdrop.grab().toImage().pixelColor(5, backdrop.height() - 5))
+        self.assertGreater(samples["Light"], samples["Dark"] + 100)
 
     def test_glide_select_picks_with_keys_and_keeps_the_combo_api(self):
         combo = self.window.source
