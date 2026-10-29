@@ -1,4 +1,4 @@
-"""Offscreen tests for VelaStyle, the hover/check helpers and the segmented switch."""
+"""Offscreen tests for VelaStyle, the hover/check helpers, the rubber switch, Glide Select and the loader."""
 import gc
 import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -13,6 +13,7 @@ try:
     from PySide6.QtWidgets import QApplication, QCheckBox, QPushButton
     from velatrace.ui import MainWindow, glass_stylesheet, theme_tokens
     from velatrace.ui_effects import progress, set_motion, track_hover
+    from velatrace.ui_micro import TAG, GlideSelect, LatticeLoader
     from velatrace.ui_style import SegmentedSwitch, VelaStyle
 except ImportError:
     QApplication = None
@@ -68,7 +69,9 @@ class UiStyleTests(unittest.TestCase):
         route.click()
         window.run_command.assert_called_with("/autoroute")
         self.assertTrue(route.isChecked())
-        self.assertEqual(switch._glide.endValue(), QRectF(route.geometry()))
+        self.assertEqual(switch._to, QRectF(route.geometry()))
+        switch._glide.setCurrentTime(switch._glide.duration())  # the rubber thumb lands exactly on the segment
+        self.assertEqual(switch.pill, QRectF(route.geometry()))
         window.mode_buttons[Mode.AUDIT].click()
         window.run_command.reset_mock()
         next(s for s in window.findChildren(QShortcut) if s.key().toString() == "Ctrl+2").activated.emit()
@@ -128,6 +131,56 @@ class UiStyleTests(unittest.TestCase):
                 edge = image.pixelColor(left.x(), left.y())
                 outside = image.pixelColor(left.x() - 4, left.y())
                 self.assertGreaterEqual(abs(luminance(edge) - luminance(outside)), 12)
+
+    def test_geist_font_is_bundled_and_used(self):
+        from PySide6.QtGui import QFontDatabase
+        self.assertIn("Geist", QFontDatabase.families())
+        self.assertEqual(self.window.status.fontInfo().family(), "Geist")
+
+    def test_glide_select_picks_with_keys_and_keeps_the_combo_api(self):
+        combo = self.window.source
+        self.assertIsInstance(combo, GlideSelect)
+        self.assertEqual(combo.itemData(0, TAG), "live")
+        self.window.show()
+        picked = Mock()
+        combo.currentTextChanged.connect(picked)
+        for motion in (True, False):
+            set_motion(motion)
+            combo.setCurrentIndex(0)
+            picked.reset_mock()
+            combo._closed = 0.0  # past the guard against a closing click reopening it
+            combo.showPopup()
+            menu = combo.menu
+            self.assertTrue(menu.isVisible())
+            self.assertTrue(combo.property("vtOpen"))
+            menu.grab()  # paints without errors mid-pop
+            menu.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.NoModifier))
+            menu.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier))
+            picked.assert_called_once_with("Schematic file…")
+            if motion:
+                menu.pop_anim.setCurrentTime(menu.pop_anim.duration())
+            self.app.processEvents()
+            self.assertIsNone(combo.menu)
+            self.assertFalse(combo.property("vtOpen"))
+
+    def test_lattice_loader_runs_only_while_working_and_shows_the_result(self):
+        loader = self.window.loader
+        self.window.show()
+        self.assertFalse(loader.isVisible())
+        loader.start()
+        self.assertTrue(loader.isVisible() and loader.tick.isActive())
+        loader.grab()
+        loader.finish(ok=False)
+        self.assertEqual(loader.state, "error")
+        self.assertFalse(loader.tick.isActive())
+        self.assertEqual(loader._alpha(4), 1.0)  # centre of the cross
+        set_motion(False)
+        loader.start()
+        self.assertFalse(loader.tick.isActive())  # static lattice, no timer
+        loader.finish()
+        self.assertEqual(loader._alpha(4), loader.IDLE)  # the check leaves the centre dim
+        loader.clear.timeout.emit()
+        self.assertFalse(loader.isVisible())
 
 
 if __name__ == "__main__":

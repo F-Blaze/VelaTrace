@@ -19,7 +19,7 @@ from queue import Queue
 from PySide6.QtCore import Qt, QThread, Signal, Slot, QStandardPaths, QTimer
 from PySide6.QtGui import QCursor, QColor, QPainter, QPen, QFontDatabase, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
+    QApplication, QCheckBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QSpinBox, QStackedWidget, QToolTip,
     QTextEdit, QVBoxLayout, QWidget,
@@ -57,6 +57,7 @@ from .theme import saved_kicad_theme
 from .write_safety import BoardSafety, SafeBoardWriter
 from .ui_effects import (ACCENT, EdgeFade, EmptyState, ShimmerLabel, StepStrip,
                          paint_dot_grid, reveal, set_motion)
+from .ui_micro import GlideSelect, LatticeLoader
 from .ui_style import SegmentedSwitch, SpotlightCard, install, system_dark
 
 BUCKET_COLORS = {"critical": "#F87171", "important": "#FBBF24",
@@ -94,7 +95,7 @@ def glass_stylesheet(t: dict) -> str:
     """Colours, font, card glass and labels. Controls are painted by VelaStyle (ui_style.py)."""
     return f"""
         QMainWindow {{background:{t['solid']}}}
-        QWidget {{font-family:'Segoe UI Variable Text','Segoe UI'; font-size:12px}}
+        QWidget {{font-family:'Geist','Segoe UI Variable Text','Segoe UI'; font-size:12px}}
         QWidget#glassRoot {{background:{t['frost']}}}
         QDialog, QMessageBox {{background:{t['frost']}}}
         QLabel#muted {{color:{t['muted']}}}
@@ -271,8 +272,7 @@ class SettingsDialog(QDialog):
 
         ai = section("AI (optional)", True, "Only for Explain with AI and pricing. "
                      "No backend or telemetry: only your endpoint receives requests.")
-        self.protocol = QComboBox()
-        self.protocol.addItems(["gemini", "openai"])
+        self.protocol = GlideSelect(["gemini", "openai"])
         self.protocol.setCurrentText(settings.protocol)
         self.protocol.setToolTip("Gemini uses exact countTokens. Groq/OpenAI-compatible models need a "
                                  "verified local tokenizer (Advanced).")
@@ -498,11 +498,9 @@ class ConstraintsDialog(QDialog):
         self.items = QListWidget()
         layout.addWidget(self.items)
         form = QFormLayout()
-        self.scope = QComboBox()
-        self.scope.addItems(["session", "universal"])
+        self.scope = GlideSelect([("session", "this run"), ("universal", "every board")])
         self.scope.setToolTip("Session: this run only, stacking across retries. Universal: saved for every board.")
-        self.kind = QComboBox()
-        self.kind.addItems(["clearance", "trace-width", "header-clearance"])
+        self.kind = GlideSelect(["clearance", "trace-width", "header-clearance"])
         self.kind.setToolTip("The router enforces all-net clearance and trace width. Header and per-net rules "
                              "stay listed but stop routing until supported; they are never ignored.")
         self.minimum = QDoubleSpinBox()
@@ -657,8 +655,7 @@ class MainWindow(QMainWindow):
         header.addWidget(self.mode_switch)
         self.set_mode_buttons(Mode.AUDIT)
         header.addStretch()
-        self.theme = QComboBox()
-        self.theme.addItems(["KiCad", "System", "Light", "Dark"])
+        self.theme = GlideSelect([("KiCad", "match"), ("System", "OS"), "Light", "Dark"])
         self.theme.setToolTip("Theme")
         self.theme.currentTextChanged.connect(self.apply_theme)
         header.addWidget(self.theme)
@@ -677,8 +674,7 @@ class MainWindow(QMainWindow):
         audit_layout = QVBoxLayout(self.audit_page)
         audit_layout.setContentsMargins(0, 0, 0, 0)
         source = QHBoxLayout()
-        self.source = QComboBox()
-        self.source.addItems(["Open PCB", "Schematic file…", "Netlist file…"])
+        self.source = GlideSelect([("Open PCB", "live"), ("Schematic file…", ".kicad_sch"), ("Netlist file…", ".net")])
         self.source.setToolTip("Open PCB reads KiCad live. Files are read as saved; unsaved edits are not included.")
         source.addWidget(self.source, 1)
         self.load_button = tip(QPushButton("Check design"), "Run the built-in checks on this computer (Ctrl+Enter)")
@@ -840,9 +836,14 @@ class MainWindow(QMainWindow):
         self.cancel_button.clicked.connect(self.cancel_route)
         layout.addWidget(self.cancel_button)
         self.status = ShimmerLabel("Ready.")
+        self.loader = LatticeLoader()
         self.usage_label = label(muted=True)
         self.usage_label.hide()
-        layout.addWidget(self.status)
+        status_row = QHBoxLayout()
+        status_row.setSpacing(6)
+        status_row.addWidget(self.loader)
+        status_row.addWidget(self.status, 1)
+        layout.addLayout(status_row)
         layout.addWidget(self.usage_label)
         self.setCentralWidget(central)
         self.refresh_badge()
@@ -1019,6 +1020,7 @@ class MainWindow(QMainWindow):
         self.status.setStyleSheet("")
         self.status.setToolTip("Keep KiCad unchanged until this finishes.")
         self.status.start()
+        self.loader.start()
         self._work_title = title
         self._work_started = time.monotonic()
         self.update_work_status()
@@ -1043,6 +1045,7 @@ class MainWindow(QMainWindow):
     def work_error(self, message):
         self.work_timer.stop()
         self.status.stop()
+        self.loader.finish(ok=False)
         self.show_error(message)
         if self._failure:
             self._failure(message)
@@ -1065,6 +1068,7 @@ class MainWindow(QMainWindow):
     def work_finished(self):
         self.work_timer.stop()
         self.status.stop()
+        self.loader.finish()
         self._work_started = None
         self.worker = None
         if not self.status.styleSheet():

@@ -1,13 +1,16 @@
 """VelaStyle: Fusion with antialiased, token-coloured controls, so edges stay crisp at any scale.
 
 Clean-room Qt painting; the looks (border glow, specular button, glide select, spring check,
-pill nav, warm tooltip) are only inspired by React Bits, no code from it. Motion goes through
+rubber segment, warm tooltip) are only inspired by React Bits, no code from it. Motion goes through
 ui_effects, so set_motion(False) snaps every state."""
 from __future__ import annotations
 
+import math
+from pathlib import Path
+
 from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPointF, QRect, QRectF, QSize, Qt, QVariantAnimation
-from PySide6.QtGui import (QBrush, QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPalette, QPen,
-                           QRadialGradient)
+from PySide6.QtGui import (QBrush, QColor, QCursor, QFontDatabase, QLinearGradient, QPainter, QPainterPath,
+                           QPalette, QPen, QRadialGradient)
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFrame, QHBoxLayout, QListWidget, QProxyStyle,
                                QPushButton, QScrollBar, QStyle, QStyleOptionViewItem,
                                QStyledItemDelegate, QTextEdit, QWidget)
@@ -18,6 +21,7 @@ DEFAULTS = dict(fg="#F5F3FF", muted="#B7B1CF", solid="#1C1930", edge="rgba(255,2
                 card="rgba(255,255,255,18)", card_hover="rgba(255,255,255,28)", field="rgba(255,255,255,14)",
                 accent_soft="rgba(139,92,246,64)", shadow="rgba(0,0,0,90)")
 DANGER = QColor("#D45A67")
+_OUT, _BACK = QEasingCurve(QEasingCurve.Type.OutCubic), QEasingCurve(QEasingCurve.Type.OutBack)
 S = QStyle.StateFlag
 _current = None
 _system_dark = False
@@ -40,11 +44,13 @@ def system_dark():
 
 
 def install():
-    """Install VelaStyle app-wide once; returns it."""
+    """Install VelaStyle and the bundled Geist font (SIL OFL 1.1, fonts/OFL.txt) app-wide once; returns it."""
     global _system_dark
     app = QApplication.instance()
     if not isinstance(app.style(), VelaStyle):
         _system_dark = app.palette().window().color().lightness() < 128
+        for font in sorted((Path(__file__).parent / "fonts").glob("*.ttf")):
+            QFontDatabase.addApplicationFont(str(font))
         app.setStyle(VelaStyle())
     return app.style()
 
@@ -310,7 +316,8 @@ class VelaStyle(QProxyStyle):
                 self._field(option, painter, bool(option.state & (S.State_HasFocus | S.State_On)),
                             progress(widget) or 0.0)
                 arrow = self.subControlRect(control, option, QStyle.SubControl.SC_ComboBoxArrow, widget)
-                _chevron(painter, arrow, c["fg"] if option.state & S.State_Enabled else c["muted"])
+                _chevron(painter, arrow, c["fg"] if option.state & S.State_Enabled else c["muted"],
+                         bool(widget is not None and widget.property("vtOpen")))  # flips while its menu is open
                 return None
             if control == C.CC_SpinBox:
                 self._field(option, painter, bool(option.state & S.State_HasFocus))
@@ -400,7 +407,8 @@ class VelaStyle(QProxyStyle):
 
 
 class SegmentedSwitch(QWidget):
-    """One rounded track with an accent pill that slides to the checked segment (180 ms)."""
+    """Rubber segment: one rounded track; the accent thumb stretches across to the checked segment
+    (leading edge first, trailing edge catching up) and squashes into place."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -411,10 +419,9 @@ class SegmentedSwitch(QWidget):
         self._row = QHBoxLayout(self)
         self._row.setContentsMargins(3, 3, 3, 3)
         self._row.setSpacing(0)
-        self._glide = QVariantAnimation(self)
-        self._glide.setDuration(180)
-        self._glide.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._glide.valueChanged.connect(self._move)
+        self._from = self._to = QRectF()
+        self._glide = QVariantAnimation(self, duration=420, startValue=0.0, endValue=1.0)
+        self._glide.valueChanged.connect(self._rubber)
 
     def add(self, text):
         button = QPushButton(text)
@@ -433,12 +440,22 @@ class SegmentedSwitch(QWidget):
 
     def _slide(self, button):
         self._glide.stop()
-        if motion_enabled() and self.isVisible() and not self.pill.isEmpty():
-            self._glide.setStartValue(self.pill)
-            self._glide.setEndValue(QRectF(button.geometry()))
+        target = QRectF(button.geometry())
+        if motion_enabled() and self.isVisible() and not self.pill.isEmpty() and self.pill != target:
+            self._from, self._to = QRectF(self.pill), target
             self._glide.start()
         else:
-            self._move(QRectF(button.geometry()))
+            self._move(target)
+
+    def _rubber(self, t):
+        a, b = self._from, self._to
+        lead = _OUT.valueForProgress(min(t / .4, 1.0))
+        trail = _BACK.valueForProgress(min(max((t - .2) / .6, 0.0), 1.0))
+        rightward = b.left() > a.left()
+        left = a.left() + (b.left() - a.left()) * (trail if rightward else lead)
+        right = a.right() + (b.right() - a.right()) * (lead if rightward else trail)
+        squash = 1.5 * math.sin(math.pi * min(max((t - .55) / .45, 0.0), 1.0))  # wider and shorter on landing
+        self._move(QRectF(QPointF(left - squash, b.top() + squash), QPointF(right + squash, b.bottom() - squash)))
 
     def _move(self, rect):
         self.pill = QRectF(rect)
