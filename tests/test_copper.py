@@ -160,3 +160,11 @@ class DelayTests(unittest.TestCase):
         self.assertAlmostEqual(dn.delay_ps, 4 * bottom.delay_ps_per_mm(0.2)
                                + homogeneous_delay_ps(1.6 / 3, FR4_EPSILON_R))
         self.assertNotIn("GND", routing)   # zone fill only: no tracks or vias
+
+
+def test_board_file_net_names_are_unescaped_like_the_netlist():
+    from velatrace.copper import _net_name
+    from velatrace.sexpr import parse
+    node = parse('(segment (net "/NFC {slash} PN7160/RF_P"))')
+    assert _net_name(node, {}) == "/NFC / PN7160/RF_P"
+    assert _net_name(parse('(segment (net "+3V3"))'), {}) == "+3V3"

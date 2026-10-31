@@ -606,17 +606,8 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
         if not pullups and not built_in:
             if _spi_bus(design, net):
                 continue  # SDA/SCL pins of an SPI display: no pull-ups needed
-            if behind := _jumpered_pullups(design, net):
-                refs = tuple(sorted({comp.reference for comp, _, _ in behind} | {jp.reference for _, _, jp in behind}))
-                resistors = ", ".join(sorted({comp.reference for comp, _, _ in behind}))
-                jumpers = ", ".join(sorted({jp.reference for _, _, jp in behind}))
-                findings.append(Finding(
-                    "i2c.pullup.optional", Severity.INFO,
-                    f"{net} pull-up {resistors} is behind jumper {jumpers}", refs, (net, behind[0][1]),
-                    f"{line} line {net} reaches {behind[0][1]} through {resistors} only via {jumpers}; "
-                    "with the jumper open the bus has no pull-up on this board.",
-                    f"Close {jumpers} unless the host board provides pull-ups."))
-                continue
+            if _jumpered_pullups(design, net):
+                continue  # pull-ups fitted behind a jumper: left open on purpose when the host provides them
             offboard = sorted(ref for ref in design.refs_on(net) if design.kind[ref] in {"connector", "module"})
             # A controller here (an IC driving the line from a GPIO-named pin) owns the bus, so
             # its pull-ups belong on this board even if the bus also leaves it.
@@ -1545,7 +1536,7 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 
 # Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
-BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "i2c.pullup.optional",
+BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "net.single_pin", "pin.input_floating",
                         # High-speed checks: not yet measured on unseen boards.
                         "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",

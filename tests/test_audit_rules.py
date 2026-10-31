@@ -252,13 +252,11 @@ def i2c_header():
     return part("J1", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "SDA"), ("2", "GND"))
 
 
-def test_i2c_pullups_behind_a_jumper_are_an_optional_note():
+def test_i2c_pullups_behind_a_jumper_are_not_missing():
     for chain in ((res("R3", "SDA", "Net-(JP1-B)"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)")),   # bus -> R -> JP -> rail
                   (i2c_jumper("JP1", "SDA", "Net-(JP1-B)"), res("R3", "Net-(JP1-B)", "+3V3"))):  # bus -> JP -> R -> rail
         found = rules(design(i2c_mcu(), i2c_sensor(), cap(), *chain), "i2c")
-        assert [(f.rule, f.severity, f.refs) for f in found] == [("i2c.pullup.optional", Severity.INFO, ("JP1", "R3"))]
-        assert "JP1" in found[0].title and "host" in found[0].fix
-    assert "i2c.pullup.optional" in audit_rules.BETA_RULES
+        assert found == []  # the designer left them optional on purpose (the host provides pull-ups)
     # A zero-ohm link behind the jumper is no pull-up; a real resistor straight to the rail needs no note.
     zero = design(i2c_mcu(), i2c_sensor(), cap(), res("R3", "SDA", "Net-(JP1-B)", "0R"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)"))
     assert [f.rule for f in rules(zero, "i2c")] == ["i2c.pullup.missing"]
