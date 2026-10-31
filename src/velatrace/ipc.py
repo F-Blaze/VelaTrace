@@ -15,7 +15,7 @@ def _pin(fp: Any, pad: Any, bottom: bool) -> Pin:
     """A pad as a Pin. Children carry absolute board positions (kipy docs), so the footprint-frame
     offset undoes the footprint rotation (KiCad's, y down) and, on the back side, the x mirror."""
     position = (pad.position.x / 1_000_000, pad.position.y / 1_000_000)
-    offset = through_hole = None
+    offset = through_hole = size = None
     try:
         angle = math.radians(fp.orientation.degrees)
         dx, dy = (pad.position.x - fp.position.x) / 1_000_000, (pad.position.y - fp.position.y) / 1_000_000
@@ -24,9 +24,15 @@ def _pin(fp: Any, pad: Any, bottom: bool) -> Pin:
             offset = (-offset[0], offset[1])
         drill = pad.padstack.drill.diameter
         through_hole = drill.x > 0 or drill.y > 0
+        layers = pad.padstack.copper_layers   # first copper layer's box; the pad's angle is board-absolute
+        if layers and layers[0].size.x > 0 and layers[0].size.y > 0:
+            w, h = layers[0].size.x / 1_000_000, layers[0].size.y / 1_000_000
+            turn = math.radians(pad.padstack.angle.degrees - fp.orientation.degrees)
+            size = (abs(w * math.cos(turn)) + abs(h * math.sin(turn)), abs(w * math.sin(turn)) + abs(h * math.cos(turn)))
     except Exception:  # a missing field leaves the fit data unknown, never fails the board read
         pass
-    return Pin(pad.number, pad.net.name, position_mm=position, offset_mm=offset, through_hole=through_hole)
+    return Pin(pad.number, pad.net.name, position_mm=position, offset_mm=offset, through_hole=through_hole,
+               size_mm=size)
 
 
 class KiCadReader:

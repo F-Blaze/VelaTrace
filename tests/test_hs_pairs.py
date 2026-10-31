@@ -9,7 +9,7 @@ import pytest
 from velatrace.audit_rules import check_pair_skew, check_pair_vias, run_heavy
 from velatrace.copper import BoardCopper, Segment, Via, read_copper_file
 from velatrace.findings import Severity
-from velatrace.models import DesignSnapshot
+from velatrace.models import Component, DesignSnapshot, Pin
 
 FIXTURE = Path(__file__).parent / "fixtures" / "copper" / "hs_board.kicad_pcb"
 BENCH = Path(os.environ.get("VELATRACE_BENCH", Path.home() / "Documents" / "VelaTrace-bench"))
@@ -42,6 +42,26 @@ def test_long_detour_on_one_line_is_reported_with_lengths_and_estimate():
     assert "estimate" in finding.evidence and "generic FR-4" in finding.evidence   # no layer models
     assert "USB" in finding.evidence and "full-speed USB" in finding.evidence
     assert "USB_D+" in finding.fix
+
+
+def hs_part(ref, value, footprint, nets):
+    return Component(ref, value, footprint, tuple(Pin(number, net) for number, net in nets.items()))
+
+
+def hs_adapter_board(*parts, length=30):
+    """A USB pair with a 30 mm / 5 mm skew and different via counts, on the given parts."""
+    return replace(board(track("USB_D+", length), track("USB_D-", 5, y=1), via("USB_D+"), via("USB_D+", 1)),
+                   components=parts)
+
+
+def test_pair_that_reaches_only_a_charger_is_not_a_data_pair():
+    connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
+    charger = hs_part("U1", "BQ25792RQMR1", "Texas_RQM0029A_VQFN-HR-28", {"6": "USB_D+", "7": "USB_D-"})
+    mcu = hs_part("U2", "STM32G431", "Package_QFP:LQFP-48", {"32": "USB_D-", "33": "USB_D+"})
+    assert ids(hs_adapter_board(connector)) == ["hs.pair.skew", "hs.pair.vias"]
+    assert ids(hs_adapter_board(connector, charger)) == []
+    assert ids(hs_adapter_board(connector, charger, mcu)) == ["hs.pair.skew", "hs.pair.vias"]
+    assert ids(hs_adapter_board(connector, mcu)) == ["hs.pair.skew", "hs.pair.vias"]
 
 
 def test_matched_pair_and_small_mismatch_are_quiet():

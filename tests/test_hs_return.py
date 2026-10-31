@@ -46,6 +46,10 @@ def snap(copper, *components):
     return DesignSnapshot(tuple(components), "fixture", copper=copper)
 
 
+def hs_part(ref, value, footprint, nets):
+    return Component(ref, value, footprint, tuple(Pin(number, net) for number, net in nets.items()))
+
+
 def cap(ref, a, b, at):
     return Component(ref, "100nF", "Capacitor_SMD:C_0402", (Pin("1", a, position_mm=at), Pin("2", b, position_mm=at)))
 
@@ -80,10 +84,10 @@ class NoPlaneTests(unittest.TestCase):
         self.assertIn("no reference plane under it", own[0].title)
 
 
-def usb_over(*fills, vias=()):
+def usb_over(*fills, vias=(), nets=("USB_D+", "USB_D-")):
     """USB_D+ / USB_D- on F.Cu from x=0 to 40 (y=5 / 6), referenced to the In1.Cu plane."""
     kinds = {"F.Cu": "microstrip", "In1.Cu": "plane", "In2.Cu": "plane", "B.Cu": "microstrip"}
-    return BoardCopper(FOUR, 1.6, (seg("USB_D+", "F.Cu", (0, 5), (40, 5)), seg("USB_D-", "F.Cu", (0, 6), (40, 6))),
+    return BoardCopper(FOUR, 1.6, (seg(nets[0], "F.Cu", (0, 5), (40, 5)), seg(nets[1], "F.Cu", (0, 6), (40, 6))),
                        vias, fills, frozenset({"In1.Cu", "In2.Cu"}),
                        {name: model(name, kind) for name, kind in kinds.items()}, {})
 
@@ -117,13 +121,35 @@ class PlaneGapTests(unittest.TestCase):   # issue #62
     def test_plane_by_layer_type_without_fill_is_trusted(self):
         self.assertEqual(check_return_plane(snap(usb_over())), [])
 
+    def test_charger_only_pair_is_not_a_data_pair(self):
+        gap = usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))))
+        connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
+        charger = hs_part("U1", "BQ25792RQMR1", "Texas_RQM0029A_VQFN-HR-28", {"6": "USB_D+", "7": "USB_D-"})
+        esd = hs_part("D1", "USBLC6-2SC6", "Package_TO_SOT_SMD:SOT-23-6", {"1": "USB_D+", "3": "USB_D-"})
+        self.assertEqual(check_return_plane(snap(gap, connector, charger, esd)), [])
+        self.assertEqual(len(check_return_plane(snap(gap, connector))), 2)             # no IC: still a pair
+        # The same pair reaching an MCU as well is a data pair, whatever else is on it.
+        mcu = hs_part("U2", "ESP32-S3", "RF_Module:ESP32-S3-WROOM-1", {"13": "USB_D-", "14": "USB_D+"})
+        self.assertEqual(len(check_return_plane(snap(gap, connector, charger, mcu))), 2)
+
+    def test_antenna_matching_nets_sit_over_a_deliberate_keepout(self):
+        gap = usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))), nets=("RF_P", "RF_OUT"))
+        antenna = hs_part("A1", "PCB loop 40x40", "NFC_PCB_Loop_40x40_4T", {"1": "LOOP_A", "2": "RF_OUT"})
+        match = hs_part("R27", "2.7R", "Resistor_SMD:R_1206_3216Metric", {"1": "RF_P", "2": "LOOP_A"})
+        shunt = hs_part("C36", "100pF", "Capacitor_SMD:C_0805_2012Metric", {"1": "RF_P", "2": "GND"})
+        self.assertEqual(len(check_return_plane(snap(gap, shunt, match))), 2)          # no antenna: a gap is a gap
+        self.assertEqual(check_return_plane(snap(gap, antenna, match, shunt)), [])      # RF_OUT on the antenna, RF_P via R27
+
 
 class ReturnViaTests(unittest.TestCase):
     def test_layer_change_without_ground_via(self):
-        found = check_return_vias(snap(four_layer(Via("GND", (9, 5), FOUR))))   # 4 mm away: too far
+        found = check_return_vias(snap(four_layer(Via("GND", (10, 5), FOUR))))   # 5 mm away: too far
         self.assertEqual([f.rule for f in found], ["hs.return.via"])
         self.assertIn("5.00, 5.00 mm", found[0].title)
         self.assertIn("GND", found[0].title)
+
+    def test_ground_via_3_5_mm_away_passes(self):
+        self.assertEqual(check_return_vias(snap(four_layer(Via("GND", (8.5, 5), FOUR)))), [])
 
     def test_close_ground_via_passes(self):
         self.assertEqual(check_return_vias(snap(four_layer(Via("GND", (6, 5), FOUR)))), [])

@@ -21,13 +21,19 @@ Library differences that are not wrong parts, and how they are left alone:
   2-pad part, the spacing may differ by up to 0.65 mm or 20 %, whichever is larger.
 - Rows x columns are only reported when the pads do not line up: rows a hair apart (3.0 and 3.15 mm)
   can cluster differently on the two sides.
+- Pad areas: where pad sizes are known (KiCad pads' copper, not the part's), a part pad whose centre
+  lands inside a footprint pad (0.25 mm margin) is served by it. Several part pads in one footprint
+  pad are one merged pad (a power SON's drain tab: no pad_count), and a 2-pad part whose pad
+  centres land inside the footprint's pads fits however long its toes are (no pitch).
 - Pin order: only numbers both sides use count, and not numbers the footprint repeats (joined legs),
   so a tab numbered 2 in KiCad and 4 at LCSC is a name, not a swap. When the pad nets are known, a
   swap whose pins share a net (a mirrored header with paired pins) or whose pin is unconnected
-  (a trimmer used as a rheostat) changes nothing and is skipped.
+  (a trimmer used as a rheostat) changes nothing and is skipped, and so is any numbering of four
+  pads on two nets, two each (a tact switch whose pairs are joined inside).
 """
 from __future__ import annotations
 
+from collections import Counter
 import math
 from typing import Iterable, Sequence
 
@@ -52,13 +58,18 @@ _PASSIVE_KINDS = {"resistor", "capacitor", "inductor", "ferrite", "resistor_arra
 # and only count, mount type and layout are checked. Upgrade: grid lookup instead of a full scan.
 _MAX_ALIGN_PADS = 400
 
-Pad = tuple[str, float, float, bool | None]   # number, x, y (mm, footprint frame), through-hole
-Group = tuple[str, float, float, bool | None, float]   # one physical pad: "A1/B12", x, y, THT, area
+_AREA_MARGIN_MM = 0.25   # a part pad's centre may sit this far outside the footprint pad's copper
+
+# number, x, y (mm, footprint frame), through-hole, optionally the pad's (width, height) in that frame
+Pad = tuple[str, float, float, bool | None] | tuple[str, float, float, bool | None, tuple[float, float] | None]
+# one physical pad: "A1/B12", x, y, THT, area, the copper rectangles (x, y, width, height) behind it
+Group = tuple[str, float, float, bool | None, float, tuple[tuple[float, float, float, float], ...]]
 
 
 def kicad_pads(comp: Component) -> list[Pad]:
     """Pads with a known offset, mechanical ones included."""
     return [(pin.number, pin.offset_mm[0], pin.offset_mm[1], pin.through_hole)
+            + ((pin.size_mm,) if pin.size_mm else ())
             for pin in comp.pins if pin.offset_mm is not None]
 
 
@@ -80,8 +91,9 @@ def fit_candidates(snapshot: DesignSnapshot) -> list[Component]:
 
 
 def _group(pads: Sequence[tuple]) -> list[Group]:
-    """Physical pads from (number, x, y, through_hole[, area]) records: one per spot, and one per
-    run of same-number pads less than _SAME_PAD_MM apart (mean position, summed area)."""
+    """Physical pads from (number, x, y, through_hole[, area or (width, height)]) records: one per
+    spot, and one per run of same-number pads less than _SAME_PAD_MM apart (mean position, summed
+    area). Mounting pads share a number by habit, not because they are one pad: they merge by spot only."""
     parent = list(range(len(pads)))
 
     def root(i: int) -> int:
@@ -99,7 +111,7 @@ def _group(pads: Sequence[tuple]) -> list[Group]:
         spots.setdefault(spot, i)
         same = numbers.setdefault(number.strip().upper(), [])
         for j in same:
-            if math.dist((x, y), pads[j][1:3]) < _SAME_PAD_MM:
+            if number.strip().upper() not in _MECHANICAL and math.dist((x, y), pads[j][1:3]) < _SAME_PAD_MM:
                 parent[root(i)] = root(j)
         same.append(i)
     runs: dict[int, list[tuple]] = {}
@@ -108,7 +120,8 @@ def _group(pads: Sequence[tuple]) -> list[Group]:
     return [("/".join(sorted({p[0].strip().upper() for p in run})),
              sum(p[1] for p in run) / len(run), sum(p[2] for p in run) / len(run),
              None if all(p[3] is None for p in run) else any(p[3] for p in run),
-             sum(p[4] if len(p) > 4 else 0.0 for p in run))
+             sum(p[4] for p in run if len(p) > 4 and not isinstance(p[4], tuple)),
+             tuple((p[1], p[2], *p[4]) for p in run if len(p) > 4 and isinstance(p[4], tuple)))
             for run in runs.values()]
 
 
@@ -158,21 +171,53 @@ def _allowed(points: Sequence[tuple[float, float]]) -> list[tuple[float, float]]
             for x, y in points]
 
 
+def _moves(real: Sequence[tuple[float, float]]):
+    """The real pads' positions under each of the 8 rotations/mirrors: (positions, mirrored)."""
+    for mirror in (1, -1):
+        for turn in range(4):
+            cos, sin = round(math.cos(turn * math.pi / 2)), round(math.sin(turn * math.pi / 2))
+            yield [(mirror * x * cos - y * sin, mirror * x * sin + y * cos) for x, y in real], mirror < 0
+
+
 def _alignments(fp: Sequence[tuple[float, float]], real: Sequence[tuple[float, float]]):
     """For each of the 8 rotations/mirrors of the real pads: (worst excess over the allowed offset,
     total offset, footprint pad -> nearest real pad index, offset per footprint pad, mirrored)."""
     allowed = _allowed(fp)
-    for mirror in (1, -1):
-        for turn in range(4):
-            cos, sin = round(math.cos(turn * math.pi / 2)), round(math.sin(turn * math.pi / 2))
-            moved = [(mirror * x * cos - y * sin, mirror * x * sin + y * cos) for x, y in real]
-            near = [_nearest(point, moved) for point in fp]
-            index = [i for i, _ in near]
-            excess = max(max(abs(a - b) - tol for a, b, tol in zip(point, moved[i], limit))
-                         for point, i, limit in zip(fp, index, allowed))
-            if len(set(index)) < len(index):   # two footprint pads on one real pad: no fit
-                excess = math.inf
-            yield excess, sum(d for _, d in near), index, [d for _, d in near], mirror < 0
+    for moved, mirrored in _moves(real):
+        near = [_nearest(point, moved) for point in fp]
+        index = [i for i, _ in near]
+        excess = max(max(abs(a - b) - tol for a, b, tol in zip(point, moved[i], limit))
+                     for point, i, limit in zip(fp, index, allowed))
+        if len(set(index)) < len(index):   # two footprint pads on one real pad: no fit
+            excess = math.inf
+        yield excess, sum(d for _, d in near), index, [d for _, d in near], mirrored
+
+
+def _served(fp: Sequence[Group], part: Sequence[Group]) -> list[tuple]:
+    """Alignments (shaped like _alignments, without offsets) in which every part pad's centre lies
+    inside the copper of some footprint pad and every footprint pad serves one. Needs the sizes of
+    all footprint pads. The index per footprint pad prefers the part pad with its own number."""
+    if not part or not fp or any(not pad[5] for pad in fp):
+        return []
+    def middle(points):
+        xs, ys = zip(*points)
+        return (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+
+    here = middle([(p[1], p[2]) for p in fp])
+    result = []
+    for moved, mirrored in _moves([(p[1], p[2]) for p in part]):
+        there = middle(moved)   # both libraries put the origin mid-part, else the bounding boxes are lined up
+        for shift in ((0.0, 0.0), (here[0] - there[0], here[1] - there[1])):
+            at = [(x + shift[0], y + shift[1]) for x, y in moved]
+            hits = [[j for j, (x, y) in enumerate(at)
+                     if any(abs(x - rx) <= w / 2 + _AREA_MARGIN_MM and abs(y - ry) <= h / 2 + _AREA_MARGIN_MM
+                            for rx, ry, w, h in pad[5])] for pad in fp]
+            if all(hits) and set().union(*hits) == set(range(len(at))):
+                index = [min(hit, key=lambda j: (part[j][0] != pad[0], math.dist(at[j], pad[1:3])))
+                         for hit, pad in zip(hits, fp)]
+                result.append((0.0, 0.0, index, [], mirrored))
+                break
+    return result
 
 
 def _large_pads(part: Sequence[Group]) -> list[str]:
@@ -206,8 +251,9 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
         spare = [pad for pad in sorted(part, key=lambda pad: pad[4], reverse=True) if pad[0] not in used]
         mounting = {pad[0] for pad in spare[:len(part) - len(fp)]}
         part = [pad for pad in part if pad[0] not in mounting]
+    merged = _served(fp, part) if len(fp) < len(part) else []   # several part pads on one footprint pad
     large = _large_pads(part)
-    tab = next((number for number in large if number in used), None) if len(part) > 2 else None
+    tab = next((number for number in large if number in used), None) if len(part) > 2 and not merged else None
     part_count = len(part) or real.pin_count
     if not fp or not part_count:
         return []
@@ -217,7 +263,7 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     def finding(rule: str, title: str, evidence: str, fix: str, severity=Severity.ERROR) -> list[Finding]:
         return [Finding(rule, severity, f"{reference} {title}", (reference,), (), evidence + blind, fix)]
 
-    if len(fp) != part_count:
+    if len(fp) != part_count and not merged:
         extra = f" (and {len(mech)} mounting pad(s))" if mech else ""
         return finding("fit.pad_count", f"footprint has {len(fp)} pads but {name} has {part_count}",
                        f"The footprint has {len(fp)} pads{extra}; the part's data lists {part_count}.",
@@ -242,6 +288,8 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     mine, theirs = (_centred(fp), _centred(part)) if aligned else ([], [])
     options = list(_alignments(mine, theirs)) if aligned else []
     fits = [option for option in options if option[0] <= 0]
+    if not fits:   # the centres differ, but part pads still land inside the footprint's pads
+        fits = _served(fp, part)
     if not fits and sorted(rows_cols) != sorted(part_rows_cols):
         return finding("fit.layout", f"pad layout differs from {name} (footprint "
                        f"{_label(*rows_cols)}, part {_label(*part_rows_cols)})",
@@ -272,6 +320,11 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
         found = (nets or {}).get(number, "")
         return "" if found.startswith("unconnected-") else found
 
+    # Four pads on two nets, two pads each, are two internally joined pairs (a tact switch): any
+    # numbering reaches the same nets.
+    pairs = Counter(net(number) for number in numbers)
+    if len(numbers) == 4 and "" not in pairs and sorted(pairs.values()) == [2, 2]:
+        return []
     wrong = []
     for _, _, nearest, _, mirrored in fits:
         swapped = [(fp[i][0], part[j][0]) for i, j in enumerate(nearest)
