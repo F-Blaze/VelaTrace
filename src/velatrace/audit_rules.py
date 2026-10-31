@@ -52,11 +52,20 @@ _GPIO_PIN = re.compile(r"(?:GPIO\d+|IO\d+|P[A-K]\d{1,2}|P\d{1,2}[._]\d{1,2}|D\d{
                        re.IGNORECASE)
 _PROTECTION_VALUE = re.compile(r"TVS|ESD|USBLC|PRTR|TPD\d|SMAJ|SMBJ|PESD|SS\d{2}|1N58|B5819|POLYFUSE|PTC",
                                re.IGNORECASE)
+# Input protection built into the IC: current-limited USB power switches, load switches, eFuses, ideal
+# diodes and power muxes with reverse blocking or a current limit. A rail entering one is protected.
+_PROTECTING_IC = re.compile(
+    r"CH217|TPS2115|TPS2113|TPS2116|TPS259|TPS2051|TPS2041|AP2141|AP2151|SY6280|RT9742|MIC2005|MIC2009|"
+    r"LM66100|LM66200|MAX40200|IDEAL.?DIODE|LOAD.?SWITCH|E-?FUSE", re.IGNORECASE)
 _EMPTY_VALUES = {"", "~", "?"}
 # Generic KiCad symbol names (R_Small_US, D_Schottky, C_Polarized...) and template text left as a value.
 _GENERIC_VALUE = re.compile(
     r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
     r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*", re.IGNORECASE)
+# A symbol name that is itself a part number (ASMB-MTB0-0A3A2, WS2812B, 1N4148W): a letters+digits run of
+# 5+ characters, not a KiCad generic like R_Pack04. Its value equal to the symbol name is the real value.
+_PART_NUMBER_SYMBOL = re.compile(r"(?<![a-z0-9-])(?!(?:pack|network)\d)(?=[a-z0-9-]*[a-z])(?=[a-z0-9-]*\d)[a-z0-9-]{5,}",
+                                 re.IGNORECASE)
 # For these kinds the symbol is generic, so a value equal to the symbol name was never set.
 # Not for ICs, transistors, modules, diodes or "other" parts, whose symbol name is often the part number
 # (a connector or antenna valued KH-5220-A56_U.FL); not for switches and battery holders, which are commodity.
@@ -75,7 +84,8 @@ _PREFIX_KINDS = {"R": "resistor", "RN": "resistor_array", "RA": "resistor_array"
                  "LED": "led", "U": "ic", "IC": "ic", "J": "connector", "P": "connector",
                  "CN": "connector", "CON": "connector", "F": "fuse", "Q": "transistor",
                  "TP": "testpoint", "H": "mounting", "MH": "mounting", "Y": "crystal",
-                 "SW": "switch", "BT": "battery"}
+                 "SW": "switch", "BT": "battery", "JP": "jumper", "SJ": "jumper"}
+_JUMPER_FOOTPRINT = re.compile(r"SOLDER.?JUMPER|JUMPER_")
 # Addressable LEDs carry a driver IC and need decoupling like one.
 _ADDRESSABLE_LED = re.compile(r"WS28\d\d|SK6\d{3}|APA1\d\d|SK98\d\d", re.IGNORECASE)
 # Pins typed power that are switch nodes or control inputs, never decoupled rails.
@@ -92,6 +102,16 @@ _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
 # (data-ready/interrupt) that some symbols type as input.
 _OPEN_OK_PIN = {"SWCLK", "SWDIO", "SWO", "SWDCK", "TCK", "TMS", "TDI", "TDO", "DRDY", "RDY", "INT", "INT1",
                 "INT2", "IRQ", "ALERT"}
+# Input pins that may float on a part family (matched on value + MPN), with the datasheet reason.
+# Only the listed pins: any other open input of the same part is still reported.
+_OPEN_OK_BY_PART = (
+    # I2C EEPROM/FRAM (24Cxx, AT24, CAT24, FM24, M24): A0-A2 (E0-E2 on ST), WP/WC have internal pull-downs.
+    (re.compile(r"(?<![A-Z0-9])24[A-Z]{1,3}\d{1,4}|AT24|CAT24|FM24|M24[A-Z]?\d"), {"A0", "A1", "A2", "E0", "E1", "E2", "WP", "WC"}),
+    # CH340/CH341 USB-UART: modem inputs have internal pull-ups, R232 an internal pull-down.
+    (re.compile(r"CH34[01]"), {"CTS", "DSR", "RI", "DCD", "R232"}),
+    # CP210x / FT23x USB-UART: unused modem-control inputs may be left open (internal pull-ups).
+    (re.compile(r"CP210\d|FT23[012]"), {"CTS", "DSR", "RI", "DCD"}),
+)
 _UNUSED_USB_PIN = re.compile(r"SBU\d")  # USB-C sideband pins: unused on USB 2.0
 _LED_PART = re.compile(r"7.?SEG|SEVEN.?SEG|(?:^|\s)(?:LED|DISPLAY)")  # on "value footprint"
 # Connectors that never bring power in: memory-card/SIM sockets, M.2, debug/programming pads
@@ -159,6 +179,8 @@ def part_kind(comp: Component) -> str:
         return "testpoint"
     if library.startswith("MOUNTINGHOLE"):
         return "mounting"
+    if _JUMPER_FOOTPRINT.search(comp.footprint.upper()):
+        return "jumper"
     kind = _PREFIX_KINDS.get(prefix)
     if kind is None:
         for lib, guess in (("RESISTOR", "resistor"), ("CAPACITOR", "capacitor"),
@@ -494,6 +516,62 @@ def _pulled_up_nearby(design: _Design, net: str, line: str) -> bool:
     return False
 
 
+# SPI signal names: a device with several of them connected is on an SPI bus, whatever its data pins are called.
+_SPI_PIN = re.compile(r"N?CS\d?|CSB|NSS|N?DC|DCX?|RS|RESX?|N?RST|RESET|MOSI|MISO|SCLK|SCK")
+_SPI_NET_TOKENS = {"SCLK", "SCK", "MOSI", "MISO"}
+# MCU-like pins (GPIO.3, IO12, PB4, GP22); an IC with several is a likely I2C master.
+_MASTER_PIN = re.compile(r"(?:GPIO|GP|IO)[._]?\d+|P[A-K]\d{1,2}|P\d{1,2}[._]\d{1,2}", re.IGNORECASE)
+
+
+def _spi_bus(design: _Design, net: str) -> bool:
+    """SDA/SCL named nets that are SPI data/clock: the net name also carries an SPI signal (SDA_SCLK,
+    SCL_MOSI: a jumper-selectable display line), or a device on it has two or more other SPI-named pins
+    wired to signal nets (display CS + DC/RS + RES). Pins tied to a rail/ground (a CSB strap) do not count."""
+    if set(re.split(r"[^A-Z0-9]+", net_label(net))) & _SPI_NET_TOKENS:
+        return True
+    for comp, _ in design.nodes[net]:
+        spi = {re.sub(r"[^A-Z0-9]", "", pin.name.upper()) for pin in comp.pins
+               if pin.net and not pin.no_connect and not i2c_line(pin.net) and pin.net not in design.grounds
+               and pin.net not in design.supplies and len(design.nodes[pin.net]) > 1
+               and _SPI_PIN.fullmatch(re.sub(r"[^A-Z0-9]", "", pin.name.upper()))}
+        if len(spi) >= 2:
+            return True
+    return False
+
+
+def _mcu_like(design: _Design, comp: Component) -> bool:
+    """A module, or an IC with several GPIO-named pins: it can be the bus master."""
+    return design.kind[comp.reference] == "module" or (design.kind[comp.reference] == "ic" and sum(
+        1 for pin in comp.pins if any(_MASTER_PIN.fullmatch(token) for token in re.split(r"[/\s,\\]+", pin.name))) >= 4)
+
+
+def _jumper_hops(design: _Design, net: str) -> list[tuple[Component, str]]:
+    """(solder jumper, net on its other side) for every two-pin jumper on net."""
+    hops = []
+    for comp, _ in design.nodes[net]:
+        nets = two_terminal_nets(comp) if design.kind[comp.reference] == "jumper" else None
+        if nets and net in nets:
+            hops.append((comp, nets[1] if nets[0] == net else nets[0]))
+    return hops
+
+
+def _jumpered_pullups(design: _Design, net: str) -> list[tuple[Component, str, Component]]:
+    """Resistors from a rail that reach the bus only through one jumper: (resistor, rail, jumper), for
+    bus -> resistor -> jumper -> rail and bus -> jumper -> resistor -> rail. 0 Ω links are no pull-up."""
+    found = []
+    for start, link in [(net, None)] + [(far, jp) for jp, far in _jumper_hops(design, net)]:
+        for comp, _ in design.nodes[start]:
+            nets = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
+            if not nets or start not in nets or parse_resistance(comp.value) == 0:
+                continue
+            other = nets[1] if nets[0] == start else nets[0]
+            if link is not None and _is_rail(design, other):
+                found.append((comp, other, link))
+            elif link is None:
+                found += [(comp, far, jp) for jp, far in _jumper_hops(design, other) if _is_rail(design, far)]
+    return found
+
+
 def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
     """SDA/SCL lines: missing, redundant, mixed-rail, 0 Ω or out-of-range pull-ups."""
     design = _Design(snapshot)
@@ -526,12 +604,18 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
         if built_in and real and all(ohms for _, _, ohms in real):
             findings += _combined_pullup(net, real, built_in)
         if not pullups and not built_in:
+            if _spi_bus(design, net):
+                continue  # SDA/SCL pins of an SPI display: no pull-ups needed
+            if _jumpered_pullups(design, net):
+                continue  # pull-ups fitted behind a jumper: left open on purpose when the host provides them
             offboard = sorted(ref for ref in design.refs_on(net) if design.kind[ref] in {"connector", "module"})
             # A controller here (an IC driving the line from a GPIO-named pin) owns the bus, so
             # its pull-ups belong on this board even if the bus also leaves it.
             master_here = any(design.kind[comp.reference] == "ic" and any(
                 _GPIO_PIN.fullmatch(token) for token in re.split(r"[/\s,]+", pin.name))
                 for comp, pin in design.nodes[net])
+            if offboard and not master_here and not any(_mcu_like(design, comp) for comp, _ in design.nodes[net]):
+                continue  # no master on this board and the bus leaves through a connector: the host board pulls it up
             if master_here and len(devices) == 1 and offboard and all(_breakout(design, ref) for ref in offboard):
                 continue  # only the controller is here and the bus goes to a general pin header: slaves and pull-ups are off-board
             if _pulled_up_nearby(design, net, line):
@@ -658,6 +742,19 @@ def check_led_resistors(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+_PORT_NAME = re.compile(r"(?:GPIO|GP|IO|P)?[A-K]?\d{1,3}")
+
+
+def _repeats_pin_name(net: str, pin: Pin) -> bool:
+    """Label GP22/GPIO22/IO35/PB4/B4 on the pin named GPIO22/IO35/PB4: the name adds nothing."""
+    def alias(name: str) -> str:
+        return re.sub(r"^(?:GPIO|GP|IO|P)(?=[A-K]?\d)", "", name)
+    label = net_label(net)
+    return bool(_PORT_NAME.fullmatch(label)) and any(
+        _PORT_NAME.fullmatch(token) and alias(token) == alias(label)
+        for token in re.split(r"[/\s,\\]+", pin.name.upper()))
+
+
 def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
     """Named nets that reach one pin only: usually a mistyped or missing label."""
     design = _Design(snapshot)
@@ -676,6 +773,8 @@ def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         if design.kind[comp.reference] == "connector" and _UNUSED_USB_PIN.fullmatch(pin.name.upper()):
             continue
+        if _repeats_pin_name(net, pin):
+            continue  # a label that only echoes the pin's own GPIO/port name documents an unused pin
         twins = sorted(other for other in by_label[net_label(net)]
                        if other != net and len(design.nodes[other]) > 1)
         if twins:
@@ -736,9 +835,11 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
         # TVS/ESD arrays and LED displays: unused channels/segments may stay open.
         if _PROTECTION_VALUE.search(text) or _LED_PART.search(text):
             continue
+        family = f"{ic.value} {mpn_of(ic) or ''}".upper()
+        open_ok = {name for part_re, names in _OPEN_OK_BY_PART if part_re.search(family) for name in names}
         floating = [pin for pin in ic.pins if pin.net and pin.electrical_type.strip().lower() == "input"
                     and len(design.nodes.get(pin.net, ())) == 1 and not _TRIM_PIN.search(pin.name.upper())
-                    and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & _OPEN_OK_PIN]
+                    and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & (_OPEN_OK_PIN | open_ok)]
         if not floating:
             continue
         names = ", ".join(pin.name or pin.number for pin in floating)
@@ -873,6 +974,7 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
                     # Battery terminals take power in even where a charger also drives them.
                     and ("BAT" in net_label(net) or not _drives(design, _fed_group(design, group)))
                     and not any(design.kind[part.reference] in protective or _PROTECTION_VALUE.search(part.value)
+                                or _PROTECTING_IC.search(part.value)
                                 for part in parts))
             if verdict[net]:
                 exposed_on[net].append(conn)
@@ -989,7 +1091,8 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
         symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
         empty = value in _EMPTY_VALUES
         if not (empty or _GENERIC_VALUE.fullmatch(value)
-                or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol)):
+                or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol
+                     and not _PART_NUMBER_SYMBOL.search(symbol))):
             continue
         if not empty and (mpn_of(comp) or any(_STOCK_FIELD.search(name) and text.strip()
                                               for name, text in comp.fields.items())):
@@ -1054,6 +1157,28 @@ PAIR_SKEW_PS = 100.0
 PAIR_VIA_DIFF = 2
 
 
+# A USB D+/D- pair that reaches only a charger, USB-PD controller or BC1.2 detector is not a data
+# link: those ICs read its DC levels to recognise the adapter. ESD arrays sit on any pair.
+# ponytail: part families by name; extend the list when another adapter-detect IC family turns up.
+_ADAPTER_IC = re.compile(r"CHARGER|BQ2[4-9]\d{3}|USB.?PD|POWER.?DELIVERY|STUSB|FUSB30|CH224|HUSB238|AP3377|TPS6598|"
+                         r"TCPC|BC1\.?2", re.IGNORECASE)
+_PAIR_ESD = re.compile(r"ESD|TVS|USBLC|TPD\d|PRTR|SRV05|PESD|IP4\d{3}|CM1\d{3}|ECMF|RCLAMP", re.IGNORECASE)
+_PAIR_PASSIVE = {"resistor", "capacitor", "inductor", "ferrite", "resistor_array", "testpoint", "connector",
+                 "diode", "fuse"}
+
+
+def _adapter_nets(snapshot: DesignSnapshot, pairs) -> set[str]:
+    """Both nets of each pair whose only active parts are adapter-detect ICs (and at least one is)."""
+    skip: set[str] = set()
+    for pair in pairs:
+        ends = [(comp, " ".join([comp.value, comp.footprint, *comp.fields.values()])) for comp in snapshot.components
+                if comp.nets & set(pair) and part_kind(comp) not in _PAIR_PASSIVE]
+        ends = [(comp, text) for comp, text in ends if not _PAIR_ESD.search(text)]
+        if ends and all(_ADAPTER_IC.search(text) for _, text in ends):
+            skip |= set(pair)
+    return skip
+
+
 def _routed_pairs(snapshot: DesignSnapshot) -> list:
     """(positive, negative, routing P, routing N, interface guess) for likely differential
     pairs with routed track on both lines. Unrouted is not mismatched, so those are skipped."""
@@ -1063,8 +1188,10 @@ def _routed_pairs(snapshot: DesignSnapshot) -> list:
         return []
     routing = net_routing(copper)
     found = find_high_speed(routing, copper.net_classes)
+    adapter = _adapter_nets(snapshot, found.pairs)
     return [(p, n, routing[p], routing[n], found.interfaces.get(p) or found.interfaces.get(n))
-            for p, n in found.pairs if routing[p].length_mm > 0 and routing[n].length_mm > 0]
+            for p, n in found.pairs if routing[p].length_mm > 0 and routing[n].length_mm > 0
+            and p not in adapter]
 
 
 def _vias(count: int) -> str:
@@ -1126,21 +1253,41 @@ GAP_MM = 3.0             # a stretch of fast route this long with no reference f
 #                          (issue #62's rule of thumb, not measured)
 GAP_STEP_MM = 0.5        # sample spacing along a track for the fill check
 VIA_HOLE_MM = 0.5        # samples this close to one of the net's own vias sit in its antipad: skipped
-RETURN_VIA_MM = 3.0      # return via must sit this close to the signal via. Layout guides ask for
-#                          ~1 mm; 3 mm only catches clearly missing ones (rule of thumb, not measured).
+RETURN_VIA_MM = 4.0      # return via must sit this close to the signal via. Layout guides ask for
+#                          ~1 mm; 4 mm only catches clearly missing ones (rule of thumb, not measured: a
+#                          ground via 3.3 mm away on a board with ground planes all round was judged fine).
 STITCH_CAP_MM = 5.0      # a capacitor between two different reference nets this close counts as the return
 VIA_TOUCH_MM = 0.25      # a track end this close to a via centre is connected to it
 _CRYSTAL = re.compile(r"XTAL|XIN|XOUT|OSC|HSE|LSE|32K|RTC")
+_ANTENNA = re.compile(r"ANTENNA|(?<![A-Z])ANT(?![A-Z])|PCB[_ ]?LOOP", re.IGNORECASE)
+_SERIES = {"resistor", "capacitor", "inductor", "ferrite"}
 _STALE_FILL = ("Planes are judged from the zone fills saved in the board; if zones changed since the "
                "last fill, refill them in KiCad (Edit > Fill All Zones) and re-run.")
 
 
-def _fast_nets(copper) -> dict[str, str]:
+def _fast_nets(snapshot: DesignSnapshot) -> dict[str, str]:
     """net -> interface guess (or "differential pair") for nets the return-path checks cover."""
     from .copper import find_high_speed   # copper imports this module
+    copper = snapshot.copper
     found = find_high_speed({seg.net for seg in copper.segments if seg.net}, copper.net_classes)
+    adapter = _adapter_nets(snapshot, found.pairs)
     nets = {net: "differential pair" for pair in found.pairs for net in pair} | dict(found.interfaces)
-    return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net))}
+    return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net)) and net not in adapter}
+
+
+def _antenna_nets(snapshot: DesignSnapshot) -> set[str]:
+    """Nets on an antenna's pins, and those joined to them through series resistors, capacitors and
+    inductors (a matching network, an EMC filter). Antennas sit over a deliberate copper keep-out."""
+    series = [comp.nets for comp in snapshot.components
+              if part_kind(comp) in _SERIES and len(comp.nets) == 2 and not any(is_ground(n) or is_supply_name(n) for n in comp.nets)]
+    nets = {net for comp in snapshot.components
+            if re.match(r"(AE|ANT)\d*$", comp.reference, re.IGNORECASE) or _ANTENNA.search(f"{comp.value} {comp.footprint}")
+            for net in comp.nets if not is_ground(net)}
+    while True:
+        grown = nets | {net for pair in series if pair & nets for net in pair}
+        if grown == nets:
+            return nets
+        nets = grown
 
 
 def _inside(points, polygon):
@@ -1195,7 +1342,8 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
     copper = snapshot.copper
     if copper is None or not copper.models:
         return []
-    nets = _fast_nets(copper)
+    antennas = _antenna_nets(snapshot)
+    nets = {net: guess for net, guess in _fast_nets(snapshot).items() if net not in antennas}
     fills: dict[str, list] = defaultdict(list)
     for zone in copper.zones:
         if is_ground(zone.net) or is_supply_name(zone.net):
@@ -1292,7 +1440,7 @@ def check_return_vias(snapshot: DesignSnapshot) -> list[Finding]:
     copper = snapshot.copper
     if copper is None or not copper.planes:
         return []
-    nets = _fast_nets(copper)
+    nets = _fast_nets(snapshot)
     ends: dict[str, list] = defaultdict(list)
     for seg in copper.segments:
         if seg.net in nets:
@@ -1388,7 +1536,8 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 
 # Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
-BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating",
+BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
+                        "net.single_pin", "pin.input_floating",
                         # High-speed checks: not yet measured on unseen boards.
                         "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",
                         # Footprint-fit checks: starting tolerances, not yet measured.

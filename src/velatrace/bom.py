@@ -467,8 +467,14 @@ def _normalise_findings(ctx: _Context) -> list[Finding]:
             continue
         kind, value, package = line
         volts = {m.parsed.voltage for m in members} - {None}
-        # Never suggest a spelling that drops or lowers a stated voltage rating.
+        # A rating written on some members only, where the rated and unrated parts sit on rails of
+        # different voltage ('100n 50V' on +24V, '100n' on +3.3V), is a deliberate distinction.
+        rails = [{rail_voltage(ctx.role(m).rail) for m in members if (m.parsed.voltage is not None) == rated}
+                 - {None} for rated in (True, False)]
+        if not same_part and all(rails) and rails[0] != rails[1]:
+            continue
         canonical = max(texts, key=lambda text: (
+            # Never suggest a spelling that drops or lowers a stated voltage rating.
             same_part or not volts or parse_value(text, kind).voltage == max(volts),
             texts[text], text == format_value(value, kind)))
         spelled = "; ".join(f"{_ref_list(_refs(m for m in members if m.component.value.strip() == t))}"

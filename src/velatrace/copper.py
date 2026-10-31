@@ -26,7 +26,20 @@ from .candidate import read_board
 from .errors import ValidationError
 from .sexpr import children, parse
 from .stackup import homogeneous_delay_ps
-from .vela_board import _GRAPHICS, _first, _net_name, _outline
+from .vela_board import _GRAPHICS, _first, _outline
+from .vela_board import _net_name as _raw_net_name
+
+# KiCad escapes these characters in board-file net names; netlists and the IPC API use the plain text.
+_KICAD_ESCAPES = {"{slash}": "/", "{backslash}": "\\", "{colon}": ":", "{lt}": "<", "{gt}": ">",
+                  "{dblquote}": '"', "{quote}": "'", "{brace}": "{"}
+
+
+def _net_name(node, codes) -> str:
+    name = _raw_net_name(node, codes)
+    if "{" in name:
+        for escaped, plain in _KICAD_ESCAPES.items():
+            name = name.replace(escaped, plain)
+    return name
 from .vela_electrical import FR4_EPSILON_R, LayerModel, differential_pairs, layer_models
 
 PLANE_COVERAGE = 0.5   # share of the board outline's convex hull a layer's ground/supply fill must cover

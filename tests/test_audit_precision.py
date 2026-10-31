@@ -126,7 +126,7 @@ def test_addressable_leds_are_checked_like_ics():
 
 def test_single_pin_skips_no_connect_and_dangling_outputs():
     def one(kind):
-        return rules(design(ic("U1", ("3", "/GPIO23", "GPIO23", kind)), cap()), "net")
+        return rules(design(ic("U1", ("3", "/STATUS", "GPIO23", kind)), cap()), "net")
     assert [f.severity for f in one("bidirectional")] == [Severity.INFO]
     assert one("bidirectional+no_connect") == []
     assert one("output") == [] and one("power_out") == []
@@ -237,7 +237,7 @@ def i2c_found(*parts):
 def test_missing_pullup_on_plug_in_board_is_info_but_on_board_controller_still_warns():
     eeprom = ic("U1", ("3", "/SDA", "SDA"), value="24C02")
     host = header("J1", "/SDA", "GND", "+3V3")
-    assert i2c_found(eeprom, host) == [("i2c.pullup.missing", Severity.INFO)]
+    assert i2c_found(eeprom, host) == []  # no master on this board: the host supplies the pull-ups
     mcu = ic("U2", ("5", "/SDA", "GPIO21"), value="ESP32-S3")
     # Beta rule: run_rules shows it as a note until a benchmark round proves it.
     assert i2c_found(eeprom, mcu, host) == [("i2c.pullup.missing", Severity.INFO)]

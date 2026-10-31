@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from velatrace.easyeda import MAX_PADS, RealPart, parse_component
+from velatrace.easyeda import MAX_PADS, RealPad, RealPart, parse_component
 from velatrace.findings import Severity
 from velatrace.footprint_fit import compare, fit_candidates, kicad_pads
 from velatrace.ipc import KiCadReader
@@ -361,6 +361,76 @@ def test_fit_candidates_skip_passives_and_parts_without_pads():
     assert kicad_pads(snapshot.components[0]) == [("1", 0.0, 0.0, None)]
 
 
+# ---- pad areas ----
+
+def fit_part(*pads):
+    """A RealPart from (number, x, y, area) records."""
+    return RealPart("C1", "Part", "PKG", tuple(RealPad(n, x, y, False, area) for n, x, y, area in pads))
+
+
+def fit_sized(pads, size):
+    """KiCad pads (number, x, y, tht) with one (width, height) each."""
+    return [(n, x, y, t, size) for n, x, y, t in pads]
+
+
+# KiCad TDSON-8-1 (5 x 6 power SON): pins 1-4 down the left, one merged drain pad "5".
+FIT_SON_PINS = [(str(i + 1), -2.9, -1.905 + 1.27 * i) for i in range(4)]
+FIT_SON = ([(n, x, y, False, (0.85, 0.5)) for n, x, y in FIT_SON_PINS] + [("5", 1.05, 0.0, False, (4.55, 4.41))])
+FIT_SON_PART = fit_part(*[(n, x, y, 0.5) for n, x, y in FIT_SON_PINS],
+                        *[(str(5 + i), 2.9, -1.905 + 1.27 * i, 0.5) for i in range(4)], ("9", 0.5, 0.0, 18.0))
+
+
+def test_part_pads_inside_one_merged_footprint_pad_are_not_a_pad_count_finding():
+    assert rules([p[:4] for p in FIT_SON], FIT_SON_PART) == ["fit.pad_count"]    # sizes unknown: as before
+    assert rules(FIT_SON, FIT_SON_PART) == []
+    # A drain pad too small to reach the drain pins: not a merged pad.
+    assert rules(FIT_SON[:4] + [("5", 1.05, 0.0, False, (1.0, 1.0))], FIT_SON_PART) == ["fit.pad_count"]
+
+
+def test_seven_pad_part_on_a_three_pad_footprint_is_still_a_pad_count_finding():
+    three = fit_sized([("1", -2.25, 0.0, False), ("2", 0.75, 0.0, False), ("3", 2.25, 0.0, False)], (0.7, 1.1))
+    part = fit_part(("1", -2.25, 0.0, 1.0), ("2", 0.75, 0.0, 1.0), ("3", 2.25, 0.0, 1.0),
+                    *[(str(4 + i), x, y, 1.0) for i, (x, y) in enumerate([(-3.8, 2), (3.8, 2), (-3.8, -2), (3.8, -2)])])
+    assert rules(three, part) == ["fit.pad_count"]
+
+
+def test_mounting_pads_sharing_a_number_are_counted_one_by_one():
+    """A tact switch's four "MP" pads, two on each side less than 2.5 mm apart, are four pads."""
+    mount = [("MP", x, y, False, (1.0, 0.7)) for x in (-3.8, 3.8) for y in (-0.65, 1.55)]
+    pins = [("1", -2.2, -1.43, False, (0.6, 1.1)), ("2", 0.75, -1.43, False, (0.7, 1.1)), ("3", 2.25, -1.43, False, (0.7, 1.1))]
+    part = fit_part(("1", -2.25, -1.49, 1.8), ("2", 0.75, -1.49, 1.8), ("3", 2.25, -1.49, 1.8),
+                    ("4", 3.8, -0.78, 1.0), ("5", 3.8, 1.49, 1.0), ("6", -3.8, 1.49, 1.0), ("7", -3.8, -0.78, 1.0))
+    assert rules(pins + mount, part) == []
+    assert rules(pins + mount[:2], part) == ["fit.pad_count"]                    # no mounting pads on one side
+
+
+def test_longer_toes_that_still_land_on_the_footprint_pads_are_not_a_pitch_finding():
+    """SOD-123F pads (centres 1.4 mm out, 1.1 mm wide) for a SOD-123FL part (centres 1.735 out)."""
+    pads = fit_sized(two_pads(1.4), (1.1, 1.1))
+    assert rules(two_pads(1.4), fit_part(("1", -1.735, 0.0, 1.4), ("2", 1.735, 0.0, 1.4))) == ["fit.pitch"]
+    assert rules(pads, fit_part(("1", -1.735, 0.0, 1.4), ("2", 1.735, 0.0, 1.4))) == []
+    assert rules(pads, fit_part(("1", -2.5, 0.0, 1.4), ("2", 2.5, 0.0, 1.4))) == ["fit.pitch"]     # SMA: off the pads
+
+
+def test_mic_case_is_still_a_layout_finding_with_pad_sizes():
+    assert rules(fit_sized(row(6), (1.7, 1.7)), real("C65114")) == ["fit.layout"]
+
+
+# ---- pin order of paired pads ----
+
+FIT_TACT = [("1", -2.1, -1.07, False), ("2", -2.1, 1.07, False), ("3", 2.1, -1.07, False), ("4", 2.1, 1.07, False)]
+FIT_TACT_PART = fit_part(("1", -2.1, -1.07, 0.7), ("2", 2.1, -1.07, 0.7), ("3", -2.1, 1.07, 0.7), ("4", 2.1, 1.07, 0.7))
+
+
+def test_four_pads_on_two_nets_two_each_are_not_a_pin_order_finding():
+    assert rules(FIT_TACT, FIT_TACT_PART) == ["fit.pin_order"]
+    pairs = {"1": "SIG", "2": "GND", "3": "SIG", "4": "GND"}
+    assert compare("SW1", FIT_TACT, FIT_TACT_PART, pairs) == []
+    # Distinct nets, or an unconnected pair: the numbering matters.
+    assert [f.rule for f in compare("SW1", FIT_TACT, FIT_TACT_PART, {"1": "A", "2": "B", "3": "C", "4": "D"})] == ["fit.pin_order"]
+    assert [f.rule for f in compare("SW1", FIT_TACT, FIT_TACT_PART, {"1": "A", "2": "A", "3": "B", "4": "C"})] == ["fit.pin_order"]
+
+
 # ---- IPC offsets ----
 
 def _reader_snapshot(angle, layer, pads):
@@ -399,6 +469,24 @@ def test_ipc_pad_offsets_undo_footprint_rotation_and_side():
         ("1", pytest.approx(0, abs=1e-9), pytest.approx(0, abs=1e-9), True),
         ("2", pytest.approx(0, abs=1e-9), pytest.approx(2.54), False),
         ("", pytest.approx(-2.54), pytest.approx(0, abs=1e-9), False)]
+
+
+def test_ipc_pad_size_is_the_copper_box_in_the_footprint_frame():
+    from kipy.board_types import FootprintInstance, Pad
+    from kipy.geometry import Angle, Vector2
+    from velatrace.ipc import _pin
+    fp = FootprintInstance()
+    fp.orientation = Angle.from_degrees(90)
+    pad = Pad()
+    pad.padstack.copper_layers[0].size = Vector2.from_xy(1_000_000, 500_000)
+    pad.padstack.angle = Angle.from_degrees(90)           # pad angles are board-absolute: not turned in the footprint
+    assert _pin(fp, pad, False).size_mm == pytest.approx((1.0, 0.5))
+    pad.padstack.angle = Angle.from_degrees(0)            # turned a quarter against the footprint
+    assert _pin(fp, pad, False).size_mm == pytest.approx((0.5, 1.0))
+    assert kicad_pads(Component("U1", "", "L:F", (replace(_pin(fp, pad, False), offset_mm=(0, 0)),)))[0][4] == pytest.approx((0.5, 1.0))
+    # No copper layer (a paste-only pad): the size stays unknown.
+    del pad.padstack._proto.copper_layers[:]
+    assert _pin(fp, pad, False).size_mm is None
 
 
 def test_ipc_missing_pad_fields_leave_fit_data_unknown():

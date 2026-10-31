@@ -127,6 +127,17 @@ class ConsolidationTests(unittest.TestCase):
                                          two_pin("C2", "10u 25V", C0402, "+3V3", "GND")))
         self.assertEqual(rules(findings, "bom.value_normalise"), [])
 
+    def test_rating_on_a_higher_voltage_rail_is_a_deliberate_distinction(self):
+        for plain, rated in (("100n", "100n 50V"), ("1u", "1u 50V")):
+            findings = bom_findings(snapshot(two_pin("C1", plain, C0402, "+3V3", "GND"),
+                                             two_pin("C2", rated, C0402, "+24V", "GND")))
+            self.assertEqual(rules(findings, "bom.value_normalise"), [], (plain, rated))
+        # The same rail, or a rail the netlist does not name a voltage for, is still a spelling variant.
+        for rail in ("+3V3", "VDD"):
+            findings = bom_findings(snapshot(two_pin("C1", "10uf 0402", C0402, "+3V3", "GND"),
+                                             two_pin("C2", "10uf 0402 6.3V", C0402, rail, "GND")))
+            self.assertEqual(len(rules(findings, "bom.value_normalise")), 1, rail)
+
     def test_near_pull_values_merge_without_parts_data(self):
         findings = bom_findings(snapshot(two_pin("R1", "4.7k", R0402, "+3V3", "/SDA"),
                                          two_pin("R2", "4.7k", R0402, "+3V3", "/SCL"),
