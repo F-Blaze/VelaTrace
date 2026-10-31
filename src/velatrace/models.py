@@ -22,6 +22,8 @@ class Pin:
     offset_mm: tuple[float, float] | None = None
     # The pad has a drill (PTH or NPTH); None when unknown.
     through_hole: bool | None = None
+    # Copper extent of the pad (width, height) in the same footprint frame as offset_mm; None when unknown.
+    size_mm: tuple[float, float] | None = None
 
     @property
     def no_connect(self) -> bool:

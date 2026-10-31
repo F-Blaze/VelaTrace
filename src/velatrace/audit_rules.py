@@ -1166,6 +1166,28 @@ PAIR_SKEW_PS = 100.0
 PAIR_VIA_DIFF = 2
 
 
+# A USB D+/D- pair that reaches only a charger, USB-PD controller or BC1.2 detector is not a data
+# link: those ICs read its DC levels to recognise the adapter. ESD arrays sit on any pair.
+# ponytail: part families by name; extend the list when another adapter-detect IC family turns up.
+_ADAPTER_IC = re.compile(r"CHARGER|BQ2[4-9]\d{3}|USB.?PD|POWER.?DELIVERY|STUSB|FUSB30|CH224|HUSB238|AP3377|TPS6598|"
+                         r"TCPC|BC1\.?2", re.IGNORECASE)
+_PAIR_ESD = re.compile(r"ESD|TVS|USBLC|TPD\d|PRTR|SRV05|PESD|IP4\d{3}|CM1\d{3}|ECMF|RCLAMP", re.IGNORECASE)
+_PAIR_PASSIVE = {"resistor", "capacitor", "inductor", "ferrite", "resistor_array", "testpoint", "connector",
+                 "diode", "fuse"}
+
+
+def _adapter_nets(snapshot: DesignSnapshot, pairs) -> set[str]:
+    """Both nets of each pair whose only active parts are adapter-detect ICs (and at least one is)."""
+    skip: set[str] = set()
+    for pair in pairs:
+        ends = [(comp, " ".join([comp.value, comp.footprint, *comp.fields.values()])) for comp in snapshot.components
+                if comp.nets & set(pair) and part_kind(comp) not in _PAIR_PASSIVE]
+        ends = [(comp, text) for comp, text in ends if not _PAIR_ESD.search(text)]
+        if ends and all(_ADAPTER_IC.search(text) for _, text in ends):
+            skip |= set(pair)
+    return skip
+
+
 def _routed_pairs(snapshot: DesignSnapshot) -> list:
     """(positive, negative, routing P, routing N, interface guess) for likely differential
     pairs with routed track on both lines. Unrouted is not mismatched, so those are skipped."""
@@ -1175,8 +1197,10 @@ def _routed_pairs(snapshot: DesignSnapshot) -> list:
         return []
     routing = net_routing(copper)
     found = find_high_speed(routing, copper.net_classes)
+    adapter = _adapter_nets(snapshot, found.pairs)
     return [(p, n, routing[p], routing[n], found.interfaces.get(p) or found.interfaces.get(n))
-            for p, n in found.pairs if routing[p].length_mm > 0 and routing[n].length_mm > 0]
+            for p, n in found.pairs if routing[p].length_mm > 0 and routing[n].length_mm > 0
+            and p not in adapter]
 
 
 def _vias(count: int) -> str:
@@ -1238,21 +1262,41 @@ GAP_MM = 3.0             # a stretch of fast route this long with no reference f
 #                          (issue #62's rule of thumb, not measured)
 GAP_STEP_MM = 0.5        # sample spacing along a track for the fill check
 VIA_HOLE_MM = 0.5        # samples this close to one of the net's own vias sit in its antipad: skipped
-RETURN_VIA_MM = 3.0      # return via must sit this close to the signal via. Layout guides ask for
-#                          ~1 mm; 3 mm only catches clearly missing ones (rule of thumb, not measured).
+RETURN_VIA_MM = 4.0      # return via must sit this close to the signal via. Layout guides ask for
+#                          ~1 mm; 4 mm only catches clearly missing ones (rule of thumb, not measured: a
+#                          ground via 3.3 mm away on a board with ground planes all round was judged fine).
 STITCH_CAP_MM = 5.0      # a capacitor between two different reference nets this close counts as the return
 VIA_TOUCH_MM = 0.25      # a track end this close to a via centre is connected to it
 _CRYSTAL = re.compile(r"XTAL|XIN|XOUT|OSC|HSE|LSE|32K|RTC")
+_ANTENNA = re.compile(r"ANTENNA|(?<![A-Z])ANT(?![A-Z])|PCB[_ ]?LOOP", re.IGNORECASE)
+_SERIES = {"resistor", "capacitor", "inductor", "ferrite"}
 _STALE_FILL = ("Planes are judged from the zone fills saved in the board; if zones changed since the "
                "last fill, refill them in KiCad (Edit > Fill All Zones) and re-run.")
 
 
-def _fast_nets(copper) -> dict[str, str]:
+def _fast_nets(snapshot: DesignSnapshot) -> dict[str, str]:
     """net -> interface guess (or "differential pair") for nets the return-path checks cover."""
     from .copper import find_high_speed   # copper imports this module
+    copper = snapshot.copper
     found = find_high_speed({seg.net for seg in copper.segments if seg.net}, copper.net_classes)
+    adapter = _adapter_nets(snapshot, found.pairs)
     nets = {net: "differential pair" for pair in found.pairs for net in pair} | dict(found.interfaces)
-    return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net))}
+    return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net)) and net not in adapter}
+
+
+def _antenna_nets(snapshot: DesignSnapshot) -> set[str]:
+    """Nets on an antenna's pins, and those joined to them through series resistors, capacitors and
+    inductors (a matching network, an EMC filter). Antennas sit over a deliberate copper keep-out."""
+    series = [comp.nets for comp in snapshot.components
+              if part_kind(comp) in _SERIES and len(comp.nets) == 2 and not any(is_ground(n) or is_supply_name(n) for n in comp.nets)]
+    nets = {net for comp in snapshot.components
+            if re.match(r"(AE|ANT)\d*$", comp.reference, re.IGNORECASE) or _ANTENNA.search(f"{comp.value} {comp.footprint}")
+            for net in comp.nets if not is_ground(net)}
+    while True:
+        grown = nets | {net for pair in series if pair & nets for net in pair}
+        if grown == nets:
+            return nets
+        nets = grown
 
 
 def _inside(points, polygon):
@@ -1307,7 +1351,8 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
     copper = snapshot.copper
     if copper is None or not copper.models:
         return []
-    nets = _fast_nets(copper)
+    antennas = _antenna_nets(snapshot)
+    nets = {net: guess for net, guess in _fast_nets(snapshot).items() if net not in antennas}
     fills: dict[str, list] = defaultdict(list)
     for zone in copper.zones:
         if is_ground(zone.net) or is_supply_name(zone.net):
@@ -1404,7 +1449,7 @@ def check_return_vias(snapshot: DesignSnapshot) -> list[Finding]:
     copper = snapshot.copper
     if copper is None or not copper.planes:
         return []
-    nets = _fast_nets(copper)
+    nets = _fast_nets(snapshot)
     ends: dict[str, list] = defaultdict(list)
     for seg in copper.segments:
         if seg.net in nets:
