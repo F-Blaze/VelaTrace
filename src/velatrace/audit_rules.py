@@ -75,7 +75,8 @@ _PREFIX_KINDS = {"R": "resistor", "RN": "resistor_array", "RA": "resistor_array"
                  "LED": "led", "U": "ic", "IC": "ic", "J": "connector", "P": "connector",
                  "CN": "connector", "CON": "connector", "F": "fuse", "Q": "transistor",
                  "TP": "testpoint", "H": "mounting", "MH": "mounting", "Y": "crystal",
-                 "SW": "switch", "BT": "battery"}
+                 "SW": "switch", "BT": "battery", "JP": "jumper", "SJ": "jumper"}
+_JUMPER_FOOTPRINT = re.compile(r"SOLDER.?JUMPER|JUMPER_")
 # Addressable LEDs carry a driver IC and need decoupling like one.
 _ADDRESSABLE_LED = re.compile(r"WS28\d\d|SK6\d{3}|APA1\d\d|SK98\d\d", re.IGNORECASE)
 # Pins typed power that are switch nodes or control inputs, never decoupled rails.
@@ -92,6 +93,16 @@ _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
 # (data-ready/interrupt) that some symbols type as input.
 _OPEN_OK_PIN = {"SWCLK", "SWDIO", "SWO", "SWDCK", "TCK", "TMS", "TDI", "TDO", "DRDY", "RDY", "INT", "INT1",
                 "INT2", "IRQ", "ALERT"}
+# Input pins that may float on a part family (matched on value + MPN), with the datasheet reason.
+# Only the listed pins: any other open input of the same part is still reported.
+_OPEN_OK_BY_PART = (
+    # I2C EEPROM/FRAM (24Cxx, AT24, CAT24, FM24, M24): A0-A2 (E0-E2 on ST), WP/WC have internal pull-downs.
+    (re.compile(r"(?<![A-Z0-9])24[A-Z]{1,3}\d{1,4}|AT24|CAT24|FM24|M24[A-Z]?\d"), {"A0", "A1", "A2", "E0", "E1", "E2", "WP", "WC"}),
+    # CH340/CH341 USB-UART: modem inputs have internal pull-ups, R232 an internal pull-down.
+    (re.compile(r"CH34[01]"), {"CTS", "DSR", "RI", "DCD", "R232"}),
+    # CP210x / FT23x USB-UART: unused modem-control inputs may be left open (internal pull-ups).
+    (re.compile(r"CP210\d|FT23[012]"), {"CTS", "DSR", "RI", "DCD"}),
+)
 _UNUSED_USB_PIN = re.compile(r"SBU\d")  # USB-C sideband pins: unused on USB 2.0
 _LED_PART = re.compile(r"7.?SEG|SEVEN.?SEG|(?:^|\s)(?:LED|DISPLAY)")  # on "value footprint"
 # Connectors that never bring power in: memory-card/SIM sockets, M.2, debug/programming pads
@@ -159,6 +170,8 @@ def part_kind(comp: Component) -> str:
         return "testpoint"
     if library.startswith("MOUNTINGHOLE"):
         return "mounting"
+    if _JUMPER_FOOTPRINT.search(comp.footprint.upper()):
+        return "jumper"
     kind = _PREFIX_KINDS.get(prefix)
     if kind is None:
         for lib, guess in (("RESISTOR", "resistor"), ("CAPACITOR", "capacitor"),
@@ -494,6 +507,62 @@ def _pulled_up_nearby(design: _Design, net: str, line: str) -> bool:
     return False
 
 
+# SPI signal names: a device with several of them connected is on an SPI bus, whatever its data pins are called.
+_SPI_PIN = re.compile(r"N?CS\d?|CSB|NSS|N?DC|DCX?|RS|RESX?|N?RST|RESET|MOSI|MISO|SCLK|SCK")
+_SPI_NET_TOKENS = {"SCLK", "SCK", "MOSI", "MISO"}
+# MCU-like pins (GPIO.3, IO12, PB4, GP22); an IC with several is a likely I2C master.
+_MASTER_PIN = re.compile(r"(?:GPIO|GP|IO)[._]?\d+|P[A-K]\d{1,2}|P\d{1,2}[._]\d{1,2}", re.IGNORECASE)
+
+
+def _spi_bus(design: _Design, net: str) -> bool:
+    """SDA/SCL named nets that are SPI data/clock: the net name also carries an SPI signal (SDA_SCLK,
+    SCL_MOSI: a jumper-selectable display line), or a device on it has two or more other SPI-named pins
+    wired to signal nets (display CS + DC/RS + RES). Pins tied to a rail/ground (a CSB strap) do not count."""
+    if set(re.split(r"[^A-Z0-9]+", net_label(net))) & _SPI_NET_TOKENS:
+        return True
+    for comp, _ in design.nodes[net]:
+        spi = {re.sub(r"[^A-Z0-9]", "", pin.name.upper()) for pin in comp.pins
+               if pin.net and not pin.no_connect and not i2c_line(pin.net) and pin.net not in design.grounds
+               and pin.net not in design.supplies and len(design.nodes[pin.net]) > 1
+               and _SPI_PIN.fullmatch(re.sub(r"[^A-Z0-9]", "", pin.name.upper()))}
+        if len(spi) >= 2:
+            return True
+    return False
+
+
+def _mcu_like(design: _Design, comp: Component) -> bool:
+    """A module, or an IC with several GPIO-named pins: it can be the bus master."""
+    return design.kind[comp.reference] == "module" or (design.kind[comp.reference] == "ic" and sum(
+        1 for pin in comp.pins if any(_MASTER_PIN.fullmatch(token) for token in re.split(r"[/\s,\\]+", pin.name))) >= 4)
+
+
+def _jumper_hops(design: _Design, net: str) -> list[tuple[Component, str]]:
+    """(solder jumper, net on its other side) for every two-pin jumper on net."""
+    hops = []
+    for comp, _ in design.nodes[net]:
+        nets = two_terminal_nets(comp) if design.kind[comp.reference] == "jumper" else None
+        if nets and net in nets:
+            hops.append((comp, nets[1] if nets[0] == net else nets[0]))
+    return hops
+
+
+def _jumpered_pullups(design: _Design, net: str) -> list[tuple[Component, str, Component]]:
+    """Resistors from a rail that reach the bus only through one jumper: (resistor, rail, jumper), for
+    bus -> resistor -> jumper -> rail and bus -> jumper -> resistor -> rail. 0 Ω links are no pull-up."""
+    found = []
+    for start, link in [(net, None)] + [(far, jp) for jp, far in _jumper_hops(design, net)]:
+        for comp, _ in design.nodes[start]:
+            nets = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
+            if not nets or start not in nets or parse_resistance(comp.value) == 0:
+                continue
+            other = nets[1] if nets[0] == start else nets[0]
+            if link is not None and _is_rail(design, other):
+                found.append((comp, other, link))
+            elif link is None:
+                found += [(comp, far, jp) for jp, far in _jumper_hops(design, other) if _is_rail(design, far)]
+    return found
+
+
 def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
     """SDA/SCL lines: missing, redundant, mixed-rail, 0 Ω or out-of-range pull-ups."""
     design = _Design(snapshot)
@@ -526,12 +595,27 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
         if built_in and real and all(ohms for _, _, ohms in real):
             findings += _combined_pullup(net, real, built_in)
         if not pullups and not built_in:
+            if _spi_bus(design, net):
+                continue  # SDA/SCL pins of an SPI display: no pull-ups needed
+            if behind := _jumpered_pullups(design, net):
+                refs = tuple(sorted({comp.reference for comp, _, _ in behind} | {jp.reference for _, _, jp in behind}))
+                resistors = ", ".join(sorted({comp.reference for comp, _, _ in behind}))
+                jumpers = ", ".join(sorted({jp.reference for _, _, jp in behind}))
+                findings.append(Finding(
+                    "i2c.pullup.optional", Severity.INFO,
+                    f"{net} pull-up {resistors} is behind jumper {jumpers}", refs, (net, behind[0][1]),
+                    f"{line} line {net} reaches {behind[0][1]} through {resistors} only via {jumpers}; "
+                    "with the jumper open the bus has no pull-up on this board.",
+                    f"Close {jumpers} unless the host board provides pull-ups."))
+                continue
             offboard = sorted(ref for ref in design.refs_on(net) if design.kind[ref] in {"connector", "module"})
             # A controller here (an IC driving the line from a GPIO-named pin) owns the bus, so
             # its pull-ups belong on this board even if the bus also leaves it.
             master_here = any(design.kind[comp.reference] == "ic" and any(
                 _GPIO_PIN.fullmatch(token) for token in re.split(r"[/\s,]+", pin.name))
                 for comp, pin in design.nodes[net])
+            if offboard and not master_here and not any(_mcu_like(design, comp) for comp, _ in design.nodes[net]):
+                continue  # no master on this board and the bus leaves through a connector: the host board pulls it up
             if master_here and len(devices) == 1 and offboard and all(_breakout(design, ref) for ref in offboard):
                 continue  # only the controller is here and the bus goes to a general pin header: slaves and pull-ups are off-board
             if _pulled_up_nearby(design, net, line):
@@ -658,6 +742,19 @@ def check_led_resistors(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+_PORT_NAME = re.compile(r"(?:GPIO|GP|IO|P)?[A-K]?\d{1,3}")
+
+
+def _repeats_pin_name(net: str, pin: Pin) -> bool:
+    """Label GP22/GPIO22/IO35/PB4/B4 on the pin named GPIO22/IO35/PB4: the name adds nothing."""
+    def alias(name: str) -> str:
+        return re.sub(r"^(?:GPIO|GP|IO|P)(?=[A-K]?\d)", "", name)
+    label = net_label(net)
+    return bool(_PORT_NAME.fullmatch(label)) and any(
+        _PORT_NAME.fullmatch(token) and alias(token) == alias(label)
+        for token in re.split(r"[/\s,\\]+", pin.name.upper()))
+
+
 def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
     """Named nets that reach one pin only: usually a mistyped or missing label."""
     design = _Design(snapshot)
@@ -676,6 +773,8 @@ def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         if design.kind[comp.reference] == "connector" and _UNUSED_USB_PIN.fullmatch(pin.name.upper()):
             continue
+        if _repeats_pin_name(net, pin):
+            continue  # a label that only echoes the pin's own GPIO/port name documents an unused pin
         twins = sorted(other for other in by_label[net_label(net)]
                        if other != net and len(design.nodes[other]) > 1)
         if twins:
@@ -736,9 +835,11 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
         # TVS/ESD arrays and LED displays: unused channels/segments may stay open.
         if _PROTECTION_VALUE.search(text) or _LED_PART.search(text):
             continue
+        family = f"{ic.value} {mpn_of(ic) or ''}".upper()
+        open_ok = {name for part_re, names in _OPEN_OK_BY_PART if part_re.search(family) for name in names}
         floating = [pin for pin in ic.pins if pin.net and pin.electrical_type.strip().lower() == "input"
                     and len(design.nodes.get(pin.net, ())) == 1 and not _TRIM_PIN.search(pin.name.upper())
-                    and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & _OPEN_OK_PIN]
+                    and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & (_OPEN_OK_PIN | open_ok)]
         if not floating:
             continue
         names = ", ".join(pin.name or pin.number for pin in floating)
@@ -1388,7 +1489,8 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
 
 # Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
-BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating",
+BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing", "i2c.pullup.optional",
+                        "net.single_pin", "pin.input_floating",
                         # High-speed checks: not yet measured on unseen boards.
                         "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",
                         # Footprint-fit checks: starting tolerances, not yet measured.

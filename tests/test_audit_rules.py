@@ -233,6 +233,67 @@ def test_i2c_is_silent_when_it_cannot_judge():
     assert rules(spi, "i2c") == []
 
 
+def i2c_mcu(*extra):
+    """An MCU with GPIO-named pins whose PB9 drives SDA (a likely I2C master)."""
+    return part("U1", "STM32F103", "Package_QFP:LQFP-48", ("1", "+3V3", "VDD"), ("2", "GND", "GND"),
+                ("3", "SDA", "PB9"), ("4", "GPIO_A", "PA0"), ("5", "GPIO_B", "PA1"), ("6", "GPIO_C", "PA2"), *extra)
+
+
+def i2c_sensor(ref="U2", *extra):
+    return part(ref, "SHT31", "Package_DFN_QFN:DFN-8", ("1", "+3V3", "VDD"), ("2", "GND", "GND"),
+                ("3", "SDA", "SDA"), *extra)
+
+
+def i2c_jumper(ref, a, b):
+    return part(ref, "I2C_PUE", "Jumper:SolderJumper_2_Open", ("1", a, "A"), ("2", b, "B"))
+
+
+def i2c_header():
+    return part("J1", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "SDA"), ("2", "GND"))
+
+
+def test_i2c_pullups_behind_a_jumper_are_an_optional_note():
+    for chain in ((res("R3", "SDA", "Net-(JP1-B)"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)")),   # bus -> R -> JP -> rail
+                  (i2c_jumper("JP1", "SDA", "Net-(JP1-B)"), res("R3", "Net-(JP1-B)", "+3V3"))):  # bus -> JP -> R -> rail
+        found = rules(design(i2c_mcu(), i2c_sensor(), cap(), *chain), "i2c")
+        assert [(f.rule, f.severity, f.refs) for f in found] == [("i2c.pullup.optional", Severity.INFO, ("JP1", "R3"))]
+        assert "JP1" in found[0].title and "host" in found[0].fix
+    assert "i2c.pullup.optional" in audit_rules.BETA_RULES
+    # A zero-ohm link behind the jumper is no pull-up; a real resistor straight to the rail needs no note.
+    zero = design(i2c_mcu(), i2c_sensor(), cap(), res("R3", "SDA", "Net-(JP1-B)", "0R"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)"))
+    assert [f.rule for f in rules(zero, "i2c")] == ["i2c.pullup.missing"]
+    direct = design(i2c_mcu(), i2c_sensor(), cap(), res("R3", "SDA", "+3V3"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)"))
+    assert rules(direct, "i2c") == []
+
+
+def test_i2c_without_any_pullup_and_an_onboard_mcu_is_still_missing():
+    for extra in ((), (i2c_header(),)):
+        found = rules(design(i2c_mcu(), i2c_sensor(), cap(), *extra), "i2c")
+        assert [f.rule for f in found] == ["i2c.pullup.missing"]
+
+
+def test_i2c_bus_of_a_plug_in_board_without_a_master_is_left_to_the_host():
+    assert rules(design(i2c_sensor(), cap(), i2c_header()), "i2c") == []
+    # The same slave alone with nothing else attached still reads as a missing pull-up.
+    assert [f.rule for f in rules(design(i2c_sensor(), i2c_sensor("U3"), cap()), "i2c")] == ["i2c.pullup.missing"]
+
+
+def test_i2c_named_nets_that_are_spi_are_skipped():
+    lcd = part("LCD1", "ST7789", "Display:LCD-SMD", ("1", "SDA", "SDA"), ("2", "SCL", "SCL"), ("3", "CS", "CS"),
+               ("4", "DC", "RS"), ("5", "RST", "RES"), ("6", "GND", "GND"))
+    spi_pins = ic("U1", ("3", "SDA", "GPIO19"), ("4", "SCL", "GPIO18"), ("5", "CS", "GPIO17"), ("6", "DC", "GPIO21"),
+                  ("7", "RST", "GPIO16"))
+    assert rules(design(spi_pins, lcd, cap()), "i2c") == []
+    # An I2C OLED whose D/C pin is only an address strap and which has just a RES line is still I2C.
+    oled = part("U2", "SSD1306", "Package_QFN:QFN-24", ("1", "SDA", "SDA"), ("2", "SCL", "SCL"), ("3", "GND", "D/C"),
+                ("4", "RST", "RES"), ("5", "GND", "GND"))
+    i2c_pins = ic("U1", ("3", "SDA", "GPIO19"), ("4", "SCL", "GPIO18"), ("5", "RST", "GPIO16"))
+    assert {f.rule for f in rules(design(i2c_pins, oled, cap()), "i2c")} == {"i2c.pullup.missing"}
+    # A display line shared through a jumper crossover carries the SPI name too: SDA_SCLK, SCL_MOSI.
+    dual = design(ic("U1", ("3", "SDA_SCLK", "GPIO14")), ic("U2", ("3", "SDA_SCLK", "SDA"), value="DISPLAY"), cap())
+    assert rules(dual, "i2c") == []
+
+
 # --- LEDs -------------------------------------------------------------------------------
 
 def led(ref, a, k, a_name="A", k_name="K"):
@@ -272,6 +333,16 @@ def test_single_pin_named_net():
     assert [f.severity for f in rules(header, "net")] == [Severity.INFO]
 
 
+def test_single_pin_label_repeating_the_gpio_name_is_documentation():
+    for label, pin in (("GP22", "GPIO22"), ("GPIO22", "GPIO22"), ("IO35", "IO35"), ("PB4", "PB4"), ("B4", "PB4")):
+        assert rules(design(ic("U1", ("3", label, pin)), cap()), "net") == [], label
+    # A functional name on an MCU pin is still a possible dangling label.
+    found = rules(design(ic("U1", ("3", "LED3", "PB10")), cap()), "net")
+    assert [(f.rule, f.nets) for f in found] == [("net.single_pin", ("LED3",))]
+    other_pin = rules(design(ic("U1", ("3", "GPIO22", "GPIO23")), cap()), "net")
+    assert [f.rule for f in other_pin] == ["net.single_pin"]
+
+
 def test_floating_ic_inputs_need_pin_types():
     def chip(kind):
         return part("U1", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
@@ -281,6 +352,40 @@ def test_floating_ic_inputs_need_pin_types():
     assert "EN" in found[0].title
     assert rules(design(chip("input+no_connect")), "pin") == []
     assert rules(design(chip("passive")), "pin") == []
+
+
+def eeprom_or_bridge(value, *pins, mpn=None):
+    return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("1", "+3V3", "VCC", "power_in"),
+                ("2", "GND", "GND", "power_in"), *pins, fields={"MPN": mpn} if mpn else None)
+
+
+def open_input(number, name):
+    return (number, f"unconnected-(U1-{name}-Pad{number})", name, "input")
+
+
+def test_floating_inputs_with_internal_pulls_are_allowed_per_part_family():
+    eeprom = eeprom_or_bridge("24C02", open_input("3", "A0"), open_input("4", "A1"), open_input("5", "A2"),
+                              open_input("6", "WP"))
+    assert rules(design(eeprom), "pin") == []
+    by_mpn = eeprom_or_bridge("EEPROM", open_input("3", "A0"), open_input("6", "WP"), mpn="FM24C64B-G")
+    assert rules(design(by_mpn), "pin") == []
+    modem = [open_input(str(n), name) for n, name in enumerate(["~{CTS}", "~{DSR}", "~{RI}", "~{DCD}", "R232"], 3)]
+    assert rules(design(eeprom_or_bridge("CH340C", *modem)), "pin") == []
+    # Only the listed pins: another open input of the same part is still reported.
+    found = rules(design(eeprom_or_bridge("CH340C", *modem, open_input("9", "RXD"))), "pin")
+    assert [(f.rule, f.refs) for f in found] == [("pin.input_floating", ("U1",))] and "RXD" in found[0].title
+    assert "A3" in rules(design(eeprom_or_bridge("24C02", open_input("3", "A3"))), "pin")[0].title
+
+
+def test_floating_inputs_stay_flagged_where_a_pin_must_be_driven():
+    reset = part("U1", "STM32F103", "Package_QFP:LQFP-48", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"),
+                 open_input("3", "NRST"))
+    opamp = part("U1", "LM358", "Package_SO:SOIC-8", ("1", "+5V", "V+", "power_in"), ("2", "GND", "V-", "power_in"),
+                 open_input("3", "+"))
+    gate = part("U1", "74HC00", "Package_SO:SOIC-14", ("1", "+3V3", "VCC", "power_in"), ("2", "GND", "GND", "power_in"),
+                open_input("3", "A"))
+    for chip in (reset, opamp, gate):
+        assert [f.rule for f in rules(design(chip), "pin")] == ["pin.input_floating"]
 
 
 # --- duplicates -------------------------------------------------------------------------
