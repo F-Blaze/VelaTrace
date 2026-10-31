@@ -52,11 +52,20 @@ _GPIO_PIN = re.compile(r"(?:GPIO\d+|IO\d+|P[A-K]\d{1,2}|P\d{1,2}[._]\d{1,2}|D\d{
                        re.IGNORECASE)
 _PROTECTION_VALUE = re.compile(r"TVS|ESD|USBLC|PRTR|TPD\d|SMAJ|SMBJ|PESD|SS\d{2}|1N58|B5819|POLYFUSE|PTC",
                                re.IGNORECASE)
+# Input protection built into the IC: current-limited USB power switches, load switches, eFuses, ideal
+# diodes and power muxes with reverse blocking or a current limit. A rail entering one is protected.
+_PROTECTING_IC = re.compile(
+    r"CH217|TPS2115|TPS2113|TPS2116|TPS259|TPS2051|TPS2041|AP2141|AP2151|SY6280|RT9742|MIC2005|MIC2009|"
+    r"LM66100|LM66200|MAX40200|IDEAL.?DIODE|LOAD.?SWITCH|E-?FUSE", re.IGNORECASE)
 _EMPTY_VALUES = {"", "~", "?"}
 # Generic KiCad symbol names (R_Small_US, D_Schottky, C_Polarized...) and template text left as a value.
 _GENERIC_VALUE = re.compile(
     r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
     r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*", re.IGNORECASE)
+# A symbol name that is itself a part number (ASMB-MTB0-0A3A2, WS2812B, 1N4148W): a letters+digits run of
+# 5+ characters, not a KiCad generic like R_Pack04. Its value equal to the symbol name is the real value.
+_PART_NUMBER_SYMBOL = re.compile(r"(?<![a-z0-9-])(?!(?:pack|network)\d)(?=[a-z0-9-]*[a-z])(?=[a-z0-9-]*\d)[a-z0-9-]{5,}",
+                                 re.IGNORECASE)
 # For these kinds the symbol is generic, so a value equal to the symbol name was never set.
 # Not for ICs, transistors, modules, diodes or "other" parts, whose symbol name is often the part number
 # (a connector or antenna valued KH-5220-A56_U.FL); not for switches and battery holders, which are commodity.
@@ -873,6 +882,7 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
                     # Battery terminals take power in even where a charger also drives them.
                     and ("BAT" in net_label(net) or not _drives(design, _fed_group(design, group)))
                     and not any(design.kind[part.reference] in protective or _PROTECTION_VALUE.search(part.value)
+                                or _PROTECTING_IC.search(part.value)
                                 for part in parts))
             if verdict[net]:
                 exposed_on[net].append(conn)
@@ -989,7 +999,8 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
         symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
         empty = value in _EMPTY_VALUES
         if not (empty or _GENERIC_VALUE.fullmatch(value)
-                or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol)):
+                or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol
+                     and not _PART_NUMBER_SYMBOL.search(symbol))):
             continue
         if not empty and (mpn_of(comp) or any(_STOCK_FIELD.search(name) and text.strip()
                                               for name, text in comp.fields.items())):

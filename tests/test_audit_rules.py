@@ -352,6 +352,21 @@ def test_screw_terminal_into_a_regulator_without_protection_is_flagged():
     assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("+12V",))]
 
 
+@pytest.mark.parametrize("value,pin", [("CH217A", "IN"), ("TPS2115A", "IN1"), ("LM66100", "VIN"),
+                                       ("TPS25940", "IN"), ("Load_Switch", "VIN")])
+def test_connector_rail_into_a_protecting_ic_is_not_flagged(value, pin):
+    usb = part("J1", "USB_A", "Connector_USB:USB_A", ("1", "VBUS"), ("2", "GND"))
+    switch = part("U2", value, "Package_TO_SOT_SMD:SOT-23-5", ("1", "VBUS", pin, "power_in"),
+                  ("2", "GND", "GND", "power_in"), ("3", "VSW", "OUT", "power_out"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "VSW", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(usb, switch, load, cap("C1", "VBUS")), "connector") == []
+    # The same rail into an ordinary regulator is still an unprotected input.
+    reg = part("U3", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "VBUS", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "VSW", "VOUT", "power_out"))
+    assert [f.rule for f in rules(design(usb, reg, load, cap("C1", "VBUS")), "connector")] == [
+        "connector.power_unprotected"]
+
+
 def test_battery_connector_into_a_charger_without_protection_is_flagged():
     batt = part("J5", "Battery", "Connector_JST:JST_PH_B2B", ("1", "VBAT"), ("2", "GND"))
     charger = part("U4", "Charger", "Package_SO:SOIC-8", ("1", "VBAT", "BAT", "power_out"),
@@ -408,6 +423,18 @@ def test_value_missing_skips_copper_parts_and_part_number_symbols():
     # Still flagged when the value is empty.
     assert values_missing(part("SW2", "~", "Button_Switch_SMD:SW_SPST_TL3342", ("1", "A"))) == [
         (Severity.WARNING, ("SW2",))]
+
+
+def test_value_missing_part_number_symbol_name_is_a_real_value():
+    rgb = lambda ref, value, symbol: part(ref, value, "LED_SMD:LED_RGB", ("1", "A"),  # noqa: E731
+                                     fields={"lib_id": f"LED:{symbol}"})
+    assert values_missing(rgb("D3", "ASMB-MTB0-0A3A2", "ASMB-MTB0-0A3A2"), part(
+        "D4", "WS2812B", "LED_SMD:LED_5050", ("1", "A"), fields={"lib_id": "LED:WS2812B"})) == []
+    # A generic symbol name left as the value is still missing.
+    assert values_missing(rgb("D5", "LED_RGB_Common", "LED_RGB_Common"), rgb("D6", "LED", "LED")) == [
+        (Severity.WARNING, ("D5", "D6"))]
+    assert values_missing(part("RN1", "R_Pack04", "Resistor_SMD:R_Array", ("1", "A"),
+                               fields={"lib_id": "Device:R_Pack04"})) == [(Severity.WARNING, ("RN1",))]
 
 
 def test_value_missing_order_code_only_is_softer():
