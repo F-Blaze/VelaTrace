@@ -62,7 +62,7 @@ Before routing, see [Details](#details) for the few settings it needs. Try it on
 
 - It is an **alpha**. Expect rough edges.
 - **KiCad 10 only**, and **tested on Windows only**.
-- It is a first pass, not a design review. On the latest test, 12 fresh boards it had never seen, **14 of 22** findings were right (64%), and it found about 3 in 10 of the problems the reviewers found. The judges were AI reviewers, not human engineers, and the sample is small.
+- It is a first pass, not a design review. On the latest test, 12 fresh boards it had never seen, **14 of 22** findings were right (64%). It won't catch every problem a reviewer would. The judges were AI reviewers, not human engineers, and the sample is small.
 - It finds only about **4 in 10** of the problems the reviewers found. Treat every result as a hint.
 - I built it with AI help. That is exactly why I measured it. Numbers and method: [Details](#details).
 
