@@ -193,3 +193,37 @@ class BenchBoardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---- USB lines named after MCU pins (doorlink: /GPIO19, /U5_IO2 ...) ----
+
+def hs2_usb_board(layer_kind="unreferenced", nets=("/U5_IO2", "/GPIO20")):
+    """A D+ line on F.Cu through a 22 R series resistor, B.Cu without ground fill."""
+    segs = (seg(nets[0], "F.Cu", (0, 0), (10, 0)), seg(nets[1], "F.Cu", (10, 0), (20, 0)))
+    return BoardCopper(("F.Cu", "B.Cu"), 1.6, segs, (), (), frozenset(),
+                       {"F.Cu": model("F.Cu", layer_kind), "B.Cu": model("B.Cu", layer_kind)}, {})
+
+
+def hs2_parts(antenna=False):
+    parts = [Component("J2", "USB_C", "Connector_USB:USB_C", (Pin("A6", "/U5_IO2", name="D+"),)),
+             Component("R34", "22", "Resistor_SMD:R_0603", (Pin("1", "/U5_IO2"), Pin("2", "/GPIO20"))),
+             Component("U1", "ESP32-S3", "Package_DFN_QFN:QFN-56", (Pin("14", "/GPIO20", name="USB_D+"),))]
+    if antenna:
+        parts.append(Component("AE1", "Antenna", "RF:Antenna", (Pin("1", "/U5_IO2"),)))
+    return parts
+
+
+class UsbPinTests(unittest.TestCase):
+    def test_nets_named_after_mcu_pins_are_found_by_their_pin_names_through_the_series_resistor(self):
+        found = check_return_plane(snap(hs2_usb_board(), *hs2_parts()))
+        self.assertEqual(sorted(f.nets[0] for f in found), ["/GPIO20", "/U5_IO2"])
+        self.assertIn("USB data", found[0].title)
+
+    def test_without_usb_pin_names_nothing_is_guessed(self):
+        plain = [Component("R34", "22", "Resistor_SMD:R_0603", (Pin("1", "/U5_IO2"), Pin("2", "/GPIO20")))]
+        self.assertEqual(check_return_plane(snap(hs2_usb_board(), *plain)), [])
+
+    def test_full_ground_fill_and_antenna_nets_stay_silent(self):
+        full = replace(hs2_usb_board(), zones=(FilledZone("GND", "B.Cu", ((-1, -5), (25, -5), (25, 5), (-1, 5))),))
+        self.assertEqual(check_return_plane(snap(full, *hs2_parts())), [])
+        self.assertEqual(check_return_plane(snap(hs2_usb_board(), *hs2_parts(antenna=True))), [])

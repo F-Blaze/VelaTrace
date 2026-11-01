@@ -37,6 +37,9 @@ DIGIKEY_INTERVAL = 0.6      # their limit is per second and exceeding it suspend
 MAX_PARTS = 200             # EasyEDA requests per run; the rest is looked up on the next run
 MAX_DIGIKEY = 50            # DigiKey searches per run (their daily limit is 1000)
 MAX_FAILURES = 3            # consecutive failures per source before it is left alone this run
+EASYEDA_FAILURES = 5        # EasyEDA is rate limited rather than down: more codes, each retried, before giving up
+BACKOFF = (2.0, 4.0, 8.0)   # seconds waited before each retry of a code EasyEDA refused with 403/429
+BACKOFF_CAP = 30.0          # longest single wait, Retry-After included
 EASYEDA_BYTES = 1_000_000
 DIGIKEY_BYTES = 2_000_000
 MISSING_AGE = timedelta(days=30)    # "EasyEDA has no pads for this" is asked again after this
@@ -320,9 +323,21 @@ class PartLookup:
         return (min(sum(not self._cached(code, now)[0] for code in codes), MAX_PARTS),
                 min(len(queries), MAX_DIGIKEY) if self.digikey else 0)
 
-    def _easyeda(self, code: str, fetch) -> RealPart | None:
-        _, _, body = fetch(EASYEDA_URL.format(code), timeout=20, max_bytes=EASYEDA_BYTES,
-                           headers={"Accept": "application/json"})
+    def _easyeda(self, code: str, fetch, pace, sleep) -> RealPart | None:
+        for delay in (*BACKOFF, None):
+            pace.wait()
+            try:
+                _, _, body = fetch(EASYEDA_URL.format(code), timeout=20, max_bytes=EASYEDA_BYTES,
+                                   headers={"Accept": "application/json"})
+                break
+            except JlcNetError as exc:
+                if delay is None or exc.status not in (403, 429):
+                    raise
+                try:
+                    delay = float(exc.retry_after)   # seconds form only; a date falls back to the schedule
+                except ValueError:
+                    pass
+                sleep(min(max(delay, 0.0), BACKOFF_CAP))
         try:
             data = json.loads(body.decode("utf-8"))
             part = parse_component(data) if isinstance(data, dict) else None
@@ -380,13 +395,12 @@ class PartLookup:
                     by_code[code] = ("not looked up", "not saved from an earlier run; looked up offline only")
                 elif asked >= MAX_PARTS:
                     by_code[code] = ("not looked up", f"over the limit of {MAX_PARTS} per run; run again")
-                elif streak >= MAX_FAILURES:
+                elif streak >= EASYEDA_FAILURES:
                     by_code[code] = ("failed", "not asked after repeated failures")
                 else:
-                    easyeda_pace.wait()
                     asked += 1
                     try:
-                        part = self._easyeda(code, fetch)
+                        part = self._easyeda(code, fetch, easyeda_pace, sleep)
                         self.cache[code] = _row(part, now().strftime(_TIME))
                         by_code[code], streak = part, 0
                     except JlcNetError as exc:

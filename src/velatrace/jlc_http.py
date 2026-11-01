@@ -26,6 +26,7 @@ IDLE_TIMEOUT = 30.0
 class JlcNetError(ValidationError):
     """The request was refused, failed or exceeded its limits; nothing was changed."""
     status = 0   # the HTTP status when the server answered with a refusal
+    retry_after = ""   # its Retry-After header, as sent, when it had one
 
 
 class Cancelled(JlcNetError):
@@ -69,6 +70,7 @@ def request(url: str, *, method: str = "GET", headers: dict[str, str] | None = N
             refused = JlcNetError(f"{parsed.hostname} answered HTTP {response.status}"
                                   + ("; redirects are refused." if 300 <= response.status < 400 else "."))
             refused.status = response.status
+            refused.retry_after = {k.lower(): v for k, v in response.getheaders()}.get("retry-after", "")
             raise refused
         found = {name.lower(): value for name, value in response.getheaders()}
         declared = found.get("content-length")
