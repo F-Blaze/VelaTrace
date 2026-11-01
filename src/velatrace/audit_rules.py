@@ -124,7 +124,9 @@ _SUPPLY_PIN = re.compile(r"IN\d*|VI|DC|ADAPTER|V\+|[AD]?P?V(?:CC|DD|IN|BUS|BAT|S
 SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
-_OUT_PIN = re.compile(r"V?OUT\d*|VO\d*")
+_OUT_PIN = re.compile(r"[+-]?V?OUT\d*[+-]?|[+-]?VO\d*[+-]?")  # also DC/DC-module spellings: +Vo, Vo+, +VOUT, VOUT+
+# Battery / backup-cell pins: the IC or module on it manages the cell (charger BAT, module VBAT, RTC VBACKUP).
+_BATTERY_PIN = re.compile(r"\+?V?BATT?\d*\+?|VBACKUP|VBAK|VRTC")
 _VIN_PIN = re.compile(r"P?A?VIN\d*|VCC|VDD")
 _FERRITE = re.compile(r"FERRITE|BEAD|BLM\d|MPZ\d|MMZ\d|[@/]\s*100\s*MHZ")
 
@@ -331,7 +333,10 @@ def _decoupled(design: _Design, net: str, cap_ends: dict[str, set[str]], returns
     return False
 
 
-def _not_a_rail(design: _Design, ic: Component, net: str) -> bool:
+_MAIN_SUPPLY_PIN = re.compile(r"V\+|VCC\d*|VDD\d*")
+
+
+def _not_a_rail(design: _Design, ic: Component, net: str, pins: list[Pin]) -> bool:
     """Battery terminals need no decoupling, nor pins whose only other connection is one resistor
     that is ≥1 kΩ (a bias/set pin such as AXP209 VINT, nothing can be powered through it) or
     goes to ground/return (a pin strapped off, e.g. an eFuse supply never programmed)."""
@@ -343,7 +348,9 @@ def _not_a_rail(design: _Design, ic: Component, net: str) -> bool:
     nets, ohms = two_terminal_nets(others[0]), parse_resistance(others[0].value)
     if not nets or ohms is None:
         return False
-    return ohms >= 1000 or any(_is_return(design, n) for n in nets)
+    # A main supply pin (V+/VCC/VDD) on a net with nothing but a bias resistor is an incomplete rail, not a set pin.
+    main = any(_MAIN_SUPPLY_PIN.fullmatch(pin.name.upper()) for pin in pins)
+    return (ohms >= 1000 and not main) or any(_is_return(design, n) for n in nets)
 
 
 def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
@@ -378,7 +385,7 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
             _base_type(pin) in {"power_in", "power_out"} or _GROUND.fullmatch(pin.name.upper()))}
         for net, pins in sorted(supply_pins.items()):
             if not caps.get(net):
-                if not _decoupled(design, net, cap_ends, returns - {net}) and not _not_a_rail(design, ic, net):
+                if not _decoupled(design, net, cap_ends, returns - {net}) and not _not_a_rail(design, ic, net, pins):
                     missing[net].append((ic, pins))
                 continue
             points = [pin.position_mm for pin in pins if pin.position_mm]
@@ -838,7 +845,9 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
         family = f"{ic.value} {mpn_of(ic) or ''}".upper()
         open_ok = {name for part_re, names in _OPEN_OK_BY_PART if part_re.search(family) for name in names}
         floating = [pin for pin in ic.pins if pin.net and pin.electrical_type.strip().lower() == "input"
-                    and len(design.nodes.get(pin.net, ())) == 1 and not _TRIM_PIN.search(pin.name.upper())
+                    and all(other is ic and other_pin is pin or other.dnp  # DNP parts leave the pin open in the default build
+                            for other, other_pin in design.nodes.get(pin.net, ()))
+                    and not _TRIM_PIN.search(pin.name.upper())
                     and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & (_OPEN_OK_PIN | open_ok)]
         if not floating:
             continue
@@ -973,6 +982,9 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
                     any(_powers_ic(design, n) for n in group)
                     # Battery terminals take power in even where a charger also drives them.
                     and ("BAT" in net_label(net) or not _drives(design, _fed_group(design, group)))
+                    # An IC/module battery pin (charger BAT, module VBAT/VBACKUP) manages the cell it meets.
+                    and not any(design.kind[comp.reference] in {"ic", "module"} and _BATTERY_PIN.fullmatch(pin.name.upper())
+                                for n in group for comp, pin in design.nodes[n])
                     and not any(design.kind[part.reference] in protective or _PROTECTION_VALUE.search(part.value)
                                 or _PROTECTING_IC.search(part.value)
                                 for part in parts))
