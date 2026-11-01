@@ -42,6 +42,9 @@ def test_float2_input_whose_only_other_connections_are_dnp_is_floating():
     dnp_res = replace(res("R1", "SENSE", "GND"), dnp=True)
     assert [f.refs for f in rules(float2_chip(dnp_res), "pin")] == [("U1",)]
     assert rules(float2_chip(res("R1", "SENSE", "GND")), "pin") == []
+    # An unfitted header or test point alone is an optional access point to an open pin.
+    dnp_tp = replace(part("TP1", "TP", "TestPoint:TestPoint_Pad", ("1", "SENSE")), dnp=True)
+    assert rules(float2_chip(dnp_tp), "pin") == []
     # One fitted part among the DNP ones keeps the pin connected.
     assert rules(float2_chip(dnp_res, res("R2", "SENSE", "+5V")), "pin") == []
 

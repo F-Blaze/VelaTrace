@@ -833,6 +833,15 @@ def _group_escape_labels(findings: list[Finding]) -> list[Finding]:
     return kept
 
 
+def _open_net(design: _Design, ic: Component, pin: Pin) -> bool:
+    """Nothing else on the pin's net, or only DNP parts that include a stuffing option (a resistor
+    or capacitor): unfitted, the pin is open in the default build. DNP headers and test points
+    alone are optional access points to a pin that is meant to be left open."""
+    others = [comp for comp, other_pin in design.nodes.get(pin.net, ()) if not (comp is ic and other_pin is pin)]
+    return not others or (all(comp.dnp for comp in others)
+                          and any(design.kind[comp.reference] not in {"connector", "testpoint"} for comp in others))
+
+
 def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
     """IC input pins (schematic pin type) left unconnected without a no-connect flag."""
     design = _Design(snapshot)
@@ -845,8 +854,7 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
         family = f"{ic.value} {mpn_of(ic) or ''}".upper()
         open_ok = {name for part_re, names in _OPEN_OK_BY_PART if part_re.search(family) for name in names}
         floating = [pin for pin in ic.pins if pin.net and pin.electrical_type.strip().lower() == "input"
-                    and all(other is ic and other_pin is pin or other.dnp  # DNP parts leave the pin open in the default build
-                            for other, other_pin in design.nodes.get(pin.net, ()))
+                    and _open_net(design, ic, pin)
                     and not _TRIM_PIN.search(pin.name.upper())
                     and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & (_OPEN_OK_PIN | open_ok)]
         if not floating:
