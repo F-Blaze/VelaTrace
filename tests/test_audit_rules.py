@@ -470,12 +470,14 @@ def test_connector_rail_into_a_protecting_ic_is_not_flagged(value, pin):
         "connector.power_unprotected"]
 
 
-def test_battery_connector_into_a_charger_without_protection_is_flagged():
+def test_battery_connector_into_a_charger_bat_pin_is_managed_but_its_input_is_not():
     batt = part("J5", "Battery", "Connector_JST:JST_PH_B2B", ("1", "VBAT"), ("2", "GND"))
     charger = part("U4", "Charger", "Package_SO:SOIC-8", ("1", "VBAT", "BAT", "power_out"),
                    ("2", "VBUS", "IN", "power_in"), ("3", "GND", "GND", "power_in"))
-    found = rules(design(batt, charger, cap("C1", "VBAT")), "connector")
-    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("VBAT",))]
+    assert rules(design(batt, charger, cap("C1", "VBAT")), "connector") == []
+    barrel = part("J6", "Barrel", "Connector_BarrelJack:BarrelJack", ("1", "VBUS"), ("2", "GND"))
+    found = rules(design(barrel, charger, cap("C1", "VBAT"), cap("C2", "VBUS")), "connector")
+    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("VBUS",))]
 
 
 def test_zero_ohm_short_and_unset_values():

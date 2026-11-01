@@ -222,10 +222,13 @@ def test_isolated_converter_minus_counts_as_return():
     assert connector(conv, ldo, block) == [(("J5",), ("/mornsun_Vin",))]
 
 
-def test_battery_socket_fires_even_when_the_charger_drives_the_battery_net():
+def test_battery_socket_on_a_charger_battery_pin_is_managed_by_the_charger():
     pmic = typed_ic("U1", ("1", "+BATT", "VBAT", "power_out"), ("2", "VBUS", "VBUS", "power_in"))
     socket = header("J4", "+BATT", "GND", value="JST_PH_2")
-    assert connector(pmic, socket) == [(("J4",), ("+BATT",))]
+    assert connector(pmic, socket) == []
+    # The same net reaching a regulator input instead of a battery pin is still a power entry.
+    reg = typed_ic("U2", ("1", "+BATT", "VIN", "power_in"), ("2", "+3V3", "VOUT", "power_out"))
+    assert connector(reg, socket) == [(("J4",), ("+BATT",))]
 
 
 # --- I2C pull-ups -----------------------------------------------------------------------
