@@ -27,7 +27,7 @@ from math import dist
 import re
 from typing import Callable, Iterable
 
-from .bom import lcsc_code, mpn_of
+from .bom import lcsc_code, mpn_of, parse_value
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
 
@@ -353,6 +353,54 @@ def _not_a_rail(design: _Design, ic: Component, net: str, pins: list[Pin]) -> bo
     return (ohms >= 1000 and not main) or any(_is_return(design, n) for n in nets)
 
 
+# Modules and dev boards carry their own decoupling; the caps beside them are bulk/board caps, not pin bypass.
+_BUILT_IN_DECOUPLING = re.compile(
+    r"ESP32[\w-]*-(?:MINI|WROOM|WROVER)|ESP-WROOM|ESP8266MOD|(?<![A-Z])PICO(?![A-Z])|RP2040.?ZERO|XIAO|TEENSY|NODEMCU|WEMOS")
+# Regulator, charger and LDO families whose pins an untyped netlist does not show as power_out.
+_REGULATOR_PART = re.compile(r"(?<!\d)(?:78|79)[LMS]?\d\d(?!\d)|1117|LM317|BQ2\d{4}|TP40\d\d|MCP73\d+|LDO")
+_SOURCE_PIN = re.compile(r"[+-]?(?:V?OUT|VO|V?BAT|SW|LX|SYS)\d*[+-]?")  # output, charger battery or switch node
+REGULATOR_MAX_PINS = 12  # larger parts with a power_out pin (motor drivers, PMICs) also have signal pins to decouple
+
+
+def _is_regulator(ic: Component) -> bool:
+    """A regulator, LDO or charger (small IC sourcing power, or a known family): its caps are the
+    input/output caps the datasheet asks for, placed per its reference layout. Power switches
+    and ideal diodes are not (they stay checked)."""
+    text = f"{ic.value} {ic.footprint}".upper()
+    if _PROTECTING_IC.search(text):
+        return False
+    return bool(_REGULATOR_PART.search(text)) or (len(terminals(ic)) <= REGULATOR_MAX_PINS and any(
+        _base_type(pin) == "power_out" and pin.net and _SOURCE_PIN.fullmatch(re.sub(r"[~{}_]", "", pin.name.upper()))
+        for pin in ic.pins))
+
+
+RAIL_NEAR_MM = 3.0  # "beside the pin" when judging whether a shared rail is well decoupled
+RAIL_BULK_F = Decimal("4.7e-6")
+
+
+def _well_decoupled_rail(design: _Design, net: str, caps: list[Component]) -> bool:
+    """Several ICs share the rail and it is decoupled as a whole: at least two capacitors within
+    RAIL_NEAR_MM of some IC pin on it, plus a bulk capacitor (≥4.7 µF) anywhere on it. A farther
+    capacitor then only adds to a rail that is already bypassed, so it is not judged per IC."""
+    pins = [pin.position_mm for comp, pin in design.nodes[net]
+            if design.kind[comp.reference] == "ic" and pin.position_mm]
+    near = sum(1 for cap in caps if any(
+        dist(a, pad.position_mm) <= RAIL_NEAR_MM for pad in cap.pins if pad.net == net and pad.position_mm
+        for a in pins))
+    bulk = any((parsed := parse_value(cap.value, "capacitor")) and parsed.value >= RAIL_BULK_F for cap in caps)
+    return near >= 2 and bulk
+
+
+def _rc_filtered(design: _Design, net: str) -> bool:
+    """The pin's net exists to be fed through a single 1 Ω–1 kΩ series resistor with the capacitors
+    on it: an RC supply filter, whose capacitor belongs to the filter."""
+    others = [comp for comp, _ in design.nodes[net] if design.kind[comp.reference] not in {"ic", "capacitor"}]
+    if len({comp.reference for comp in others}) != 1 or design.kind[others[0].reference] != "resistor":
+        return False
+    ohms = parse_resistance(others[0].value)
+    return ohms is not None and 1 < ohms <= 1000
+
+
 def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
     """IC supply pins with no capacitor from that net to ground; far caps (placed boards)."""
     design = _Design(snapshot)
@@ -379,17 +427,23 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
     findings = []
     for ic in design.of_kind("ic"):
         supply_pins = _supply_pins(design, ic)
+        # 1-Wire sensors, references and supervisors in TO-92/SOT-23-3 draw microamps and need no bypass;
+        # a 3-pin regulator still does (input/output caps).
+        tiny = len(terminals(ic)) <= 3 and not _is_regulator(ic)
+        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic)
         # A capacitor to any of the IC's own power/ground pin nets also decouples: stacked
         # domains (cap to the neighbouring rail), protection ICs on a local ground (DW01 B-).
         returns = base_returns | {pin.net for pin in ic.pins if pin.net and (
             _base_type(pin) in {"power_in", "power_out"} or _GROUND.fullmatch(pin.name.upper()))}
         for net, pins in sorted(supply_pins.items()):
             if not caps.get(net):
+                if tiny:
+                    continue
                 if not _decoupled(design, net, cap_ends, returns - {net}) and not _not_a_rail(design, ic, net, pins):
                     missing[net].append((ic, pins))
                 continue
             points = [pin.position_mm for pin in pins if pin.position_mm]
-            if not points:
+            if not points or (far_ok and not _is_addressable(ic)):
                 continue
             distances = []
             for cap in caps[net]:
@@ -401,7 +455,8 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
                 nearest, ref = min(distances)
                 if nearest > DECOUPLING_NEAR_MM and _is_addressable(ic):
                     far_leds[net].append((ic, ref, nearest))
-                elif nearest > DECOUPLING_NEAR_MM:
+                elif nearest > DECOUPLING_NEAR_MM and not (
+                        _rc_filtered(design, net) or _well_decoupled_rail(design, net, caps[net])):
                     findings.append(Finding(
                         "decoupling.far", Severity.WARNING,
                         f"{ic.reference}'s nearest {net} capacitor ({ref}) is {nearest:.1f} mm away",
@@ -436,6 +491,8 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+_OLED_MODULE = re.compile(r"^(?!.*(?:FPC|FFC|FLEX|COG|QFN|QFP|SOIC|TSSOP|BGA|WLCSP|DIE)).*"
+                          r"(?:OLED|SSD13\d\d|SH11\d\d|128\s*X\s*(?:32|64))", re.S)
 # Documented on-module I2C pull-ups the netlist cannot show: (part pattern, pin pattern, ohms, logic V).
 # Raspberry Pi CM4/CM5 and the 40-pin Pi header pull GPIO2/GPIO3 (header pins 3/5) to 3.3 V via 1.8 kΩ.
 KNOWN_MODULE_PULLUPS = (
@@ -443,6 +500,9 @@ KNOWN_MODULE_PULLUPS = (
      Decimal(1800), Decimal("3.3")),
     # TI TXS01xx I2C translators: 10 kΩ pull-ups on every A and B port (datasheet: no external ones needed).
     (re.compile(r"TXS01\d\d"), re.compile(r"[AB]\d"), Decimal(10000), Decimal("3.3")),
+    # I2C OLED/display modules (0.96" 128x64, SSD1306/SH1106 breakouts) carry 4.7-10 kΩ pull-ups on SDA/SCL.
+    # Only the module: a bare panel on an FPC/COG footprint or a controller IC package has none.
+    (_OLED_MODULE, re.compile(r".*"), Decimal(10000), Decimal("3.3")),
 )
 I2C_SINK_MAX_A = Decimal("0.003")  # I2C sink limit; checked as V/R (ignores VOL: conservative)
 

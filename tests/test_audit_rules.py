@@ -35,8 +35,13 @@ def rules(snapshot, rule_prefix):
             if item.rule.startswith(rule_prefix)]
 
 
-def ic(ref="U1", *extra, value="MCU", footprint="Package_QFP:LQFP-32"):
-    return part(ref, value, footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"), *extra)
+def exp4_spare(count=2):
+    """Unconnected spare pads: ICs in these fixtures have more than the 3 pins that exempt a part from bypass checks."""
+    return [(f"9{n}", "", "NC") for n in range(count)]
+
+
+def ic(ref="U1", *extra, value="MCU", footprint="Package_QFP:LQFP-32", spare=2):
+    return part(ref, value, footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"), *extra, *exp4_spare(spare))
 
 
 def cap(ref="C1", a="+3V3", b="GND", value="100nF", pos=None, pin_pos=(None, None)):
@@ -91,7 +96,7 @@ def test_decoupling_missing_and_present():
 
 def test_decoupling_uses_pin_types_when_present():
     typed = part("U1", "SENSOR", "Package_SO:SOIC-8", ("1", "+3V3", "EN", "input"),
-                 ("2", "GND", "GND", "power_in"), ("3", "Net-(U1-VDD)", "VDD", "power_in"))
+                 ("2", "GND", "GND", "power_in"), ("3", "Net-(U1-VDD)", "VDD", "power_in"), *exp4_spare(1))
     found = rules(design(typed, cap("C1", "+3V3", "GND")), "decoupling")
     # EN tied to +3V3 is not a supply pin; the filtered VDD net has no capacitor.
     assert [f.nets for f in found] == [("Net-(U1-VDD)",)]
@@ -123,7 +128,7 @@ def missing(*parts):
 
 
 def typed_chip(*pins, ref="U1", value="CHIP"):
-    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins)
+    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins, *exp4_spare())
 
 
 def test_decoupling_op_amp_and_mcu_supply_without_a_capacitor_is_still_flagged():
@@ -390,10 +395,12 @@ def test_floating_inputs_stay_flagged_where_a_pin_must_be_driven():
 # --- duplicates -------------------------------------------------------------------------
 
 def test_identical_parallel_ics():
-    twins = design(ic("U1", ("3", "OUT"), value="TMP36"), ic("U2", ("3", "OUT"), value="TMP36"), cap())
+    twins = design(ic("U1", ("3", "OUT"), ("4", "GND"), value="TMP36", spare=0),
+                   ic("U2", ("3", "OUT"), ("4", "GND"), value="TMP36", spare=0), cap())
     found = rules(twins, "duplicate")
     assert [(f.severity, f.refs) for f in found] == [(Severity.SAVING, ("U1", "U2"))]
-    on_bus = design(ic("U1", ("3", "SDA"), value="TMP102"), ic("U2", ("3", "SDA"), value="TMP102"), cap())
+    on_bus = design(ic("U1", ("3", "SDA"), ("4", "GND"), value="TMP102", spare=0),
+                    ic("U2", ("3", "SDA"), ("4", "GND"), value="TMP102", spare=0), cap())
     assert [f.severity for f in rules(on_bus, "duplicate")] == [Severity.WARNING]
     strapped = design(ic("U1", ("3", "SDA"), ("4", "GND"), value="TMP102"),
                       ic("U2", ("3", "SDA"), ("4", "+3V3"), value="TMP102"), cap())

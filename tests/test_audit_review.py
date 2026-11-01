@@ -108,7 +108,7 @@ class AuditReview(unittest.TestCase):
 class RuleContext(unittest.TestCase):
  def test_rule_findings_reach_both_prompts_without_pad_coordinates(self):
   from velatrace.audit_rules import run_rules
-  parts=tuple(replace(c,pins=tuple(replace(p,position_mm=(1.0,2.0)) for p in c.pins)) for c in SENSORS)
+  parts=tuple(replace(c,pins=tuple(replace(p,position_mm=(1.0,2.0)) for p in c.pins)+(Pin('3',''),Pin('4',''))) for c in SENSORS)
   snapshot=DesignSnapshot(parts,'fixture'); findings=tuple(run_rules(snapshot,providers=(),include_experimental=True))
   self.assertTrue(findings)
   s=AuditSession(FakeProvider()); s.set_description('Temperature monitor'); s.load_design(snapshot,findings)

@@ -972,7 +972,7 @@ class SetupUsabilityTests(unittest.TestCase):
     def test_logos_with_duplicate_refs_do_not_block_the_checks(self):
         from velatrace.models import DesignSnapshot, Pin
         parts = (Component("REF**", "LOGO", "Symbol:Logo", ()), Component("REF**", "LOGO", "Symbol:Logo", ()),
-                 Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"))))
+                 Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"), Pin("3", ""), Pin("4", ""))))
         with patch("velatrace.ui.read_xml_netlist", return_value=DesignSnapshot(parts, "fixture")):
             window = self.launch()
             window.settings.experimental = True
