@@ -690,7 +690,7 @@ def _lcsc_split_findings(ctx: _Context) -> list[Finding]:
         ratings = {(m.parsed.tolerance, m.parsed.voltage, m.parsed.dielectric, m.parsed.power,
                     m.parsed.other) for m in coded}
         rails = {rail_voltage(ctx.role(m).rail) for m in coded} - {None}
-        if len(by_code) < 2 or len(ratings) > 1 or len(rails) > 1 or any(
+        if len(by_code) < 2 or len(ratings) > 1 or _voltages_apart(rails) or any(
                 mpn_of(m.component) for m in coded):
             continue  # different ratings, rails or explicit MPNs are different parts on purpose
         if ctx.db is not None:
@@ -717,11 +717,18 @@ def _lcsc_split_findings(ctx: _Context) -> list[Finding]:
     return findings
 
 
+def _voltages_apart(volts: Iterable[Decimal | None]) -> bool:
+    """Rail/rating voltages at least 2x apart with the top above the logic rails: a part chosen for
+    the higher one is deliberate (a 50 V cap on 24 V), whereas 1.1/3.3/5 V all share one part."""
+    known = [v for v in volts if v]
+    return bool(known) and max(known) > 6 and max(known) >= 2 * min(known)
+
+
 def _deliberate_package(ctx: _Context, members: list[Passive], target: list[Passive]) -> bool:
     """A different package is on purpose when the parts sit on clearly different voltage (a stated
-    rating or rail at least 2x apart) or a resistor may dissipate real power."""
+    rating or rail 2x apart, see _voltages_apart) or a resistor may dissipate real power."""
     mine, theirs = ctx.min_voltage(members), ctx.min_voltage(target)
-    if mine and theirs and max(mine, theirs) >= 2 * min(mine, theirs):
+    if mine and theirs and _voltages_apart((mine, theirs)):
         return True
     return any(_power_resistor(ctx, m) for m in members)
 

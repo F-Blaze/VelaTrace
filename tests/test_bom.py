@@ -434,6 +434,13 @@ class RecallTests(unittest.TestCase):
         self.assertEqual(finding.refs, ("C1", "C2", "C3"))
         self.assertIn("Use C1525", finding.fix)
 
+    def test_logic_rails_of_different_voltage_still_share_a_code(self):
+        [finding] = rules(bom_findings(snapshot(
+            two_pin("C1", "100n", C0402, "+1V1", "GND", LCSC="C1525"),
+            two_pin("C2", "100n", C0402, "+3V3", "GND", LCSC="C1525"),
+            two_pin("C3", "100n", C0402, "VBUS", "GND", LCSC="C386112"))), "bom.value_merge")
+        self.assertEqual(finding.refs, ("C1", "C2", "C3"))
+
     def test_different_lcsc_codes_stay_apart_when_the_parts_differ(self):
         def pair(v1, v2, rail2="+3V3", **extra):
             return bom_findings(snapshot(
