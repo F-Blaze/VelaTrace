@@ -33,7 +33,7 @@ def usb_c(*extra, footprint="Connector_USB:USB_C_Receptacle_USB2.0",
 
 
 def cc_findings(snapshot):
-    return [item for item in run_rules(snapshot, providers=())
+    return [item for item in run_rules(snapshot, providers=(), include_experimental=True)
             if item.rule == "connector.usbc_cc_missing"]
 
 

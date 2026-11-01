@@ -14,12 +14,13 @@ from types import SimpleNamespace
 
 try:
     from PySide6.QtWidgets import QApplication
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QEvent, Qt
     from velatrace.ui import MainWindow, ComponentCard, FindingCard, RouteCanvas
 except ImportError:
     QApplication = None
 
 from velatrace.audit import AuditStage
+from velatrace.audit_rules import EXPERIMENTAL_RULES
 from velatrace.flags import Function, Flag
 from velatrace.models import Component
 from velatrace.provider import ProviderError
@@ -581,7 +582,7 @@ class UiTests(unittest.TestCase):
         from PySide6.QtWidgets import QLabel
         headers = [item.text() for item in self.window.card_container.findChildren(QLabel)
                    if " · " in item.text() and item.text().split(" · ")[0] in {"Errors", "Warnings", "Savings", "Info"}]
-        self.assertEqual(headers, ["Warnings · 2", "Savings · 1", "Info · 2"])
+        self.assertEqual(headers, ["Warnings · 2", "Savings · 1"])  # the 2 experimental notes are hidden
         self.assertIn("2 warnings · 1 saving", self.window.totals.text())
         self.assertIn("never removed automatically", self.window.totals.toolTip())
         card = self.window.finding_cards[0]
@@ -591,6 +592,33 @@ class UiTests(unittest.TestCase):
         QTest.mouseClick(card, Qt.MouseButton.LeftButton)
         self.assertFalse(card.details.isHidden())
         self.assertIn("Fix:", card.details.text())
+
+    def test_gate_experimental_note_and_setting(self):
+        from PySide6.QtWidgets import QLabel
+        from velatrace.ui import Settings, SettingsDialog
+        texts = lambda: [item.text() for item in self.window.card_container.findChildren(QLabel)]
+        note = "experimental notes hidden (Setup → Show experimental checks)"
+        self.assertEqual(self.window.hidden_experimental, 2)
+        self.assertIn(f"2 {note}", texts())
+        self.window.settings.experimental = True  # a re-check with the box ticked shows them instead
+        self.window.findings = self.window.check_design(self.window.audit_snapshot)
+        self.window.render_cards()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.assertEqual(self.window.hidden_experimental, 0)
+        self.assertFalse([text for text in texts() if note in text])
+        self.assertEqual(sum(card.finding.rule in EXPERIMENTAL_RULES for card in self.window.finding_cards), 2)
+        # Default off, saved, restored, and offered as a checkbox in Setup.
+        self.assertFalse(Settings().experimental)
+        saved = Path(self.temp.name) / "gate.json"
+        Settings(experimental=True).save(saved)
+        loaded = Settings()
+        loaded.load(saved)
+        self.assertTrue(loaded.experimental)
+        dialog = SettingsDialog(Settings(), self.window)
+        self.assertFalse(dialog.experimental.isChecked())
+        self.assertEqual(dialog.experimental.text(), "Show experimental checks")
+        dialog.experimental.setChecked(True)
+        self.assertTrue(dialog.value().experimental)
 
     def test_finding_text_is_plain_and_locate_hook_is_reserved(self):
         from decimal import Decimal
@@ -947,6 +975,7 @@ class SetupUsabilityTests(unittest.TestCase):
                  Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"))))
         with patch("velatrace.ui.read_xml_netlist", return_value=DesignSnapshot(parts, "fixture")):
             window = self.launch()
+            window.settings.experimental = True
             self.read_fixture(window)
         self.assertNotIn("Stopped", window.status.text())
         self.assertEqual([c.reference for c in window.audit_snapshot.components], ["U1"])

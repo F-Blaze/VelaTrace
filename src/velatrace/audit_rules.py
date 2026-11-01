@@ -1581,6 +1581,14 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing"})
 
+# The light BETA rules: right 2 of 9 times on fresh boards, so run_rules leaves them out
+# unless asked. The heavy hs.*/fit.* rules are opt-in already and keep their note behaviour.
+EXPERIMENTAL_RULES = frozenset(rule for rule in BETA_RULES if not rule.startswith(("hs.", "fit.")))
+
+
+def experimental_note(count: int) -> str:
+    return f"{count} experimental note{'s' if count != 1 else ''} hidden (Setup → Show experimental checks)"
+
 
 def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable[Check]) -> list[Finding]:
     findings: list[Finding] = []
@@ -1595,12 +1603,19 @@ def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable
                           for item in findings])
 
 
-def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:
+def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None,
+              include_experimental: bool = False, hidden: list[Finding] | None = None) -> list[Finding]:
     """The light built-in checks plus extra providers, sorted by severity.
 
-    A failing check never hides the others: it becomes an INFO finding.
+    A failing check never hides the others: it becomes an INFO finding. Findings of
+    EXPERIMENTAL_RULES are left out (appended to `hidden` if given) unless include_experimental.
     """
-    return _run(RULES, snapshot, EXTRA_PROVIDERS if providers is None else providers)
+    found = _run(RULES, snapshot, EXTRA_PROVIDERS if providers is None else providers)
+    if include_experimental:
+        return found
+    if hidden is not None:
+        hidden.extend(item for item in found if item.rule in EXPERIMENTAL_RULES)
+    return [item for item in found if item.rule not in EXPERIMENTAL_RULES]
 
 
 def run_heavy(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None) -> list[Finding]:

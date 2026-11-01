@@ -31,7 +31,8 @@ def design(*components):
 
 
 def rules(snapshot, rule_prefix):
-    return [item for item in run_rules(snapshot, providers=()) if item.rule.startswith(rule_prefix)]
+    return [item for item in run_rules(snapshot, providers=(), include_experimental=True)
+            if item.rule.startswith(rule_prefix)]
 
 
 def ic(ref="U1", *extra, value="MCU", footprint="Package_QFP:LQFP-32"):
@@ -609,3 +610,50 @@ def test_fixture_netlist_flags_the_duplicate_sensor_only():
     found = run_rules(read_xml_netlist(FIXTURES / "necessity.xml"), providers=())
     assert [(f.rule, f.severity, f.refs) for f in found] == [
         ("duplicate.parallel_ic", Severity.SAVING, ("U1", "U2"))]
+
+
+# --- experimental gate ---------------------------------------------------------------------
+
+def gate_board():
+    # U1 has no decoupling cap (experimental) and an unrelated saving-free 'LED on 3V3 to GND' is fine.
+    return design(ic(), led("D1", "+3V3", "GND"), ic("U2", ("3", "SDA1")))
+
+
+def test_gate_experimental_rules_are_the_light_beta_rules():
+    assert audit_rules.EXPERIMENTAL_RULES == audit_rules.BETA_RULES - {
+        rule for rule in audit_rules.BETA_RULES if rule.startswith(("hs.", "fit."))}
+    assert {"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating"} \
+        <= audit_rules.EXPERIMENTAL_RULES
+    assert not any(rule.startswith(("hs.", "fit.")) for rule in audit_rules.EXPERIMENTAL_RULES)
+
+
+def test_gate_run_rules_hides_experimental_by_default_and_counts_them():
+    hidden = []
+    shown = run_rules(gate_board(), providers=(), hidden=hidden)
+    everything = run_rules(gate_board(), providers=(), include_experimental=True)
+    assert hidden and all(item.rule in audit_rules.EXPERIMENTAL_RULES for item in hidden)
+    assert not [item for item in shown if item.rule in audit_rules.EXPERIMENTAL_RULES]
+    assert all(item.severity == Severity.INFO for item in hidden)  # same INFO notes as with the flag
+    assert sorted(shown + hidden, key=repr) == sorted(everything, key=repr)
+    assert run_rules(gate_board(), providers=()) == shown  # hidden is optional
+
+
+def test_gate_other_findings_and_providers_are_unaffected():
+    def extra(snapshot):
+        return [Finding("bom.example", Severity.WARNING, "extra")]
+    found = run_rules(gate_board(), providers=(extra,))
+    assert [item.severity for item in found if item.rule == "bom.example"] == [Severity.WARNING]
+    plain = {item.rule for item in run_rules(gate_board(), providers=(), include_experimental=True)}
+    assert {item.rule for item in found} - {"bom.example"} == plain - audit_rules.EXPERIMENTAL_RULES
+
+
+def test_gate_run_heavy_keeps_beta_notes():
+    from test_audit_heavy import skewed
+    found = audit_rules.run_heavy(skewed(), providers=())
+    assert found and all(item.severity == Severity.INFO for item in found)
+    assert any(item.rule == "hs.pair.skew" for item in found)
+
+
+def test_gate_experimental_note_wording():
+    assert audit_rules.experimental_note(3) == "3 experimental notes hidden (Setup \u2192 Show experimental checks)"
+    assert audit_rules.experimental_note(1).startswith("1 experimental note hidden")

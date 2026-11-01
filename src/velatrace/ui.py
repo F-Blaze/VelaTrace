@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from .audit import AuditSession, AuditStage, require_connectivity
-from .audit_rules import run_heavy, run_rules, summarize
+from .audit_rules import experimental_note, run_heavy, run_rules, summarize
 from .bom import bom_findings
 from .candidate import SafeCandidateValidator, canonical, project_context, trusted_via_catalog
 from .constraints import Constraint, ConstraintStore, Scope, propose_constraint
@@ -210,6 +210,7 @@ class Settings:
     output_cap: int = 4096
     digikey_id: str = ""
     digikey_secret: str = field(default="", repr=False)
+    experimental: bool = False
 
     def digikey_login(self):
         return DigiKeyLogin(self.digikey_id, self.digikey_secret) if self.digikey_id and self.digikey_secret else None
@@ -326,6 +327,13 @@ class SettingsDialog(QDialog):
         secret = text(digikey, "digikey_secret", "Client secret", "Kept in memory for this launch only; never saved.")
         secret.setEchoMode(QLineEdit.EchoMode.Password)
 
+        checks = section("Checks", False)
+        self.experimental = QCheckBox("Show experimental checks")
+        self.experimental.setChecked(settings.experimental)
+        self.experimental.setToolTip("Rules that were right less than half the time on test boards. "
+                                     "Shown as notes. Takes effect on the next check.")
+        checks.addRow(self.experimental)
+
         advanced = section("Advanced", False)
         text(advanced, "search_model", "Search model ID", "Optional; defaults to the model ID.")
         text(advanced, "tokenizer", "Tokenizer folder", "Local tokenizer for the OpenAI protocol.")
@@ -349,7 +357,8 @@ class SettingsDialog(QDialog):
     def value(self):
         values = {name: field.text().strip() for name, field in self.fields.items()}
         return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(),
-                        cap=self.cap.value(), output_cap=self.output_cap.value())
+                        cap=self.cap.value(), output_cap=self.output_cap.value(),
+                        experimental=self.experimental.isChecked())
 
 
 class ComponentCard(QFrame):
@@ -633,6 +642,7 @@ class MainWindow(QMainWindow):
         self._cancel = None  # threading.Event of the running Route board click
         self._dsn_folder = None  # private copy of the last exported board and DSN
         self._preflight_notes = []
+        self.hidden_experimental = 0  # light findings left out by check_design
         self.ready = False
         self.preview_shown = False
         self._cleanup_failed = False
@@ -963,7 +973,10 @@ class MainWindow(QMainWindow):
         """Built-in rules plus BOM savings; the cached parts list is used only if downloaded."""
         def bom(snap):
             return design_findings(snap, self.config_dir)  # JLCPCB hook: catalogue + cached live data
-        return run_rules(snapshot, providers=[bom])
+        hidden = []
+        found = run_rules(snapshot, providers=[bom], include_experimental=self.settings.experimental, hidden=hidden)
+        self.hidden_experimental = len(hidden)
+        return found
 
     def export_report(self):
         name = Path(self.audit_snapshot.path or "design").stem or "design"
@@ -973,7 +986,8 @@ class MainWindow(QMainWindow):
             return
         try:
             save_report(path, render_report(self.audit_snapshot, list(self.findings), version=__version__,
-                                                  heavy=self.heavy_findings))
+                                                  heavy=self.heavy_findings,
+                                                  hidden_experimental=self.hidden_experimental))
         except OSError as exc:
             self.show_error(f"Could not save report: {exc}")
             return
@@ -1071,7 +1085,11 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
+        changed = dialog.value().experimental != self.settings.experimental
         self.apply_settings(dialog.value())
+        if changed and getattr(self, "audit_snapshot", None) is not None:
+            self.findings = self.check_design(self.audit_snapshot)  # Takes effect now, not on the next load.
+            self.render_cards()
 
     def apply_settings(self, settings, *, save=True):
         self.settings = settings  # Reopening Setup after a failure shows what was typed.
@@ -1296,6 +1314,7 @@ class MainWindow(QMainWindow):
                 self.safety.clear_preview()
         def done(_):
             self.audit_snapshot, self.findings, self.heavy_findings = None, [], None
+            self.hidden_experimental = 0
             self.audit_step.setText(READY_STEP)
             self.audit_step.setToolTip("")
             self.reset_ai()
@@ -1422,6 +1441,8 @@ class MainWindow(QMainWindow):
             if findings is None:
                 continue
             self.card_layout.addWidget(label(title, muted=True))
+            if title == "Light checks" and self.hidden_experimental:
+                self.card_layout.addWidget(label(experimental_note(self.hidden_experimental), muted=True))
             if not findings:
                 self.card_layout.addWidget(label("No issues found.", muted=True))
             for severity, heading in SEVERITY_GROUPS:
