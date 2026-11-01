@@ -10,7 +10,7 @@ import pytest
 
 from velatrace.easyeda import MAX_PADS, RealPad, RealPart, parse_component
 from velatrace.findings import Severity
-from velatrace.footprint_fit import compare, fit_candidates, kicad_pads
+from velatrace.footprint_fit import compare, fit3_generic_header, fit_candidates, kicad_pads
 from velatrace.ipc import KiCadReader
 from velatrace.models import Component, DesignSnapshot, Pin
 
@@ -538,3 +538,59 @@ def test_package_only_part_that_states_its_rows_gets_a_layout_check():
     assert rules(row(6), replace(stated, rows=1)) == []
     assert rules(row(6), replace(stated, rows=0)) == []        # no row count: nothing to compare
     assert rules(row(6), replace(stated, rows=4)) == []        # 6 pins cannot be 4 rows: ignore the hint
+
+
+# ---- round 5: anchors, generic headers, shared USB-C pads ----
+
+def test_custom_corner_pads_anchored_off_the_part_pad_centre_are_not_a_layout_finding():
+    """BQ25792 QFN-29 whose corner pads are a 0.15 mm anchor plus a polygon: the anchors sit up to 0.4 mm
+    from the part pads' centres (the pad areas overlap) while every other pad lines up."""
+    data = json.loads((FIXTURES / "qfn29_custom_corners.json").read_text(encoding="utf-8"))
+    pads = [(n, x, y, tht, tuple(size)) for n, x, y, tht, size in data["kicad"]]
+    part = fit_part(*data["part"])
+    assert rules(pads, part) == []
+    corners = {"1", "9", "16", "24"}
+    far = fit_part(*[(n, x + (1.5 if n in corners else 0.0), y, a) for n, x, y, a in data["part"]])
+    assert rules(pads, far) != []       # polygons nowhere near the anchors: still a misfit
+
+
+def test_generic_pin_header_mirror_is_not_a_pin_order_finding():
+    pads, part = header_2x9()
+    assert rules(pads, part) == ["fit.pin_order"]
+    assert compare("P8", pads, part, generic_header=True) == []
+    # A generic header is symmetric, but a SOIC mirrored on distinct nets stays wrong for any flag.
+    soic_part = real("C7593")
+    mirrored = [(p.number, -p.x_mm, p.y_mm, p.through_hole) for p in soic_part.pads]
+    assert [f.rule for f in compare("U1", mirrored, soic_part, {str(n): f"N{n}" for n in range(1, 9)})] == ["fit.pin_order"]
+    # Pad count and layout of a header are still checked.
+    assert [f.rule for f in compare("P8", pads[:12], part, generic_header=True)] == ["fit.pad_count"]
+
+
+def test_generic_header_footprints_are_recognised():
+    def comp(ref, footprint, value):
+        return Component(ref, value, footprint)
+    for footprint, value in (("Connector_PinHeader_2.54mm:PinHeader_2x07_P2.54mm_Vertical", "Conn_02x07_Odd_Even"),
+                             ("Connector_PinSocket_2.54mm:PinSocket_1x04_P2.54mm_Vertical", "Conn"),
+                             ("Tiny:CONN_PIN_HEADER_2x07_P2.54mm_Vertical_SMD", "CONN_PIN_HEADER_02x07"),
+                             ("Connector_Generic:Conn_01x04", "Conn_01x04")):
+        assert fit3_generic_header(comp("J3", footprint, value)), footprint
+    for footprint, value in (("Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12", "USB_C"),
+                             ("Connector_JST:JST_SH_SM03B-SRSS-TB_1x03-1MP_P1.00mm_Horizontal", "SWD"),
+                             ("Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", "NE555")):
+        assert not fit3_generic_header(comp("J1", footprint, value)), footprint
+
+
+def test_usb_c_with_shared_wide_pads_fits_the_per_contact_part():
+    """16-pin USB-C: KiCad stacks A1/B12, A4/B9, A9/B4, A12/B1 on four wide pads and has four shell slots;
+    the part draws every contact (and 0/1/2/3 for the shell)."""
+    def wide(a, b, x):
+        return [(a, x, -3.744, False, (0.6, 1.3)), (b, x, -3.744, False, (0.6, 1.3))]
+    mid = [("B8", -1.75), ("A5", -1.25), ("B7", -0.75), ("A6", -0.25), ("A7", 0.25), ("B6", 0.75), ("A8", 1.25), ("B5", 1.75)]
+    pads = (wide("A1", "B12", -3.2) + wide("A4", "B9", -2.4) + wide("A9", "B4", 2.4) + wide("A12", "B1", 3.2)
+            + [(n, x, -3.744, False, (0.3, 1.3)) for n, x in mid]
+            + [("S1", sx, y, True, (1.2, 1.9)) for sx in (-4.325, 4.325) for y in (-2.976, 1.204)])
+    contacts = [("A1", -3.35), ("B12", -3.05), ("A4", -2.55), ("B9", -2.25), *mid, ("B4", 2.25), ("A9", 2.55),
+                ("B1", 3.05), ("A12", 3.35)]
+    part = fit_part(*[(n, x, -2.474, 0.39) for n, x in contacts],
+                    ("0", -4.325, -1.706, 2.4), ("3", -4.325, 2.474, 2.2), ("1", 4.325, -1.706, 2.4), ("2", 4.325, 2.474, 2.2))
+    assert rules(pads, part) == []
