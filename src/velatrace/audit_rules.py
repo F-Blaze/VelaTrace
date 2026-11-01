@@ -1285,29 +1285,44 @@ _STALE_FILL = ("Planes are judged from the zone fills saved in the board; if zon
                "last fill, refill them in KiCad (Edit > Fill All Zones) and re-run.")
 
 
+_USB_PIN = re.compile(r"(?:^|[_ ])(?:USB[_ ]?)?D[+\-](?:$|[_ ])|(?:^|[_ ])USB[_ ]?D[PMN](?:$|[_ ])", re.IGNORECASE)
+
+
+def _through_series(snapshot: DesignSnapshot, nets: set[str]) -> set[str]:
+    """``nets`` plus those joined to them through series resistors, capacitors and inductors."""
+    series = [comp.nets for comp in snapshot.components
+              if part_kind(comp) in _SERIES and len(comp.nets) == 2 and not any(is_ground(n) or is_supply_name(n) for n in comp.nets)]
+    while True:
+        grown = nets | {net for pair in series if pair & nets for net in pair}
+        if grown == nets:
+            return nets
+        nets = grown
+
+
+def _usb_pin_nets(snapshot: DesignSnapshot) -> set[str]:
+    """Nets on a pin named like a USB data line (D+, D-, USB_DP ...) and those behind its series parts,
+    whatever the net is called (/GPIO19, /U5_IO2): the pin names say what a net named after an MCU pin is."""
+    return _through_series(snapshot, {pin.net for comp in snapshot.components for pin in comp.pins
+                                      if _USB_PIN.search(pin.name) and not is_ground(pin.net) and not is_supply_name(pin.net)})
+
+
 def _fast_nets(snapshot: DesignSnapshot) -> dict[str, str]:
     """net -> interface guess (or "differential pair") for nets the return-path checks cover."""
     from .copper import find_high_speed   # copper imports this module
     copper = snapshot.copper
     found = find_high_speed({seg.net for seg in copper.segments if seg.net}, copper.net_classes)
     adapter = _adapter_nets(snapshot, found.pairs)
-    nets = {net: "differential pair" for pair in found.pairs for net in pair} | dict(found.interfaces)
+    nets = ({net: "USB data" for net in _usb_pin_nets(snapshot)}
+            | {net: "differential pair" for pair in found.pairs for net in pair} | dict(found.interfaces))
     return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net)) and net not in adapter}
 
 
 def _antenna_nets(snapshot: DesignSnapshot) -> set[str]:
     """Nets on an antenna's pins, and those joined to them through series resistors, capacitors and
     inductors (a matching network, an EMC filter). Antennas sit over a deliberate copper keep-out."""
-    series = [comp.nets for comp in snapshot.components
-              if part_kind(comp) in _SERIES and len(comp.nets) == 2 and not any(is_ground(n) or is_supply_name(n) for n in comp.nets)]
-    nets = {net for comp in snapshot.components
-            if re.match(r"(AE|ANT)\d*$", comp.reference, re.IGNORECASE) or _ANTENNA.search(f"{comp.value} {comp.footprint}")
-            for net in comp.nets if not is_ground(net)}
-    while True:
-        grown = nets | {net for pair in series if pair & nets for net in pair}
-        if grown == nets:
-            return nets
-        nets = grown
+    return _through_series(snapshot, {net for comp in snapshot.components
+                                     if re.match(r"(AE|ANT)\d*$", comp.reference, re.IGNORECASE) or _ANTENNA.search(f"{comp.value} {comp.footprint}")
+                                     for net in comp.nets if not is_ground(net)})
 
 
 def _inside(points, polygon):
