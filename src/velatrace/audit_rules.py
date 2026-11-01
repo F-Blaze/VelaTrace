@@ -1579,7 +1579,10 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order",
                         "fit.unverified",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
-                        "connector.usbc_cc_missing"})
+                        "connector.usbc_cc_missing",
+                        # Placement check: right about 3 in 10 times on boards whose reviewers judged
+                        # placement (holdouts 3-5, 2026-11); the distance does not separate real from noise.
+                        "decoupling.far"})
 
 # The light BETA rules: right 2 of 9 times on fresh boards, so run_rules leaves them out
 # unless asked. The heavy hs.*/fit.* rules are opt-in already and keep their note behaviour.

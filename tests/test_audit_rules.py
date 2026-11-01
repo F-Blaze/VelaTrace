@@ -110,7 +110,7 @@ def test_decoupling_far_uses_pad_positions():
                    ("2", "GND", "GND", "", (10.0, 12.0)))
     far = cap(pin_pos=((22.0, 10.0), (23.0, 10.0)))
     found = rules(design(near_ic, far), "decoupling")
-    assert [(f.rule, f.severity, f.refs) for f in found] == [("decoupling.far", Severity.WARNING, ("U1", "C1"))]
+    assert [(f.rule, f.severity, f.refs) for f in found] == [("decoupling.far", Severity.INFO, ("U1", "C1"))]  # experimental
     assert "12.0 mm" in found[0].title
     close = cap(pin_pos=((12.0, 10.0), (13.0, 10.0)))
     assert rules(design(near_ic, close), "decoupling") == []
