@@ -25,6 +25,11 @@ Library differences that are not wrong parts, and how they are left alone:
   lands inside a footprint pad (0.25 mm margin) is served by it. Several part pads in one footprint
   pad are one merged pad (a power SON's drain tab: no pad_count), and a 2-pad part whose pad
   centres land inside the footprint's pads fits however long its toes are (no pitch).
+- Custom pads (corner pads drawn as a small anchor plus a polygon): the anchor sits elsewhere than
+  the polygon's centre. A part pad whose own area (a square of that size, up to 0.5 mm) reaches the
+  footprint pad's copper counts as served, so the layout still lines up pad for pad.
+- Generic pin headers and sockets are physically symmetric: which end is pin 1 is the board's
+  decision, so a mirrored or renumbered header is not a pin-order finding.
 - Pin order: only numbers both sides use count, and not numbers the footprint repeats (joined legs),
   so a tab numbered 2 in KiCad and 4 at LCSC is a name, not a swap. When the pad nets are known, a
   swap whose pins share a net (a mirrored header with paired pins) or whose pin is unconnected
@@ -35,6 +40,7 @@ from __future__ import annotations
 
 from collections import Counter
 import math
+import re
 from typing import Iterable, Sequence
 
 from .audit_rules import part_kind
@@ -58,6 +64,7 @@ _PASSIVE_KINDS = {"resistor", "capacitor", "inductor", "ferrite", "resistor_arra
 # and only count, mount type and layout are checked. Upgrade: grid lookup instead of a full scan.
 _MAX_ALIGN_PADS = 400
 
+_ANCHOR_REACH_MM = 0.5   # a custom pad's anchor may sit this far from the polygon's centre
 _AREA_MARGIN_MM = 0.25   # a part pad's centre may sit this far outside the footprint pad's copper
 
 # number, x, y (mm, footprint frame), through-hole, optionally the pad's (width, height) in that frame
@@ -76,6 +83,14 @@ def kicad_pads(comp: Component) -> list[Pad]:
 def pad_nets(comp: Component) -> dict[str, str]:
     """Pad number -> net, for compare()."""
     return {pin.number.strip().upper(): pin.net for pin in comp.pins}
+
+
+_GENERIC_HEADER = re.compile(r"PIN[_ ]?(HEADER|SOCKET)|PINHD|(^|[:_ ])CONN_0\d[XxPp]")
+
+
+def fit3_generic_header(comp: Component) -> bool:
+    """A plain pin header or socket (KiCad PinHeader_/PinSocket_/Conn_01x04, a CONN_PIN_HEADER value)."""
+    return part_kind(comp) == "connector" and bool(_GENERIC_HEADER.search((comp.footprint + " " + comp.value).upper()))
 
 
 def _mechanical(pad: Sequence) -> bool:
@@ -203,6 +218,8 @@ def _served(fp: Sequence[Group], part: Sequence[Group]) -> list[tuple]:
         xs, ys = zip(*points)
         return (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
 
+    # a part pad's reach: half a square of its area, at most _ANCHOR_REACH_MM (a tab's centre stays strict)
+    reach = [min(math.sqrt(p[4]) / 2, _ANCHOR_REACH_MM) for p in part]
     here = middle([(p[1], p[2]) for p in fp])
     result = []
     for moved, mirrored in _moves([(p[1], p[2]) for p in part]):
@@ -210,7 +227,8 @@ def _served(fp: Sequence[Group], part: Sequence[Group]) -> list[tuple]:
         for shift in ((0.0, 0.0), (here[0] - there[0], here[1] - there[1])):
             at = [(x + shift[0], y + shift[1]) for x, y in moved]
             hits = [[j for j, (x, y) in enumerate(at)
-                     if any(abs(x - rx) <= w / 2 + _AREA_MARGIN_MM and abs(y - ry) <= h / 2 + _AREA_MARGIN_MM
+                     if any(abs(x - rx) <= w / 2 + max(_AREA_MARGIN_MM, reach[j])
+                            and abs(y - ry) <= h / 2 + max(_AREA_MARGIN_MM, reach[j])
                             for rx, ry, w, h in pad[5])] for pad in fp]
             if all(hits) and set().union(*hits) == set(range(len(at))):
                 index = [min(hit, key=lambda j: (part[j][0] != pad[0], math.dist(at[j], pad[1:3])))
@@ -237,9 +255,10 @@ def _label(rows: int, cols: int) -> str:
 
 
 def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
-            nets: dict[str, str] | None = None) -> list[Finding]:
+            nets: dict[str, str] | None = None, generic_header: bool = False) -> list[Finding]:
     """Findings (at most one) for a footprint whose pads do not fit the real part. With nets (from
-    pad_nets) a numbering difference whose swapped pins share a net is not reported."""
+    pad_nets) a numbering difference whose swapped pins share a net is not reported; for a
+    generic_header (fit3_generic_header) no numbering difference is."""
     groups = _group(list(kicad_pads))
     fp = [pad for pad in groups if not _mechanical(pad)]
     mech = [pad for pad in groups if _mechanical(pad)]
@@ -310,6 +329,8 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
                        f"{ROW_SPACING_SHARE:.0%} in row spacing). Pad pitch: footprint {_pitch(mine):.2f} mm, "
                        f"part {_pitch(theirs):.2f} mm.",
                        "Use the footprint with the part's pad pitch and spacing.")
+    if generic_header:
+        return []
     # Both sides are top views (bottom-side footprints are un-mirrored on read), so a mirror may
     # explain the geometry but never the numbering: a mirror-image pinout is a real mistake, unless
     # the part as placed (not mirrored) puts each swapped pin on the net it should have anyway.
