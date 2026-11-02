@@ -359,7 +359,14 @@ _BUILT_IN_DECOUPLING = re.compile(
 # Regulator, charger and LDO families whose pins an untyped netlist does not show as power_out.
 _REGULATOR_PART = re.compile(r"(?<!\d)(?:78|79)[LMS]?\d\d(?!\d)|1117|LM317|BQ2\d{4}|TP40\d\d|MCP73\d+|LDO")
 _SOURCE_PIN = re.compile(r"[+-]?(?:V?OUT|VO|V?BAT|SW|LX|SYS)\d*[+-]?")  # output, charger battery or switch node
+# Single-gate logic and reset supervisors draw microamps; a far bypass cap is harmless (decoupling.missing still applies).
+_LOW_CURRENT_PART = re.compile(
+    r"74[A-Z]{0,5}1G\d|NC7S[A-Z]?\d|MAX8(?:09|1[012])(?!\d)|APX80[39]|TPS38\d\d|STM8(?:0\d|1\d)(?!\d)|MCP1\d\d(?!\d)")
 REGULATOR_MAX_PINS = 12  # larger parts with a power_out pin (motor drivers, PMICs) also have signal pins to decouple
+
+
+def _r6_low_current(ic: Component) -> bool:
+    return len(terminals(ic)) <= 6 and bool(_LOW_CURRENT_PART.search(ic.value.upper()))
 
 
 def _is_regulator(ic: Component) -> bool:
@@ -430,7 +437,7 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
         # 1-Wire sensors, references and supervisors in TO-92/SOT-23-3 draw microamps and need no bypass;
         # a 3-pin regulator still does (input/output caps).
         tiny = len(terminals(ic)) <= 3 and not _is_regulator(ic)
-        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic)
+        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic) or _r6_low_current(ic)
         # A capacitor to any of the IC's own power/ground pin nets also decouples: stacked
         # domains (cap to the neighbouring rail), protection ICs on a local ground (DW01 B-).
         returns = base_returns | {pin.net for pin in ic.pins if pin.net and (
@@ -442,7 +449,8 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
                 if not _decoupled(design, net, cap_ends, returns - {net}) and not _not_a_rail(design, ic, net, pins):
                     missing[net].append((ic, pins))
                 continue
-            points = [pin.position_mm for pin in pins if pin.position_mm]
+            # Every pad of the IC on this net counts (SOT-223 tab, repeated supply pads): the nearest one rules.
+            points = [pin.position_mm for pin in ic.pins if pin.net == net and pin.position_mm]
             if not points or (far_ok and not _is_addressable(ic)):
                 continue
             distances = []
@@ -822,6 +830,18 @@ def _repeats_pin_name(net: str, pin: Pin) -> bool:
         for token in re.split(r"[/\s,\\]+", pin.name.upper()))
 
 
+# Template labels on a connector pin that only name the header pin's function (Raspberry Pi 40-pin header etc.).
+_R6_STANDARD_LABEL = re.compile(
+    r"GPIO_?\d*|IO_?\d+|[DA]\d{1,2}|P[A-K]?\d{1,3}|ID_S[DC]|[TR]XD?\d?|SDA\d?|SCL\d?|SCLK|SCK|MOSI|MISO|CE\d|CS\d?"
+    r"|PWM\d*|PCM|CLK|FS|DIN|DOUT|SPI\d*|I2C\d*|UART\d*|GCLK\d*")
+
+
+def _r6_documentation_label(net: str, pin: Pin) -> bool:
+    label = re.sub(r"[\[\]]", "", net_label(net))
+    atoms = [a for a in re.split(r"[./\s]+", label) if a]
+    return label == pin.name.upper() or (bool(atoms) and all(_R6_STANDARD_LABEL.fullmatch(a) for a in atoms))
+
+
 def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
     """Named nets that reach one pin only: usually a mistyped or missing label."""
     design = _Design(snapshot)
@@ -842,6 +862,8 @@ def check_single_pin_nets(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         if _repeats_pin_name(net, pin):
             continue  # a label that only echoes the pin's own GPIO/port name documents an unused pin
+        if design.kind[comp.reference] == "connector" and _r6_documentation_label(net, pin):
+            continue  # template label naming the header pin's standard function (GPIO17, ID_SD, TXD ...)
         twins = sorted(other for other in by_label[net_label(net)]
                        if other != net and len(design.nodes[other]) > 1)
         if twins:
