@@ -1656,6 +1656,15 @@ def check_return_vias(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+def _signal(name: str) -> Check:
+    """Check from rules_signal, bound late because that module imports this one."""
+    def run(snapshot: DesignSnapshot) -> list[Finding]:
+        from . import rules_signal
+        return getattr(rules_signal, name)(snapshot)
+    run.__name__ = name
+    return run
+
+
 RULES: dict[str, Check] = {
     "decoupling": check_decoupling,
     "i2c": check_i2c_pullups,
@@ -1667,6 +1676,9 @@ RULES: dict[str, Check] = {
     "connector.usbc_cc_missing": check_usbc_cc,
     "value": check_values,
     "coverage": check_coverage,
+    "crystal.load_caps_missing": _signal("check_crystal_load_caps"),
+    "usb.dp_dn_swapped": _signal("check_usb_dp_dn_swapped"),
+    "net.output_contention": _signal("check_output_contention"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
