@@ -25,6 +25,7 @@ from dataclasses import replace
 from decimal import Decimal
 from math import dist
 import re
+from importlib import import_module
 from typing import Callable, Iterable
 
 from .bom import lcsc_code, mpn_of, parse_value
@@ -1656,6 +1657,11 @@ def check_return_vias(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+def _sibling(module: str, name: str) -> Check:
+    """A check in a rules module that imports this one: looked up on first use, so there is no import cycle."""
+    return lambda snapshot: getattr(import_module(f"{__package__}.{module}"), name)(snapshot)
+
+
 RULES: dict[str, Check] = {
     "decoupling": check_decoupling,
     "i2c": check_i2c_pullups,
@@ -1667,6 +1673,10 @@ RULES: dict[str, Check] = {
     "connector.usbc_cc_missing": check_usbc_cc,
     "value": check_values,
     "coverage": check_coverage,
+    "power.vcap_missing": _sibling("rules_power", "check_vcap_missing"),
+    "power.reg_out_cap_missing": _sibling("rules_power", "check_reg_out_cap_missing"),
+    "power.bootstrap_cap_missing": _sibling("rules_power", "check_bootstrap_cap_missing"),
+    "power.exposed_pad_floating": _sibling("rules_power", "check_exposed_pad_floating"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
