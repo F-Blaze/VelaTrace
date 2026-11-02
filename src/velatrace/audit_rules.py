@@ -30,6 +30,7 @@ from typing import Callable, Iterable
 from .bom import lcsc_code, mpn_of, parse_value
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
+from . import rules_polarity
 
 Check = Callable[[DesignSnapshot], list[Finding]]
 
@@ -1667,6 +1668,10 @@ RULES: dict[str, Check] = {
     "connector.usbc_cc_missing": check_usbc_cc,
     "value": check_values,
     "coverage": check_coverage,
+    "polarity.reversed": lambda snapshot: rules_polarity.check_polarity_reversed(snapshot),
+    "polarity.mosfet_topology": lambda snapshot: rules_polarity.check_mosfet_topology(snapshot),
+    "power.mounting_hole_rail": lambda snapshot: rules_polarity.check_mounting_hole_rail(snapshot),
+    "power.rail_voltage_mismatch": lambda snapshot: rules_polarity.check_rail_voltage_mismatch(snapshot),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
