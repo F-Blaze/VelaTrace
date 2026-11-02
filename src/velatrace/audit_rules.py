@@ -61,7 +61,8 @@ _EMPTY_VALUES = {"", "~", "?"}
 # Generic KiCad symbol names (R_Small_US, D_Schottky, C_Polarized...) and template text left as a value.
 _GENERIC_VALUE = re.compile(
     r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
-    r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*", re.IGNORECASE)
+    r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*|"
+    r"tvs[a-z]?|esd|zener|schottky|diode|transistor|npn|pnp|nmos|pmos|mosfet", re.IGNORECASE)
 # A symbol name that is itself a part number (ASMB-MTB0-0A3A2, WS2812B, 1N4148W): a letters+digits run of
 # 5+ characters, not a KiCad generic like R_Pack04. Its value equal to the symbol name is the real value.
 _PART_NUMBER_SYMBOL = re.compile(r"(?<![a-z0-9-])(?!(?:pack|network)\d)(?=[a-z0-9-]*[a-z])(?=[a-z0-9-]*\d)[a-z0-9-]{5,}",
@@ -112,6 +113,13 @@ _OPEN_OK_BY_PART = (
     # CP210x / FT23x USB-UART: unused modem-control inputs may be left open (internal pull-ups).
     (re.compile(r"CP210\d|FT23[012]"), {"CTS", "DSR", "RI", "DCD"}),
 )
+# Control inputs with no guaranteed internal bias (enable/chip-select/output-enable/sleep/shutdown/standby,
+# current-limit and power-good threshold, mode/select, thermistor, line-driver data inputs): left unconnected they
+# float whatever type the symbol gives the pin. RESET is left out: MCU reset pins often have internal pull-ups.
+_IN4_CONTROL_PIN = re.compile(
+    r"\d?N?(?:EN|ENABLE|CE|OE|SLEEP|SHDN|SHUTDOWN|STBY|STANDBY)\d?|ILIM|PGTH|SEL\d*|MODE\d*|THERM|TS|T\d?IN|DIN\d?")
+_IN4_LOOSE_TYPES = {"unspecified", "bidirectional", "passive"}  # symbol types that often hide a control input
+_IN4_UNFITTED = re.compile(r"(?<![A-Z0-9])(?:DNP|DNM|DNF|DNI|NO.?POP)(?![A-Z0-9])", re.IGNORECASE)
 _UNUSED_USB_PIN = re.compile(r"SBU\d")  # USB-C sideband pins: unused on USB 2.0
 _LED_PART = re.compile(r"7.?SEG|SEVEN.?SEG|(?:^|\s)(?:LED|DISPLAY)")  # on "value footprint"
 # Connectors that never bring power in: memory-card/SIM sockets, M.2, debug/programming pads
@@ -920,8 +928,18 @@ def _open_net(design: _Design, ic: Component, pin: Pin) -> bool:
     or capacitor): unfitted, the pin is open in the default build. DNP headers and test points
     alone are optional access points to a pin that is meant to be left open."""
     others = [comp for comp, other_pin in design.nodes.get(pin.net, ()) if not (comp is ic and other_pin is pin)]
-    return not others or (all(comp.dnp for comp in others)
+    return not others or (all(comp.dnp or _IN4_UNFITTED.search(comp.value) for comp in others)
                           and any(design.kind[comp.reference] not in {"connector", "testpoint"} for comp in others))
+
+
+def _in4_input_like(pin: Pin) -> bool:
+    """A typed input, or a named control input (EN, nSLEEP, PGTH, T2IN...) the symbol types loosely.
+    A no-connect flag still means "unused on purpose"."""
+    kind = pin.electrical_type.strip().lower()
+    if kind == "input":
+        return bool(pin.net)
+    return kind in _IN4_LOOSE_TYPES and any(
+        _IN4_CONTROL_PIN.fullmatch(token) for token in re.split(r"[^A-Z0-9]+", pin.name.upper()))
 
 
 def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
@@ -935,7 +953,7 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         family = f"{ic.value} {mpn_of(ic) or ''}".upper()
         open_ok = {name for part_re, names in _OPEN_OK_BY_PART if part_re.search(family) for name in names}
-        floating = [pin for pin in ic.pins if pin.net and pin.electrical_type.strip().lower() == "input"
+        floating = [pin for pin in ic.pins if _in4_input_like(pin)
                     and _open_net(design, ic, pin)
                     and not _TRIM_PIN.search(pin.name.upper())
                     and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & (_OPEN_OK_PIN | open_ok)]

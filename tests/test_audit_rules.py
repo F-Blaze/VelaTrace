@@ -354,7 +354,7 @@ def test_floating_ic_inputs_need_pin_types():
     assert [(f.rule, f.severity, f.refs) for f in found] == [("pin.input_floating", Severity.INFO, ("U1",))]  # beta rule
     assert "EN" in found[0].title
     assert rules(design(chip("input+no_connect")), "pin") == []
-    assert rules(design(chip("passive")), "pin") == []
+    assert rules(design(chip("passive")), "pin")[0].rule == "pin.input_floating"  # loosely typed control pin
 
 
 def eeprom_or_bridge(value, *pins, mpn=None):
