@@ -1695,6 +1695,15 @@ def sort_findings(findings: Iterable[Finding]) -> list[Finding]:
                                             item.nets, item.title))
 
 
+# Two separate reasons a rule shows as Info:
+#  - BETA_RULES: not yet precise enough to warn (see below); restore the severity once proven.
+#  - INFO_RULES: the board works without the fix, so Info is the right severity even at full precision.
+# Rules that break or misbehave the board (value.zero_ohm_short, led.no_resistor, i2c.pullup.*,
+# net.label_scope, ...) are in neither set and keep their Warning/Error (BETA ones are still demoted).
+INFO_RULES = frozenset({"decoupling.far", "decoupling.missing", "value.missing", "connector.power_unprotected",
+                        "hs.pair.skew", "hs.pair.vias", "hs.return.no_plane", "hs.return.via",
+                        "fit.pitch", "fit.unverified"})
+
 # Measured below 50% precision on held-out boards (benchmark, 2026-10): shown as notes, not
 # warnings, until a later benchmark round proves them. Remove a rule here to restore its severity.
 BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
@@ -1728,7 +1737,8 @@ def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable
         except Exception as exc:  # a check bug must not block the rest of the audit
             findings.append(Finding("audit.check_failed", Severity.INFO,
                                     f"The {name} check could not run", evidence=str(exc) or type(exc).__name__))
-    return sort_findings([replace(item, severity=Severity.INFO) if item.rule in BETA_RULES else item
+    return sort_findings([replace(item, severity=Severity.INFO) if item.rule in BETA_RULES or item.rule in INFO_RULES
+                          else item
                           for item in findings])
 
 

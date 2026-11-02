@@ -494,7 +494,7 @@ def test_zero_ohm_short_and_unset_values():
     assert rules(jumper, "value") == []
     unset = design(ic(), cap("C1", value="C"), res("R2", "A", "B", "R"))
     found = rules(unset, "value")
-    assert [(f.rule, f.severity, f.refs) for f in found] == [("value.missing", Severity.WARNING, ("C1", "R2"))]
+    assert [(f.rule, f.severity, f.refs) for f in found] == [("value.missing", Severity.INFO, ("C1", "R2"))]
     assert rules(design(ic(), cap("C1", value="100nF"), res("R2", "A", "B", "10k"),
                         part("TP1", "~", "TestPoint:TestPoint_Pad_D1.0mm", ("1", "A")),
                         part("H1", "~", "MountingHole:MountingHole_3.2mm_M3", ("1", "")),
@@ -520,7 +520,7 @@ def test_value_missing_covers_more_kinds_and_symbol_names():
         part("R4", "Rset", "Resistor_SMD:R_0402", ("1", "A")),
         part("R5", "Custom_Sym", "Resistor_SMD:R_0402", ("1", "A"), fields={"lib_id": "Device:Custom_Sym"}),
         part("U3", "LM358", bare, ("1", "A"), fields={"lib_id": "Amplifier_Operational:LM358"}))
-    assert found == [(Severity.WARNING, ("D2", "F1", "FB1", "J1", "K1", "R3", "R4", "R5", "U2", "Y1"))]
+    assert found == [(Severity.INFO, ("D2", "F1", "FB1", "J1", "K1", "R3", "R4", "R5", "U2", "Y1"))]
 
 
 def test_value_missing_skips_copper_parts_and_part_number_symbols():
@@ -534,7 +534,7 @@ def test_value_missing_skips_copper_parts_and_part_number_symbols():
              fields={"lib_id": "Switch:SW_Push"})) == []
     # Still flagged when the value is empty.
     assert values_missing(part("SW2", "~", "Button_Switch_SMD:SW_SPST_TL3342", ("1", "A"))) == [
-        (Severity.WARNING, ("SW2",))]
+        (Severity.INFO, ("SW2",))]
 
 
 def test_value_missing_part_number_symbol_name_is_a_real_value():
@@ -544,9 +544,9 @@ def test_value_missing_part_number_symbol_name_is_a_real_value():
         "D4", "WS2812B", "LED_SMD:LED_5050", ("1", "A"), fields={"lib_id": "LED:WS2812B"})) == []
     # A generic symbol name left as the value is still missing.
     assert values_missing(rgb("D5", "LED_RGB_Common", "LED_RGB_Common"), rgb("D6", "LED", "LED")) == [
-        (Severity.WARNING, ("D5", "D6"))]
+        (Severity.INFO, ("D5", "D6"))]
     assert values_missing(part("RN1", "R_Pack04", "Resistor_SMD:R_Array", ("1", "A"),
-                               fields={"lib_id": "Device:R_Pack04"})) == [(Severity.WARNING, ("RN1",))]
+                               fields={"lib_id": "Device:R_Pack04"})) == [(Severity.INFO, ("RN1",))]
 
 
 def test_value_missing_order_code_only_is_softer():
@@ -563,10 +563,10 @@ def test_value_missing_generic_value_with_mpn_or_stock_id_is_fine():
     named = lambda ref, fields: part(ref, "LED", "LED_SMD:LED_0603", ("1", "A"), fields=fields)  # noqa: E731
     assert values_missing(named("D1", {"MPN": "19-217/GHC"}), named("D2", {"UST_ID": "42"}),
                    named("D3", {"Stock": "S-7"})) == []
-    assert values_missing(named("D4", {"UST_ID": ""})) == [(Severity.WARNING, ("D4",))]
+    assert values_missing(named("D4", {"UST_ID": ""})) == [(Severity.INFO, ("D4",))]
     # An empty value stays missing whatever else identifies the part.
     assert values_missing(part("D5", "~", "LED_SMD:LED_0603", ("1", "A"), fields={"MPN": "19-217"})) == [
-        (Severity.WARNING, ("D5",))]
+        (Severity.INFO, ("D5",))]
 
 
 def test_coverage_note_when_no_ground_is_named():
@@ -664,3 +664,19 @@ def test_gate_run_heavy_keeps_beta_notes():
 def test_gate_experimental_note_wording():
     assert audit_rules.experimental_note(3) == "3 experimental notes hidden (Setup \u2192 Hide experimental checks is on)"
     assert audit_rules.experimental_note(1).startswith("1 experimental note hidden")
+
+
+def test_info_rules_are_always_info_and_breaking_rules_keep_their_severity():
+    def emit(rule_names, severity):
+        def provider(_snapshot):
+            return [Finding(name, severity, name) for name in rule_names]
+        return provider
+    empty = design()
+    info = sorted(audit_rules.INFO_RULES)
+    assert {item.severity for item in run_rules(empty, providers=[emit(info, Severity.ERROR)])} == {Severity.INFO}
+    assert {item.severity for item in audit_rules.run_heavy(empty, [emit(info, Severity.WARNING)])} == {Severity.INFO}
+    kept = [("value.zero_ohm_short", Severity.ERROR), ("led.no_resistor", Severity.WARNING),
+            ("net.label_scope", Severity.WARNING)]
+    got = run_rules(empty, providers=[lambda _s: [Finding(r, s, r) for r, s in kept]])
+    assert sorted((f.rule, f.severity) for f in got) == sorted(kept)
+    assert not set(audit_rules.INFO_RULES) & {rule for rule, _ in kept}
