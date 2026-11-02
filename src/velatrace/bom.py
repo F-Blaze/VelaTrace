@@ -785,6 +785,38 @@ def _package_merge_findings(ctx: _Context) -> list[Finding]:
     return findings
 
 
+# KiCad's stock footprint variants differ only in pad geometry (..._Pad1.2x1.4mm_HandSolder): the same chip.
+_PAD_VARIANT = re.compile(r"(?:_Pad[\d.]+x[\d.]+mm)?(?:_?HandSolder)?$", re.IGNORECASE)
+
+
+def _variant_merge_findings(ctx: _Context) -> list[Finding]:
+    """One chip size, value and order code fitted with footprint variants (R_0805_2012Metric next to
+    ..._Pad1.20x1.40mm_HandSolder): footprint-keyed BOM grouping gives one line per variant.
+
+    Skipped when order codes or explicit MPNs differ (the LCSC-split / value-merge checks own that)
+    or the ratings disagree."""
+    findings = []
+    for (kind, value, package), members in ctx.by_line.items():
+        names = Counter(m.component.footprint for m in members)
+        if (len(names) < 2 or len({_PAD_VARIANT.sub("", fp.rsplit(":", 1)[-1]) for fp in names}) > 1
+                or len({lcsc_code(m.component) for m in members} - {None}) > 1
+                or len({mpn_of(m.component) for m in members} - {None}) > 1
+                or any(not a.parsed.compatible(b.parsed) for a in members for b in members)):
+            continue
+        target = max(names, key=lambda fp: (names[fp], not _PAD_VARIANT.search(fp.rsplit(":", 1)[-1]).group(0), fp))
+        moved = [m for m in members if m.component.footprint != target]
+        short = target.rsplit(":", 1)[-1]
+        findings.append(Finding(
+            "bom.package_merge", Severity.SAVING,
+            f"{format_value(value, kind)} {kind}s use {len(names)} {package} footprints: use {short}",
+            refs=_refs(members), nets=(),
+            evidence=(f"{_ref_list(_refs(moved))} use {', '.join(sorted(n.rsplit(':', 1)[-1] for n in names if n != target))}; "
+                      f"the rest use {short}. Same value, size and order code, so only the pad variant differs "
+                      "and footprint-keyed BOM grouping gives an extra BOM line."),
+            fix=f"Set the footprint of {_ref_list(_refs(moved))} to {short} (or use one variant for all)."))
+    return findings
+
+
 def _part_text(part: "Part") -> str:
     ratings = " ".join(x for x in (f"{part.voltage.normalize():f}V" if part.voltage else "",
                                    part.dielectric or "",
@@ -970,4 +1002,5 @@ def bom_findings(snapshot: DesignSnapshot, parts_db: "PartsDB | None" = None, *,
     ctx = _Context(snapshot, parts_db, boards_per_order)
     return (_normalise_findings(ctx) + _lcsc_hygiene_findings(ctx) + _value_merge_findings(ctx)
             + _diode_merge_findings(ctx) + _lcsc_split_findings(ctx) + _package_merge_findings(ctx)
+            + _variant_merge_findings(ctx)
             + _jlc_findings(ctx))

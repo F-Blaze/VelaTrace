@@ -1406,14 +1406,40 @@ def _usb_pin_nets(snapshot: DesignSnapshot) -> set[str]:
                                       if _USB_PIN.search(pin.name) and not is_ground(pin.net) and not is_supply_name(pin.net)})
 
 
+# A net named CLK is a fast clock only with a source behind it: a crystal/oscillator part on the net, or
+# a clock pin (CLK, XIN, REFCLK, MCLK ...) on an IC that is not a plain logic buffer or shift register.
+# A GPIO that clocks a 74HC595 is slow however it is named. Board pads carry no pin names, so on a
+# bare board only the crystal/oscillator evidence is available.
+_XTAL_PART = re.compile(r"CRYSTAL|XTAL|OSCILLATOR|TCXO|VCXO|OCXO|RESONATOR|(?<![A-Z])XO(?![A-Z])", re.IGNORECASE)
+_CLOCK_PIN = re.compile(r"CLK|CLKIN|XIN|XTAL\d?|OSC\d?|REFCLK|MCLK|BCLK|SCLK")
+_LOGIC_IC = re.compile(r"(?<![A-Z0-9])(?:SN)?74[A-Z]{0,5}\d{2,4}|CD4\d{3}|HEF4\d{3}|595|TPIC6|STP\d{2}|TLC59|MBI5",
+                       re.IGNORECASE)
+
+
+def _clock_source_nets(snapshot: DesignSnapshot) -> set[str]:
+    """Nets that touch a crystal/oscillator part or a clock pin of a non-logic IC."""
+    nets: set[str] = set()
+    for comp in snapshot.components:
+        text = f"{comp.value} {comp.footprint.split(':')[-1]}"
+        kind = part_kind(comp)
+        if kind == "crystal" or (kind in {"ic", "other"} and _XTAL_PART.search(text)) or re.match(r"(?:OSC|XO|XTAL)\d", comp.reference, re.IGNORECASE):
+            nets |= comp.nets
+        elif kind == "ic" and not _LOGIC_IC.search(text):
+            nets |= {pin.net for pin in comp.pins
+                     if _CLOCK_PIN.fullmatch(re.sub(r"[^A-Z0-9]", "", pin.name.upper()))}
+    return nets
+
+
 def _fast_nets(snapshot: DesignSnapshot) -> dict[str, str]:
     """net -> interface guess (or "differential pair") for nets the return-path checks cover."""
     from .copper import find_high_speed   # copper imports this module
     copper = snapshot.copper
     found = find_high_speed({seg.net for seg in copper.segments if seg.net}, copper.net_classes)
     adapter = _adapter_nets(snapshot, found.pairs)
+    sourced = _clock_source_nets(snapshot)
+    guesses = {net: guess for net, guess in found.interfaces.items() if guess != "clock" or net in sourced}
     nets = ({net: "USB data" for net in _usb_pin_nets(snapshot)}
-            | {net: "differential pair" for pair in found.pairs for net in pair} | dict(found.interfaces))
+            | {net: "differential pair" for pair in found.pairs for net in pair} | guesses)
     return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net)) and net not in adapter}
 
 

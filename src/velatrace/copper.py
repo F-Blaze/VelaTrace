@@ -280,6 +280,9 @@ _CLASS_HINTS = (("usb", "USB"), ("ethernet", "ETH"), ("hdmi", "HDMI"), ("lvds/mi
 # A net class that says "impedance controlled / differential" without naming the interface.
 _FAST_CLASS = re.compile(r"DIFF|PAIR|IMPED|HIGH.?SPEED|\bHS\b|Z\d{2,3}\b|\d{2,3}\s*(?:R|OHM|Ω)\b", re.IGNORECASE)
 _SLOW = re.compile(r"(?:^|_)(?:SPI\d?|I2C\d?|I2S\d?|UART\d?|SWD|JTAG|SCL|SDA)(?:_|$)")
+# Sideband control around a clock (PCIe CLKREQ#, CLK_nREQ, CLK_EN, CLK_OE): slow open-drain or logic-level
+# handshakes, never the clock itself. Not "CLK_N", which is the negative half of a clock pair.
+_SIDEBAND = re.compile(r"(?:^|[_\W])N?(?:REQ|EN|ENA|ENABLE|OE|STOP|STBY|SEL)\d?(?:#|_?N)?$")
 
 
 def interface_guess(net: str, net_class: str = "") -> str | None:
@@ -288,7 +291,8 @@ def interface_guess(net: str, net_class: str = "") -> str | None:
     A name guess: it never looks at parts or data rates, and returns None when unsure."""
     label = net_label(net)
     for interface, pattern in _INTERFACES:
-        if label and pattern.fullmatch(label) and not (interface == "clock" and _SLOW.search(label)):
+        if label and pattern.fullmatch(label) and not (
+                interface == "clock" and (_SLOW.search(label) or _SIDEBAND.search(label))):
             return interface
     upper = net_class.upper()
     for interface, word in _CLASS_HINTS:

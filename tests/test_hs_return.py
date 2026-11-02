@@ -227,3 +227,33 @@ class UsbPinTests(unittest.TestCase):
         full = replace(hs2_usb_board(), zones=(FilledZone("GND", "B.Cu", ((-1, -5), (25, -5), (25, 5), (-1, 5))),))
         self.assertEqual(check_return_plane(snap(full, *hs2_parts())), [])
         self.assertEqual(check_return_plane(snap(hs2_usb_board(), *hs2_parts(antenna=True))), [])
+
+
+class ClockGuessTests(unittest.TestCase):
+    """Round 6: a net named CLK is a fast clock only with a source behind it (ck4_ helpers)."""
+
+    @staticmethod
+    def ck4_fast(net, *components):
+        from velatrace.audit_rules import _fast_nets
+        return _fast_nets(snap(two_layer("unreferenced", net), *components))
+
+    def test_ck4_sideband_suffix_is_not_a_clock(self):
+        from velatrace.copper import interface_guess
+        for net in ["/PCIe_CLK_nREQ", "PCIE_CLKREQ#", "CLK_REQ#", "CLK_EN", "CLK_OE"]:
+            self.assertIsNone(interface_guess(net), net)
+        self.assertEqual(interface_guess("CLK_N"), "clock")
+
+    def test_ck4_gpio_clock_into_shift_register_is_not_fast(self):
+        gpio = Component("U1", "ESP8266", "Module:ESP", (Pin("1", "/CLK", "GPIO14"),))
+        shift = Component("U2", "74HC595", "Package_SO:SOIC-16", (Pin("11", "/CLK", "SRCLK"),))
+        self.assertEqual(self.ck4_fast("/CLK", gpio, shift), {})
+        self.assertEqual(check_return_plane(snap(two_layer("unreferenced", "/CLK"), gpio, shift)), [])
+
+    def test_ck4_clock_pin_of_non_logic_ic_or_crystal_source_is_fast(self):
+        phy = Component("U3", "LAN8720A", "Package_DFN_QFN:QFN-24", (Pin("5", "CLK_25M", "XTAL1"),))
+        self.assertEqual(self.ck4_fast("CLK_25M", phy), {"CLK_25M": "clock"})
+        osc = Component("X1", "25MHz", "Oscillator:Oscillator_SMD", (Pin("3", "CLK_25M"),))
+        self.assertEqual(self.ck4_fast("CLK_25M", osc), {"CLK_25M": "clock"})
+        xtal = Component("Y1", "25MHz", "Crystal:Crystal_SMD_3225", (Pin("1", "CLK_25M"),))
+        self.assertEqual(self.ck4_fast("CLK_25M", xtal), {"CLK_25M": "clock"})
+        self.assertEqual(self.ck4_fast("CLK_25M"), {})   # no source evidence at all
