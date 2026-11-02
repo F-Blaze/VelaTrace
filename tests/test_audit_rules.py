@@ -31,8 +31,7 @@ def design(*components):
 
 
 def rules(snapshot, rule_prefix):
-    return [item for item in run_rules(snapshot, providers=(), include_experimental=True)
-            if item.rule.startswith(rule_prefix)]
+    return [item for item in run_rules(snapshot, providers=()) if item.rule.startswith(rule_prefix)]
 
 
 def exp4_spare(count=2):
@@ -634,24 +633,25 @@ def test_gate_experimental_rules_are_the_light_beta_rules():
     assert not any(rule.startswith(("hs.", "fit.")) for rule in audit_rules.EXPERIMENTAL_RULES)
 
 
-def test_gate_run_rules_hides_experimental_by_default_and_counts_them():
+def test_gate_run_rules_shows_experimental_by_default_and_can_hide_and_count_them():
+    everything = run_rules(gate_board(), providers=())
+    assert {item.rule for item in everything} & audit_rules.EXPERIMENTAL_RULES
     hidden = []
-    shown = run_rules(gate_board(), providers=(), hidden=hidden)
-    everything = run_rules(gate_board(), providers=(), include_experimental=True)
+    shown = run_rules(gate_board(), providers=(), include_experimental=False, hidden=hidden)
     assert hidden and all(item.rule in audit_rules.EXPERIMENTAL_RULES for item in hidden)
     assert not [item for item in shown if item.rule in audit_rules.EXPERIMENTAL_RULES]
     assert all(item.severity == Severity.INFO for item in hidden)  # same INFO notes as with the flag
     assert sorted(shown + hidden, key=repr) == sorted(everything, key=repr)
-    assert run_rules(gate_board(), providers=()) == shown  # hidden is optional
+    assert run_rules(gate_board(), providers=(), include_experimental=False) == shown  # hidden is optional
 
 
 def test_gate_other_findings_and_providers_are_unaffected():
     def extra(snapshot):
         return [Finding("bom.example", Severity.WARNING, "extra")]
-    found = run_rules(gate_board(), providers=(extra,))
+    found = run_rules(gate_board(), providers=(extra,), include_experimental=False)
     assert [item.severity for item in found if item.rule == "bom.example"] == [Severity.WARNING]
-    plain = {item.rule for item in run_rules(gate_board(), providers=(), include_experimental=True)}
-    assert {item.rule for item in found} - {"bom.example"} == plain - audit_rules.EXPERIMENTAL_RULES
+    plain = {item.rule for item in run_rules(gate_board(), providers=(), include_experimental=False)}
+    assert {item.rule for item in found} - {"bom.example"} == plain
 
 
 def test_gate_run_heavy_keeps_beta_notes():
@@ -662,5 +662,5 @@ def test_gate_run_heavy_keeps_beta_notes():
 
 
 def test_gate_experimental_note_wording():
-    assert audit_rules.experimental_note(3) == "3 experimental notes hidden (Setup \u2192 Show experimental checks)"
+    assert audit_rules.experimental_note(3) == "3 experimental notes hidden (Setup \u2192 Hide experimental checks is on)"
     assert audit_rules.experimental_note(1).startswith("1 experimental note hidden")

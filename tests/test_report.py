@@ -84,7 +84,7 @@ def test_light_and_heavy_sections():
 
 
 def test_gate_report_notes_hidden_experimental_findings():
-    note = "2 experimental notes hidden (Setup \u2192 Show experimental checks)"
+    note = "2 experimental notes hidden (Setup \u2192 Hide experimental checks is on)"
     assert note in render(sample(), hidden_experimental=2)
     assert note in render(sample(), hidden_experimental=2, heavy=[])
     assert "experimental" not in render(sample())

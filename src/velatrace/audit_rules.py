@@ -1644,13 +1644,13 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         # placement (holdouts 3-5, 2026-11); the distance does not separate real from noise.
                         "decoupling.far"})
 
-# The light BETA rules: right 2 of 9 times on fresh boards, so run_rules leaves them out
-# unless asked. The heavy hs.*/fit.* rules are opt-in already and keep their note behaviour.
+# The light BETA rules: right 2 of 9 times on fresh boards, so they show as Info notes
+# that run_rules can leave out when asked (include_experimental=False). The heavy hs.*/fit.* rules are opt-in already and keep their note behaviour.
 EXPERIMENTAL_RULES = frozenset(rule for rule in BETA_RULES if not rule.startswith(("hs.", "fit.")))
 
 
 def experimental_note(count: int) -> str:
-    return f"{count} experimental note{'s' if count != 1 else ''} hidden (Setup → Show experimental checks)"
+    return f"{count} experimental note{'s' if count != 1 else ''} hidden (Setup → Hide experimental checks is on)"
 
 
 def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable[Check]) -> list[Finding]:
@@ -1667,11 +1667,11 @@ def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable
 
 
 def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None,
-              include_experimental: bool = False, hidden: list[Finding] | None = None) -> list[Finding]:
+              include_experimental: bool = True, hidden: list[Finding] | None = None) -> list[Finding]:
     """The light built-in checks plus extra providers, sorted by severity.
 
     A failing check never hides the others: it becomes an INFO finding. Findings of
-    EXPERIMENTAL_RULES are left out (appended to `hidden` if given) unless include_experimental.
+    EXPERIMENTAL_RULES are left out (appended to `hidden` if given) when include_experimental is False.
     """
     found = _run(RULES, snapshot, EXTRA_PROVIDERS if providers is None else providers)
     if include_experimental:

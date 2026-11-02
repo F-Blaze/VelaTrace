@@ -210,7 +210,7 @@ class Settings:
     output_cap: int = 4096
     digikey_id: str = ""
     digikey_secret: str = field(default="", repr=False)
-    experimental: bool = False
+    hide_experimental: bool = False
 
     def digikey_login(self):
         return DigiKeyLogin(self.digikey_id, self.digikey_secret) if self.digikey_id and self.digikey_secret else None
@@ -328,10 +328,10 @@ class SettingsDialog(QDialog):
         secret.setEchoMode(QLineEdit.EchoMode.Password)
 
         checks = section("Checks", False)
-        self.experimental = QCheckBox("Show experimental checks")
-        self.experimental.setChecked(settings.experimental)
+        self.experimental = QCheckBox("Hide experimental checks")
+        self.experimental.setChecked(settings.hide_experimental)
         self.experimental.setToolTip("Rules that were right less than half the time on test boards. "
-                                     "Shown as notes. Takes effect on the next check.")
+                                     "Shown as notes unless hidden. Takes effect on the next check.")
         checks.addRow(self.experimental)
 
         advanced = section("Advanced", False)
@@ -358,7 +358,7 @@ class SettingsDialog(QDialog):
         values = {name: field.text().strip() for name, field in self.fields.items()}
         return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(),
                         cap=self.cap.value(), output_cap=self.output_cap.value(),
-                        experimental=self.experimental.isChecked())
+                        hide_experimental=self.experimental.isChecked())
 
 
 class ComponentCard(QFrame):
@@ -974,7 +974,7 @@ class MainWindow(QMainWindow):
         def bom(snap):
             return design_findings(snap, self.config_dir)  # JLCPCB hook: catalogue + cached live data
         hidden = []
-        found = run_rules(snapshot, providers=[bom], include_experimental=self.settings.experimental, hidden=hidden)
+        found = run_rules(snapshot, providers=[bom], include_experimental=not self.settings.hide_experimental, hidden=hidden)
         self.hidden_experimental = len(hidden)
         return found
 
@@ -1085,7 +1085,7 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        changed = dialog.value().experimental != self.settings.experimental
+        changed = dialog.value().hide_experimental != self.settings.hide_experimental
         self.apply_settings(dialog.value())
         if changed and getattr(self, "audit_snapshot", None) is not None:
             self.findings = self.check_design(self.audit_snapshot)  # Takes effect now, not on the next load.

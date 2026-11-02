@@ -582,7 +582,7 @@ class UiTests(unittest.TestCase):
         from PySide6.QtWidgets import QLabel
         headers = [item.text() for item in self.window.card_container.findChildren(QLabel)
                    if " · " in item.text() and item.text().split(" · ")[0] in {"Errors", "Warnings", "Savings", "Info"}]
-        self.assertEqual(headers, ["Warnings · 2", "Savings · 1"])  # the 2 experimental notes are hidden
+        self.assertEqual(headers, ["Warnings · 2", "Savings · 1", "Info · 2"])
         self.assertIn("2 warnings · 1 saving", self.window.totals.text())
         self.assertIn("never removed automatically", self.window.totals.toolTip())
         card = self.window.finding_cards[0]
@@ -597,28 +597,33 @@ class UiTests(unittest.TestCase):
         from PySide6.QtWidgets import QLabel
         from velatrace.ui import Settings, SettingsDialog
         texts = lambda: [item.text() for item in self.window.card_container.findChildren(QLabel)]
-        note = "experimental notes hidden (Setup → Show experimental checks)"
-        self.assertEqual(self.window.hidden_experimental, 2)
-        self.assertIn(f"2 {note}", texts())
-        self.window.settings.experimental = True  # a re-check with the box ticked shows them instead
+        note = "experimental notes hidden (Setup → Hide experimental checks is on)"
+        self.assertEqual(self.window.hidden_experimental, 0)  # shown by default
+        self.assertFalse([text for text in texts() if "experimental notes hidden" in text])
+        self.assertEqual(sum(card.finding.rule in EXPERIMENTAL_RULES for card in self.window.finding_cards), 2)
+        self.window.settings.hide_experimental = True  # a re-check with the box ticked hides them
         self.window.findings = self.window.check_design(self.window.audit_snapshot)
         self.window.render_cards()
         QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-        self.assertEqual(self.window.hidden_experimental, 0)
-        self.assertFalse([text for text in texts() if note in text])
-        self.assertEqual(sum(card.finding.rule in EXPERIMENTAL_RULES for card in self.window.finding_cards), 2)
+        self.assertEqual(self.window.hidden_experimental, 2)
+        self.assertIn(f"2 {note}", texts())
+        self.assertEqual(sum(card.finding.rule in EXPERIMENTAL_RULES for card in self.window.finding_cards), 0)
         # Default off, saved, restored, and offered as a checkbox in Setup.
-        self.assertFalse(Settings().experimental)
+        self.assertFalse(Settings().hide_experimental)
         saved = Path(self.temp.name) / "gate.json"
-        Settings(experimental=True).save(saved)
+        Settings(hide_experimental=True).save(saved)
         loaded = Settings()
         loaded.load(saved)
-        self.assertTrue(loaded.experimental)
+        self.assertTrue(loaded.hide_experimental)
+        saved.write_text('{"experimental": true}', encoding="utf-8")  # old key: ignored, checks stay shown
+        loaded = Settings()
+        loaded.load(saved)
+        self.assertFalse(loaded.hide_experimental)
         dialog = SettingsDialog(Settings(), self.window)
         self.assertFalse(dialog.experimental.isChecked())
-        self.assertEqual(dialog.experimental.text(), "Show experimental checks")
+        self.assertEqual(dialog.experimental.text(), "Hide experimental checks")
         dialog.experimental.setChecked(True)
-        self.assertTrue(dialog.value().experimental)
+        self.assertTrue(dialog.value().hide_experimental)
 
     def test_finding_text_is_plain_and_locate_hook_is_reserved(self):
         from decimal import Decimal
@@ -975,7 +980,6 @@ class SetupUsabilityTests(unittest.TestCase):
                  Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"), Pin("3", ""), Pin("4", ""))))
         with patch("velatrace.ui.read_xml_netlist", return_value=DesignSnapshot(parts, "fixture")):
             window = self.launch()
-            window.settings.experimental = True
             self.read_fixture(window)
         self.assertNotIn("Stopped", window.status.text())
         self.assertEqual([c.reference for c in window.audit_snapshot.components], ["U1"])
