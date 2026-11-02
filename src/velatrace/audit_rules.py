@@ -1663,6 +1663,15 @@ def _sibling(module: str, name: str) -> Check:
     return lambda snapshot: getattr(import_module(f"{__package__}.{module}"), name)(snapshot)
 
 
+def _signal(name: str) -> Check:
+    """Check from rules_signal, bound late because that module imports this one."""
+    def run(snapshot: DesignSnapshot) -> list[Finding]:
+        from . import rules_signal
+        return getattr(rules_signal, name)(snapshot)
+    run.__name__ = name
+    return run
+
+
 RULES: dict[str, Check] = {
     "decoupling": check_decoupling,
     "i2c": check_i2c_pullups,
@@ -1682,6 +1691,9 @@ RULES: dict[str, Check] = {
     "polarity.mosfet_topology": lambda snapshot: rules_polarity.check_mosfet_topology(snapshot),
     "power.mounting_hole_rail": lambda snapshot: rules_polarity.check_mounting_hole_rail(snapshot),
     "power.rail_voltage_mismatch": lambda snapshot: rules_polarity.check_rail_voltage_mismatch(snapshot),
+    "crystal.load_caps_missing": _signal("check_crystal_load_caps"),
+    "usb.dp_dn_swapped": _signal("check_usb_dp_dn_swapped"),
+    "net.output_contention": _signal("check_output_contention"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
