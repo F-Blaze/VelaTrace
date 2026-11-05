@@ -305,7 +305,8 @@ def _supply_pins(design: _Design, ic: Component) -> dict[str, list[Pin]]:
     result: dict[str, list[Pin]] = defaultdict(list)
     for pin in ic.pins:
         name = re.sub(r"[~{}]", "", pin.name.upper())
-        if (not pin.net or _is_return(design, pin.net) or pin.no_connect or _GROUND.fullmatch(name)
+        if (not pin.net or pin.net.startswith("unconnected-(") or _is_return(design, pin.net) or pin.no_connect
+                or _GROUND.fullmatch(name)
                 or any(_NOT_SUPPLY_TOKEN.fullmatch(token) for token in re.split(r"[^A-Z0-9]+", name))):
             continue
         if not typed:
@@ -373,6 +374,15 @@ _SOURCE_PIN = re.compile(r"[+-]?(?:V?OUT|VO|V?BAT|SW|LX|SYS)\d*[+-]?")  # output
 _LOW_CURRENT_PART = re.compile(
     r"74[A-Z]{0,5}1G\d|NC7S[A-Z]?\d|MAX8(?:09|1[012])(?!\d)|APX80[39]|TPS38\d\d|STM8(?:0\d|1\d)(?!\d)|MCP1\d\d(?!\d)")
 REGULATOR_MAX_PINS = 12  # larger parts with a power_out pin (motor drivers, PMICs) also have signal pins to decouple
+
+
+_AMP_INPUT_PIN = re.compile(r"[+-]|[+-]IN[A-D]?|IN[A-D]?[+-]")
+
+
+def _is_linear_amp(ic: Component) -> bool:
+    """Op-amps, comparators and audio amps (an input pin named +/-/IN+/IN-): low-frequency analog
+    parts work with a bypass cap a few cm away on the rail, so only a missing cap is reported."""
+    return any(_AMP_INPUT_PIN.fullmatch(re.sub(r"[~{}\s]", "", pin.name.upper())) for pin in ic.pins)
 
 
 def _r6_low_current(ic: Component) -> bool:
@@ -447,7 +457,7 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
         # 1-Wire sensors, references and supervisors in TO-92/SOT-23-3 draw microamps and need no bypass;
         # a 3-pin regulator still does (input/output caps).
         tiny = len(terminals(ic)) <= 3 and not _is_regulator(ic)
-        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic) or _r6_low_current(ic)
+        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic) or _r6_low_current(ic) or _is_linear_amp(ic)
         # A capacitor to any of the IC's own power/ground pin nets also decouples: stacked
         # domains (cap to the neighbouring rail), protection ICs on a local ground (DW01 B-).
         returns = base_returns | {pin.net for pin in ic.pins if pin.net and (
@@ -944,6 +954,17 @@ def _in4_input_like(pin: Pin) -> bool:
         _IN4_CONTROL_PIN.fullmatch(token) for token in re.split(r"[^A-Z0-9]+", pin.name.upper()))
 
 
+_GPIO_TOKEN = re.compile(r"P[A-K]\d{1,2}|P\d[._]?\d{1,2}|GPIO\d+|IO\d+")
+_STRAP_TOKEN = re.compile(r"BOOT\d?|N?RST|RESET|MODE\d?|STRAP\w*|EN")
+
+
+def _is_gpio(pin: Pin) -> bool:
+    """A programmable MCU port pin (PE6, P0.3, GPIO12): firmware sets its pull-up or drives it,
+    so leaving a spare one open is normal. Boot/reset/strap functions on the same pin still count."""
+    tokens = [t for t in re.split(r"[^A-Z0-9_.]+", pin.name.upper()) if t]
+    return any(_GPIO_TOKEN.fullmatch(t) for t in tokens) and not any(_STRAP_TOKEN.fullmatch(t) for t in tokens)
+
+
 def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
     """IC input pins (schematic pin type) left unconnected without a no-connect flag."""
     design = _Design(snapshot)
@@ -956,7 +977,7 @@ def check_floating_inputs(snapshot: DesignSnapshot) -> list[Finding]:
         family = f"{ic.value} {mpn_of(ic) or ''}".upper()
         open_ok = {name for part_re, names in _OPEN_OK_BY_PART if part_re.search(family) for name in names}
         floating = [pin for pin in ic.pins if _in4_input_like(pin)
-                    and _open_net(design, ic, pin)
+                    and _open_net(design, ic, pin) and not _is_gpio(pin)
                     and not _TRIM_PIN.search(pin.name.upper())
                     and not set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & (_OPEN_OK_PIN | open_ok)]
         if not floating:

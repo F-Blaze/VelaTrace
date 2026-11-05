@@ -680,3 +680,27 @@ def test_info_rules_are_always_info_and_breaking_rules_keep_their_severity():
     got = run_rules(empty, providers=[lambda _s: [Finding(r, s, r) for r, s in kept]])
     assert sorted((f.rule, f.severity) for f in got) == sorted(kept)
     assert not set(audit_rules.INFO_RULES) & {rule for rule, _ in kept}
+
+
+def test_far_cap_is_fine_for_op_amps_but_missing_cap_is_not():
+    def amp(*extra):
+        return part("U1", "TL072", "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+12V", "V+", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "V-", "power_in", (10.0, 12.0)), ("3", "Net-(U1-+)", "+", "input"),
+                    ("2", "Net-(U1--)", "-", "input"), ("1", "OUT", "", "output"), *extra)
+    far = cap(a="+12V", pin_pos=((40.0, 10.0), (41.0, 10.0)))
+    assert rules(design(amp(), far), "decoupling") == []
+    assert [f.rule for f in rules(design(amp()), "decoupling")] == ["decoupling.missing"]
+
+
+def test_unconnected_supply_pin_needs_no_decoupling():
+    module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
+                  ("2", "GND", "GND", "power_in"), *exp4_spare())
+    assert rules(design(module), "decoupling") == []
+
+
+def test_spare_gpio_may_float_but_boot_pins_may_not():
+    mcu = eeprom_or_bridge("ATmega32U4", open_input("3", "PE6"), open_input("4", "P0.3"), open_input("5", "GPIO12"))
+    assert rules(design(mcu), "pin") == []
+    boot = eeprom_or_bridge("STM32F103", open_input("3", "PB2/BOOT1"), open_input("4", "BOOT0"))
+    found = rules(design(boot), "pin")
+    assert "BOOT0" in found[0].title and "BOOT1" in found[0].title
