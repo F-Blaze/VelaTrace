@@ -31,7 +31,7 @@ def design(*components):
 
 
 def rules(snapshot, rule_prefix):
-    return [item for item in run_rules(snapshot, providers=()) if item.rule.startswith(rule_prefix)]
+    return [item for item in run_rules(snapshot, providers=(), include_opt_in=True) if item.rule.startswith(rule_prefix)]
 
 
 def exp4_spare(count=2):
@@ -704,3 +704,23 @@ def test_spare_gpio_may_float_but_boot_pins_may_not():
     boot = eeprom_or_bridge("STM32F103", open_input("3", "PB2/BOOT1"), open_input("4", "BOOT0"))
     found = rules(design(boot), "pin")
     assert "BOOT0" in found[0].title and "BOOT1" in found[0].title
+
+
+def test_qwiic_and_fan_ports_are_not_power_entries():
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    def conn(*signals):
+        return part("J1", "Conn", "Connector_JST:JST_SH_1x04", ("1", "+5V"), ("2", "GND"),
+                    *[(str(n), net) for n, net in enumerate(signals, 3)])
+    for port in (conn("/I2C_SDA", "/I2C_SCL"), conn("/FAN_PWM", "/FAN_TACHO")):
+        assert rules(design(port, reg, cap("C2", "+5V")), "connector") == []
+    found = rules(design(conn("/UART_TX", "/UART_RX"), reg, cap("C2", "+5V")), "connector")
+    assert [f.nets for f in found] == [("+5V",)]
+
+
+def test_cap_distance_check_is_opt_in():
+    near_ic = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "", (10.0, 10.0)),
+                   ("2", "GND", "GND", "", (10.0, 12.0)))
+    board = design(near_ic, cap(pin_pos=((22.0, 10.0), (23.0, 10.0))))
+    assert not [f for f in run_rules(board, providers=()) if f.rule == "decoupling.far"]
+    assert [f.rule for f in run_rules(board, providers=(), include_opt_in=True) if f.rule == "decoupling.far"]

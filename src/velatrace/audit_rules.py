@@ -131,6 +131,7 @@ _NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|(?<![A-Z0-9])(?:SD|TF)(?![A-Z0-9]
                               r"CASTELLAT|STAMP")
 # Pin names that take a supply in (untyped netlists): VIN/VCC/VDD/VBUS..., IN, 3V3, V+.
 _SUPPLY_PIN = re.compile(r"IN\d*|VI|DC|ADAPTER|V\+|[AD]?P?V(?:CC|DD|IN|BUS|BAT|SYS|MOT|S|M|P)\w*")
+_FAN_SIGNAL = re.compile(r"(?<![A-Z])(?:PWM|TACH\w*|FG)(?![A-Z])")
 SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
@@ -1100,8 +1101,11 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
             continue  # card sockets, M.2, SWD/Tag-Connect: loads and programming pads
         if not any(net in design.grounds or _RETURN.fullmatch(net_label(net)) for net in nets):
             continue
-        if len({n for n in nets if net_label(n) and n not in design.grounds and n not in design.supplies}) >= SIGNAL_INTERFACE_MIN:
+        signals = {n for n in nets if net_label(n) and n not in design.grounds and n not in design.supplies}
+        if len(signals) >= SIGNAL_INTERFACE_MIN:
             continue
+        if signals and all(i2c_line(n) or _FAN_SIGNAL.search(net_label(n)) for n in signals):
+            continue  # Qwiic/STEMMA I2C port or fan header: an accessory port, not a power entry
         for net in sorted(nets & design.supplies):
             if net.startswith("unconnected-(") or len(design.nodes[net]) < 2:
                 continue
@@ -1793,14 +1797,24 @@ def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable
                           for item in findings])
 
 
+# Off unless the user asks (Setup → Check capacitor distances): decoupling.far was right in only
+# 3 of 24 rulings on bench boards it was not tuned on (2026-11-04), while the rest of the light
+# checks stayed at ~75%. The cap is there in every case; only its distance is judged.
+OPT_IN_RULES = frozenset({"decoupling.far"})
+
+
 def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None,
-              include_experimental: bool = True, hidden: list[Finding] | None = None) -> list[Finding]:
+              include_experimental: bool = True, hidden: list[Finding] | None = None,
+              include_opt_in: bool = False) -> list[Finding]:
     """The light built-in checks plus extra providers, sorted by severity.
 
     A failing check never hides the others: it becomes an INFO finding. Findings of
-    EXPERIMENTAL_RULES are left out (appended to `hidden` if given) when include_experimental is False.
+    EXPERIMENTAL_RULES are left out (appended to `hidden` if given) when include_experimental is False;
+    OPT_IN_RULES only run when include_opt_in is True.
     """
     found = _run(RULES, snapshot, EXTRA_PROVIDERS if providers is None else providers)
+    if not include_opt_in:
+        found = [item for item in found if item.rule not in OPT_IN_RULES]
     if include_experimental:
         return found
     if hidden is not None:
