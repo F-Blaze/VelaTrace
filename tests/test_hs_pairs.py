@@ -66,9 +66,17 @@ def test_pair_that_reaches_only_a_charger_is_not_a_data_pair():
 
 def test_full_speed_only_usb_device_pair_is_quiet():
     connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
-    for value in ("STM32G431", "RP2040", "ESP32-S3-WROOM-1", "CH340C", "ATmega32U4-AU"):
+    for value in ("STM32G431", "RP2040", "ESP32-S3-WROOM-1", "CH340C", "ATmega32U4-AU", "CP2112", "PCM2912A"):
         fs = hs_part("U2", value, "Package_QFP:LQFP-48", {"32": "USB_D-", "33": "USB_D+"})
         assert ids(hs_adapter_board(connector, fs)) == [], value
+
+
+def test_full_speed_device_behind_series_resistors_is_found():
+    connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
+    r1 = hs_part("R1", "27", "Resistor_SMD:R_0402", {"1": "USB_D+", "2": "/RP_DP"})
+    r2 = hs_part("R2", "27", "Resistor_SMD:R_0402", {"1": "USB_D-", "2": "/RP_DM"})
+    mcu = hs_part("U2", "RP2040", "Package_DFN_QFN:QFN-56", {"46": "/RP_DM", "47": "/RP_DP"})
+    assert ids(hs_adapter_board(connector, r1, r2, mcu)) == []
 
 
 def test_matched_pair_and_small_mismatch_are_quiet():

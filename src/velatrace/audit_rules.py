@@ -1348,14 +1348,20 @@ def _routed_pairs(snapshot: DesignSnapshot) -> list:
 # an extra via between D+ and D- is far below what that link notices, so pair checks skip them.
 _FULL_SPEED_USB = re.compile(
     r"ESP32-?(?:S2|S3|C3|C5|C6|H2)|RP2040|RP2350|ATMEGA\d+U\d|AT90USB|ATSAMD|SAMD\d\d|STM32(?:F[0-4]|[GLCU]\d)|"
-    r"CH34[0-9]|CH9102|CH55\d|CH32V|CP210\d|FT23[012][RXQ]|MCP2221|PIC1[68]F\d*K?5\d|GD32F")
+    r"CH34[0-9]|CH9102|CH55\d|CH32V|CP21\d\d|PCM29\d\d|FT23[012][RXQ]|MCP2221|PIC1[68]F\d*K?5\d|GD32F")
 
 
 def _full_speed_usb(snapshot: DesignSnapshot, p: str, n: str) -> bool:
     """The pair reaches ICs, and every IC on it is a full-speed-only USB device (connectors,
-    resistors and ESD parts in between do not count)."""
+    ESD parts and series resistors of up to 100 Ω in between do not count)."""
+    nets = {p, n}
+    for comp in snapshot.components:
+        ends = two_terminal_nets(comp)
+        ohms = parse_resistance(comp.value) if comp.reference.upper().startswith("R") else None
+        if ends and ohms is not None and ohms <= 100 and set(ends) & {p, n}:
+            nets |= set(ends)
     chips = [comp for comp in snapshot.components if comp.reference.upper().startswith(("U", "IC"))
-             and any(pin.net in (p, n) for pin in comp.pins)]
+             and any(pin.net in nets for pin in comp.pins)]
     chips = [comp for comp in chips if not _PROTECTION_VALUE.search(f"{comp.value} {comp.footprint}".upper())]
     return bool(chips) and all(_FULL_SPEED_USB.search(f"{comp.value} {mpn_of(comp) or ''}".upper()) for comp in chips)
 
