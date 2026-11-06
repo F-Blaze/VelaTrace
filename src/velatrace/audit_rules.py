@@ -1244,10 +1244,13 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
         if not empty and (mpn_of(comp) or any(_STOCK_FIELD.search(name) and text.strip()
                                               for name, text in comp.fields.items())):
             continue  # a generic value ("LED") is fine while an MPN or stock ID names the part
+        if not empty and kind in {"resistor", "capacitor", "inductor"} and parse_value(value.split("_")[0], kind):
+            continue  # a part-specific symbol named by its value ("20p_0402_C0G_50V") does carry the value
         code = lcsc_code(comp) or next((text.strip() for name, text in comp.fields.items()
                                         if name.strip().casefold() in _ORDER_FIELDS and text.strip()), "")
         if code and not mpn_of(comp):
-            order_only[comp.reference] = code
+            if kind not in {"led", "diode"}:  # "LED" plus an order code is normal; a passive needs its value
+                order_only[comp.reference] = code
         else:
             unset.append(comp.reference)
     unset.sort()
@@ -1338,7 +1341,23 @@ def _routed_pairs(snapshot: DesignSnapshot) -> list:
     adapter = _adapter_nets(snapshot, found.pairs)
     return [(p, n, routing[p], routing[n], found.interfaces.get(p) or found.interfaces.get(n))
             for p, n in found.pairs if routing[p].length_mm > 0 and routing[n].length_mm > 0
-            and p not in adapter]
+            and p not in adapter and not _full_speed_usb(snapshot, p, n)]
+
+
+# USB devices whose built-in USB is full-speed only (12 Mbit/s, edges of several ns): a few mm or
+# an extra via between D+ and D- is far below what that link notices, so pair checks skip them.
+_FULL_SPEED_USB = re.compile(
+    r"ESP32-?(?:S2|S3|C3|C5|C6|H2)|RP2040|RP2350|ATMEGA\d+U\d|AT90USB|ATSAMD|SAMD\d\d|STM32(?:F[0-4]|[GLCU]\d)|"
+    r"CH34[0-9]|CH9102|CH55\d|CH32V|CP210\d|FT23[012][RXQ]|MCP2221|PIC1[68]F\d*K?5\d|GD32F")
+
+
+def _full_speed_usb(snapshot: DesignSnapshot, p: str, n: str) -> bool:
+    """The pair reaches ICs, and every IC on it is a full-speed-only USB device (connectors,
+    resistors and ESD parts in between do not count)."""
+    chips = [comp for comp in snapshot.components if comp.reference.upper().startswith(("U", "IC"))
+             and any(pin.net in (p, n) for pin in comp.pins)]
+    chips = [comp for comp in chips if not _PROTECTION_VALUE.search(f"{comp.value} {comp.footprint}".upper())]
+    return bool(chips) and all(_FULL_SPEED_USB.search(f"{comp.value} {mpn_of(comp) or ''}".upper()) for comp in chips)
 
 
 def _vias(count: int) -> str:
@@ -1396,7 +1415,9 @@ def check_pair_vias(snapshot: DesignSnapshot) -> list[Finding]:
 # crystal/RTC nets (XTAL, XIN/XOUT, OSC, HSE/LSE, 32k): those are usually slow sine-ish
 # oscillator lines where a return-path note is noise. No data rate or edge rate is known,
 # so every finding is an estimate. Gaps are judged from stored fills sampled along each track.
-GAP_MM = 3.0             # a stretch of fast route this long with no reference fill under it is reported
+# A stretch of fast route this long with no reference fill under it is reported. Shorter breaks
+# (a pour cut around pads and vias near a chip) were judged harmless in every bench ruling (2026-11-05).
+GAP_MM = 8.0
 #                          (issue #62's rule of thumb, not measured)
 GAP_STEP_MM = 0.5        # sample spacing along a track for the fill check
 VIA_HOLE_MM = 0.5        # samples this close to one of the net's own vias sit in its antipad: skipped

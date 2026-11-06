@@ -75,10 +75,8 @@ class NoPlaneTests(unittest.TestCase):
         def board(*fills):
             return replace(two_layer("unreferenced"), zones=fills)
         self.assertEqual(check_return_plane(snap(board(FilledZone("GND", "B.Cu", SQUARE)))), [])
-        part = check_return_plane(snap(board(FilledZone("GND", "B.Cu", ((-1, -1), (4, -1), (4, 1), (-1, 1))))))
-        self.assertEqual(len(part), 1)
-        self.assertIn("runs 6.0 mm", part[0].title)
-        self.assertIn("B.Cu", part[0].evidence)
+        # A 6 mm break in the fill is below GAP_MM (8 mm): a pour cut near pads is normal.
+        self.assertEqual(check_return_plane(snap(board(FilledZone("GND", "B.Cu", ((-1, -1), (4, -1), (4, 1), (-1, 1)))))), [])
         # A fill on the track's own layer is not a reference.
         own = check_return_plane(snap(board(FilledZone("GND", "F.Cu", SQUARE))))
         self.assertIn("no reference plane under it", own[0].title)
@@ -110,9 +108,10 @@ class PlaneGapTests(unittest.TestCase):   # issue #62
         self.assertIn("10.25, 5.00 mm", found[0].evidence)
 
     def test_bridged_hole_under_one_line(self):
-        found = check_return_plane(snap(usb_over(with_hole(18, 23, 4.6, 5.4))))
+        found = check_return_plane(snap(usb_over(with_hole(14, 26, 4.6, 5.4))))
         self.assertEqual([f.nets for f in found], [("USB_D+",)])
-        self.assertIn("runs 5.0 mm", found[0].title)
+        self.assertIn("runs 12.0 mm", found[0].title)
+        self.assertEqual(check_return_plane(snap(usb_over(with_hole(18, 23, 4.6, 5.4)))), [])  # 5 mm: below GAP_MM
 
     def test_antipad_at_own_via_passes(self):
         self.assertEqual(check_return_plane(snap(usb_over(with_hole(19.6, 20.4, 4.6, 5.4),

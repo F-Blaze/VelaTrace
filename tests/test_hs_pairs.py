@@ -57,11 +57,18 @@ def hs_adapter_board(*parts, length=30):
 def test_pair_that_reaches_only_a_charger_is_not_a_data_pair():
     connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
     charger = hs_part("U1", "BQ25792RQMR1", "Texas_RQM0029A_VQFN-HR-28", {"6": "USB_D+", "7": "USB_D-"})
-    mcu = hs_part("U2", "STM32G431", "Package_QFP:LQFP-48", {"32": "USB_D-", "33": "USB_D+"})
+    mcu = hs_part("U2", "USB2514B", "Package_DFN_QFN:QFN-36", {"32": "USB_D-", "33": "USB_D+"})  # high-speed hub
     assert ids(hs_adapter_board(connector)) == ["hs.pair.skew", "hs.pair.vias"]
     assert ids(hs_adapter_board(connector, charger)) == []
     assert ids(hs_adapter_board(connector, charger, mcu)) == ["hs.pair.skew", "hs.pair.vias"]
     assert ids(hs_adapter_board(connector, mcu)) == ["hs.pair.skew", "hs.pair.vias"]
+
+
+def test_full_speed_only_usb_device_pair_is_quiet():
+    connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
+    for value in ("STM32G431", "RP2040", "ESP32-S3-WROOM-1", "CH340C", "ATmega32U4-AU"):
+        fs = hs_part("U2", value, "Package_QFP:LQFP-48", {"32": "USB_D-", "33": "USB_D+"})
+        assert ids(hs_adapter_board(connector, fs)) == [], value
 
 
 def test_matched_pair_and_small_mismatch_are_quiet():

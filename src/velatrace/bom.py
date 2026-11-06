@@ -798,7 +798,8 @@ def _variant_merge_findings(ctx: _Context) -> list[Finding]:
     findings = []
     for (kind, value, package), members in ctx.by_line.items():
         names = Counter(m.component.footprint for m in members)
-        if (len(names) < 2 or len({_PAD_VARIANT.sub("", fp.rsplit(":", 1)[-1]) for fp in names}) > 1
+        # Footprints that differ only in library name ("Resistor_SMD:" vs a project copy) are the same land pattern.
+        if (len({fp.rsplit(":", 1)[-1] for fp in names}) < 2 or len({_PAD_VARIANT.sub("", fp.rsplit(":", 1)[-1]) for fp in names}) > 1
                 or len({lcsc_code(m.component) for m in members} - {None}) > 1
                 or len({mpn_of(m.component) for m in members} - {None}) > 1
                 or any(not a.parsed.compatible(b.parsed) for a in members for b in members)):

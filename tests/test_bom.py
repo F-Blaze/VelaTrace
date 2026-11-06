@@ -523,3 +523,8 @@ def test_ck4_pad_variant_merge_keeps_the_order_code_and_mpn_guards():
                          two_pin("R3", "10K 5%", R0805_HAND, "+3V3", "/SCL"))
     assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET"),
                          two_pin("R3", "10K", R0805, "+3V3", "/SCL"))
+
+
+def test_package_merge_ignores_a_footprint_that_differs_only_in_library_name():
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET", LCSC="C84376"),
+                         two_pin("R2", "10K", "MyProject:R_0805_2012Metric", "+3V3", "/SCL", LCSC="C84376"))

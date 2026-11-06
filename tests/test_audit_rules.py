@@ -724,3 +724,12 @@ def test_cap_distance_check_is_opt_in():
     board = design(near_ic, cap(pin_pos=((22.0, 10.0), (23.0, 10.0))))
     assert not [f for f in run_rules(board, providers=()) if f.rule == "decoupling.far"]
     assert [f.rule for f in run_rules(board, providers=(), include_opt_in=True) if f.rule == "decoupling.far"]
+
+
+def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
+    led = part("D1", "LED", "LED_SMD:LED_0603", ("1", "A"), fields={"LCSC": "C2297", "lib_id": "Device:LED"})
+    named = part("C1", "20p_0402_C0G_50V", "Capacitor_SMD:C_0402", ("1", "A"),
+                 fields={"LCSC": "C1554", "lib_id": "lib:20p_0402_C0G_50V"})
+    assert rules(design(ic(), cap(), led, named), "value.missing") == []
+    bare = part("C2", "C", "Capacitor_SMD:C_0402", ("1", "A"), fields={"LCSC": "C1554", "lib_id": "Device:C"})
+    assert [f.refs for f in rules(design(ic(), cap(), bare), "value.missing")] == [("C2",)]
