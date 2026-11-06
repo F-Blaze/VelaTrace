@@ -40,7 +40,7 @@ Full list: [docs/behavior-and-limits.md](docs/behavior-and-limits.md#built-in-au
 
 You need KiCad 10 (tested on Windows only).
 
-1. In KiCad open the **Plugin and Content Manager**, search for **VelaTrace**, click **Install**, then **Apply Pending Changes**. If it is not listed yet, download `VelaTrace-v0.1.0-alpha.2-pcm.zip` from the [v0.1.0-alpha.2 release](https://github.com/F-Blaze/VelaTrace/releases/tag/v0.1.0-alpha.2) and use **Install from File...**. (If you installed earlier with `git clone`, delete that `plugins/VelaTrace` folder first.)
+1. In KiCad open the **Plugin and Content Manager**, search for **VelaTrace**, click **Install**, then **Apply Pending Changes**. Without the Plugin Manager (offline, or an older KiCad index), download `VelaTrace-v0.1.0-alpha.2-pcm.zip` from the [v0.1.0-alpha.2 release](https://github.com/F-Blaze/VelaTrace/releases/tag/v0.1.0-alpha.2) and use **Install from File...**. (If you installed earlier with `git clone`, delete that `plugins/VelaTrace` folder first.)
 2. When KiCad asks to enable the KiCad API, click **Yes**. (Missed it? **Preferences > Plugins**, tick **Enable KiCad API**.)
 3. Open the PCB Editor. The first start installs about 300 MB of Python packages (about 4 minutes for me), then a VelaTrace button appears. Click it, then **Check design**.
 
