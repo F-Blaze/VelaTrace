@@ -31,7 +31,7 @@ def design(*components):
 
 
 def rules(snapshot, rule_prefix):
-    return [item for item in run_rules(snapshot, providers=(), include_opt_in=True) if item.rule.startswith(rule_prefix)]
+    return [item for item in run_rules(snapshot, providers=()) if item.rule.startswith(rule_prefix)]
 
 
 def exp4_spare(count=2):
@@ -718,13 +718,6 @@ def test_qwiic_and_fan_ports_are_not_power_entries():
     assert [f.nets for f in found] == [("+5V",)]
 
 
-def test_cap_distance_check_is_opt_in():
-    near_ic = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "", (10.0, 10.0)),
-                   ("2", "GND", "GND", "", (10.0, 12.0)))
-    board = design(near_ic, cap(pin_pos=((22.0, 10.0), (23.0, 10.0))))
-    assert not [f for f in run_rules(board, providers=()) if f.rule == "decoupling.far"]
-    assert [f.rule for f in run_rules(board, providers=(), include_opt_in=True) if f.rule == "decoupling.far"]
-
 
 def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
     led = part("D1", "LED", "LED_SMD:LED_0603", ("1", "A"), fields={"LCSC": "C2297", "lib_id": "Device:LED"})
@@ -752,3 +745,25 @@ def test_cap_one_jumper_away_decouples():
     jumper = part("JP1", "Jumper_3", "Jumper:SolderJumper_3", ("1", "3V0"), ("2", "VMAIN"), ("3", "3V3_AUX"))
     assert rules(design(chip, jumper, cap("C1", "VMAIN")), "decoupling") == []
     assert [f.rule for f in rules(design(chip, jumper), "decoupling")] == ["decoupling.missing"]
+
+
+def test_many_dangling_labels_on_one_header_become_one_note():
+    pins = [(str(n), f"/{n}", f"Pin_{n}") for n in range(1, 9)]
+    found = rules(design(part("J1", "Conn_01x08", "Connector_PinHeader_2.54mm:PinHeader_1x08", *pins)), "net.single_pin")
+    assert len(found) == 1 and found[0].severity == Severity.INFO and len(found[0].nets) == 8
+    few = rules(design(part("J1", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", *pins[:2])), "net.single_pin")
+    assert len(few) == 2
+
+
+def test_regulator_by_part_number_and_marked_up_battery_pin_drive_their_rails():
+    vr = part("VR1", "LM1117MPX-3.3", "My_Library:VREG_LM1117", ("1", "+5V", "VIN", "power_in"),
+              ("2", "+3V3", "VOUT_2", "power_in"), ("3", "GND", "GND", "power_in"))
+    load = part("U3", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    header = part("J4", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+3V3"), ("2", "GND"))
+    assert rules(design(vr, load, header, cap("C1", "+3V3")), "connector") == []
+    charger = part("U1", "MCP73871", "Package_DFN_QFN:QFN-20", ("14", "/VBAT", "V_{BAT}", "power_out"),
+                   ("16", "/VBAT", "V_{BAT_SENSE}", "input"), ("5", "GND", "GND", "power_in"))
+    battery = part("J2", "JST_PH", "Connector_JST:JST_PH_B2B-PH-K_1x02", ("1", "/VBAT"), ("2", "GND"))
+    found = rules(design(charger, load, battery, cap("C2", "/VBAT")), "connector")
+    assert [f.nets for f in found] == [("/VBAT",)]  # a battery input stays flagged, without claiming nothing drives it
+    assert "nothing on the board drives" not in found[0].evidence and "reversed cell" in found[0].evidence

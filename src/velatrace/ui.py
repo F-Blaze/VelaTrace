@@ -211,7 +211,6 @@ class Settings:
     digikey_id: str = ""
     digikey_secret: str = field(default="", repr=False)
     hide_experimental: bool = False
-    check_cap_distance: bool = False
 
     def digikey_login(self):
         return DigiKeyLogin(self.digikey_id, self.digikey_secret) if self.digikey_id and self.digikey_secret else None
@@ -334,11 +333,6 @@ class SettingsDialog(QDialog):
         self.experimental.setToolTip("Rules that were right less than half the time on test boards. "
                                      "Shown as notes unless hidden. Takes effect on the next check.")
         checks.addRow(self.experimental)
-        self.cap_distance = QCheckBox("Check capacitor distances")
-        self.cap_distance.setChecked(settings.check_cap_distance)
-        self.cap_distance.setToolTip("Notes when an IC's nearest bypass capacitor is more than 5 mm away. "
-                                     "Often harmless, so off by default. Takes effect on the next check.")
-        checks.addRow(self.cap_distance)
 
         advanced = section("Advanced", False)
         text(advanced, "search_model", "Search model ID", "Optional; defaults to the model ID.")
@@ -364,8 +358,7 @@ class SettingsDialog(QDialog):
         values = {name: field.text().strip() for name, field in self.fields.items()}
         return Settings(**values, protocol=self.protocol.currentText(), search=self.search.isChecked(),
                         cap=self.cap.value(), output_cap=self.output_cap.value(),
-                        hide_experimental=self.experimental.isChecked(),
-                        check_cap_distance=self.cap_distance.isChecked())
+                        hide_experimental=self.experimental.isChecked())
 
 
 class ComponentCard(QFrame):
@@ -981,8 +974,7 @@ class MainWindow(QMainWindow):
         def bom(snap):
             return design_findings(snap, self.config_dir)  # JLCPCB hook: catalogue + cached live data
         hidden = []
-        found = run_rules(snapshot, providers=[bom], include_experimental=not self.settings.hide_experimental, hidden=hidden,
-                          include_opt_in=self.settings.check_cap_distance)
+        found = run_rules(snapshot, providers=[bom], include_experimental=not self.settings.hide_experimental, hidden=hidden)
         self.hidden_experimental = len(hidden)
         return found
 
@@ -1093,9 +1085,7 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.settings, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        new = dialog.value()
-        changed = (new.hide_experimental, new.check_cap_distance) != (
-            self.settings.hide_experimental, self.settings.check_cap_distance)
+        changed = dialog.value().hide_experimental != self.settings.hide_experimental
         self.apply_settings(dialog.value())
         if changed and getattr(self, "audit_snapshot", None) is not None:
             self.findings = self.check_design(self.audit_snapshot)  # Takes effect now, not on the next load.

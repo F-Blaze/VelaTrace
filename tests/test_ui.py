@@ -624,9 +624,6 @@ class UiTests(unittest.TestCase):
         self.assertEqual(dialog.experimental.text(), "Hide experimental checks")
         dialog.experimental.setChecked(True)
         self.assertTrue(dialog.value().hide_experimental)
-        self.assertFalse(dialog.cap_distance.isChecked())  # cap-distance notes are opt-in
-        dialog.cap_distance.setChecked(True)
-        self.assertTrue(dialog.value().check_cap_distance)
 
     def test_finding_text_is_plain_and_locate_hook_is_reserved(self):
         from decimal import Decimal

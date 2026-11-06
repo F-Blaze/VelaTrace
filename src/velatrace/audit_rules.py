@@ -138,6 +138,13 @@ SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board i
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
 _OUT_PIN = re.compile(r"[+-]?V?OUT\d*[+-]?|[+-]?VO\d*[+-]?")  # also DC/DC-module spellings: +Vo, Vo+, +VOUT, VOUT+
+def _plain_pin(name: str) -> str:
+    """Pin name without KiCad text markup and duplicate-name suffix: "V_{BAT}" -> "VBAT",
+    "~{RESET}" -> "RESET", "VOUT_2" (second VOUT pin) -> "VOUT"."""
+    name = re.sub(r"[_^~]\{([^}]*)\}", r"\1", name.upper())
+    return re.sub(r"_\d+$", "", name)
+
+
 # Battery / backup-cell pins: the IC or module on it manages the cell (charger BAT, module VBAT, RTC VBACKUP).
 _BATTERY_PIN = re.compile(r"\+?V?BATT?\d*\+?|VBACKUP|VBAK|VRTC")
 _VIN_PIN = re.compile(r"P?A?VIN\d*|VCC|VDD")
@@ -926,14 +933,13 @@ ESCAPE_LABELS_MIN = 6
 
 def _group_escape_labels(findings: list[Finding]) -> list[Finding]:
     per_part: dict[str, list[Finding]] = defaultdict(list)
-    for item in findings:
-        if item.rule == "net.single_pin" and item.severity == Severity.WARNING:
+    for item in findings:  # ICs (warnings) and connectors/test points (notes) alike: one card per part
+        if item.rule == "net.single_pin":
             per_part[item.refs[0]].append(item)
     grouped = {ref: rows for ref, rows in per_part.items() if len(rows) >= ESCAPE_LABELS_MIN}
     if not grouped:
         return findings
-    kept = [item for item in findings if not (item.rule == "net.single_pin" and item.refs[0] in grouped
-                                              and item.severity == Severity.WARNING)]
+    kept = [item for item in findings if not (item.rule == "net.single_pin" and item.refs[0] in grouped)]
     for ref, rows in sorted(grouped.items()):
         nets = tuple(net for row in rows for net in row.nets)
         kept.append(Finding(
@@ -1144,11 +1150,15 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
     findings = []
     for refs, nets in sorted(by_conns.items()):
         shown, also = ", ".join(sorted(nets)), (f" (also on {', '.join(refs[1:])})" if len(refs) > 1 else "")
+        battery = all("BAT" in net_label(net) for net in nets)
+        why = ("a battery plugs in there, and nothing on it blocks a reversed cell (a charger may drive "
+               "the rail, but it does not protect against reversal)" if battery else
+               "nothing on the board drives that supply")
         findings.append(Finding(
             "connector.power_unprotected", Severity.INFO,
             f"{refs[0]} carries {shown} with no reverse-polarity/ESD part{also}", refs, tuple(sorted(nets)),
-            f"{', '.join(refs)} {'has' if len(refs) == 1 else 'have'} pins on {shown} and a return; nothing on "
-            "the board drives that supply, and no diode, fuse, transistor or TVS/ESD part touches it.",
+            f"{', '.join(refs)} {'has' if len(refs) == 1 else 'have'} pins on {shown} and a return; {why}, "
+            "and no diode, fuse, transistor or TVS/ESD part touches it.",
             "If this is a power input, add a series Schottky/P-FET or a TVS to ground; "
             "ignore if it only supplies power to another board."))
     return findings
@@ -1198,7 +1208,9 @@ def _drives(design: _Design, group: set[str]) -> bool:
             kind = design.kind[comp.reference]
             if kind == "connector":
                 continue
-            if kind in {"ic", "module"} and _OUT_PIN.fullmatch(pin.name.upper()):
+            # A regulator is one by its part number too (a "VR1" reference is not typed as an IC).
+            if ((kind in {"ic", "module"} or _REGULATOR_PART.search(comp.value.upper()))
+                    and _OUT_PIN.fullmatch(_plain_pin(pin.name))):
                 return True
             if _base_type(pin) == "power_out" and not _NOT_SUPPLY_PIN.fullmatch(pin.name.upper()):
                 return True
@@ -1847,24 +1859,14 @@ def _run(checks: dict[str, Check], snapshot: DesignSnapshot, providers: Iterable
                           for item in findings])
 
 
-# Off unless the user asks (Setup → Check capacitor distances): decoupling.far was right in only
-# 3 of 24 rulings on bench boards it was not tuned on (2026-11-04), while the rest of the light
-# checks stayed at ~75%. The cap is there in every case; only its distance is judged.
-OPT_IN_RULES = frozenset({"decoupling.far"})
-
-
 def run_rules(snapshot: DesignSnapshot, providers: Iterable[Check] | None = None,
-              include_experimental: bool = True, hidden: list[Finding] | None = None,
-              include_opt_in: bool = False) -> list[Finding]:
+              include_experimental: bool = True, hidden: list[Finding] | None = None) -> list[Finding]:
     """The light built-in checks plus extra providers, sorted by severity.
 
     A failing check never hides the others: it becomes an INFO finding. Findings of
-    EXPERIMENTAL_RULES are left out (appended to `hidden` if given) when include_experimental is False;
-    OPT_IN_RULES only run when include_opt_in is True.
+    EXPERIMENTAL_RULES are left out (appended to `hidden` if given) when include_experimental is False.
     """
     found = _run(RULES, snapshot, EXTRA_PROVIDERS if providers is None else providers)
-    if not include_opt_in:
-        found = [item for item in found if item.rule not in OPT_IN_RULES]
     if include_experimental:
         return found
     if hidden is not None:
