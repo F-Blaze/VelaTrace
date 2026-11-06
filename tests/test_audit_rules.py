@@ -733,3 +733,22 @@ def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
     assert rules(design(ic(), cap(), led, named), "value.missing") == []
     bare = part("C2", "C", "Capacitor_SMD:C_0402", ("1", "A"), fields={"LCSC": "C1554", "lib_id": "Device:C"})
     assert [f.refs for f in rules(design(ic(), cap(), bare), "value.missing")] == [("C2",)]
+
+
+def test_raspberry_pi_header_3v3_is_the_pis_output_but_5v_is_still_checked():
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+3V3", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+1V8", "VOUT", "power_out"))
+    def hat(net):
+        return part("J1", "Raspberry_Pi_2_3", "Connector_PinSocket_2.54mm:PinSocket_2x20", ("1", net), ("6", "GND"))
+    assert rules(design(hat("+3V3"), reg, cap("C2", "+3V3")), "connector") == []
+    reg5 = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    assert [f.nets for f in rules(design(hat("+5V"), reg5, cap("C2", "+5V")), "connector")] == [("+5V",)]
+
+
+def test_cap_one_jumper_away_decouples():
+    chip = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "3V0", "VCC", "power_in"),
+                ("2", "GND", "GND", "power_in"), *exp4_spare())
+    jumper = part("JP1", "Jumper_3", "Jumper:SolderJumper_3", ("1", "3V0"), ("2", "VMAIN"), ("3", "3V3_AUX"))
+    assert rules(design(chip, jumper, cap("C1", "VMAIN")), "decoupling") == []
+    assert [f.rule for f in rules(design(chip, jumper), "decoupling")] == ["decoupling.missing"]

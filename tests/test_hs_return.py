@@ -128,8 +128,17 @@ class PlaneGapTests(unittest.TestCase):   # issue #62
         self.assertEqual(check_return_plane(snap(gap, connector, charger, esd)), [])
         self.assertEqual(len(check_return_plane(snap(gap, connector))), 2)             # no IC: still a pair
         # The same pair reaching an MCU as well is a data pair, whatever else is on it.
+        hub = hs_part("U2", "USB2514B", "Package_DFN_QFN:QFN-36", {"13": "USB_D-", "14": "USB_D+"})  # high-speed
+        self.assertEqual(len(check_return_plane(snap(gap, connector, charger, hub))), 2)
+        # Full-speed-only USB (12 Mbit/s) is reported only past 15 mm: this 30 mm gap still counts, 12 mm does not.
         mcu = hs_part("U2", "ESP32-S3", "RF_Module:ESP32-S3-WROOM-1", {"13": "USB_D-", "14": "USB_D+"})
-        self.assertEqual(len(check_return_plane(snap(gap, connector, charger, mcu))), 2)
+        self.assertEqual(len(check_return_plane(snap(gap, connector, mcu))), 2)
+        self.assertEqual(check_return_plane(snap(usb_over(with_hole(14, 26, 0, 10)), connector, mcu)), [])
+
+    def test_chip_select_lines_are_not_return_path_checked(self):
+        gap = usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))), nets=("QSPI_SS", "QSPI_SCLK"))
+        found = check_return_plane(snap(gap))
+        self.assertEqual([f.nets for f in found], [("QSPI_SCLK",)])
 
     def test_antenna_matching_nets_sit_over_a_deliberate_keepout(self):
         gap = usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))), nets=("RF_P", "RF_OUT"))
@@ -198,7 +207,7 @@ if __name__ == "__main__":
 
 def hs2_usb_board(layer_kind="unreferenced", nets=("/U5_IO2", "/GPIO20")):
     """A D+ line on F.Cu through a 22 R series resistor, B.Cu without ground fill."""
-    segs = (seg(nets[0], "F.Cu", (0, 0), (10, 0)), seg(nets[1], "F.Cu", (10, 0), (20, 0)))
+    segs = (seg(nets[0], "F.Cu", (0, 0), (20, 0)), seg(nets[1], "F.Cu", (20, 0), (40, 0)))  # 20 mm each: past the full-speed limit
     return BoardCopper(("F.Cu", "B.Cu"), 1.6, segs, (), (), frozenset(),
                        {"F.Cu": model("F.Cu", layer_kind), "B.Cu": model("B.Cu", layer_kind)}, {})
 
@@ -223,7 +232,7 @@ class UsbPinTests(unittest.TestCase):
         self.assertEqual(check_return_plane(snap(hs2_usb_board(), *plain)), [])
 
     def test_full_ground_fill_and_antenna_nets_stay_silent(self):
-        full = replace(hs2_usb_board(), zones=(FilledZone("GND", "B.Cu", ((-1, -5), (25, -5), (25, 5), (-1, 5))),))
+        full = replace(hs2_usb_board(), zones=(FilledZone("GND", "B.Cu", ((-1, -5), (45, -5), (45, 5), (-1, 5))),))
         self.assertEqual(check_return_plane(snap(full, *hs2_parts())), [])
         self.assertEqual(check_return_plane(snap(hs2_usb_board(), *hs2_parts(antenna=True))), [])
 

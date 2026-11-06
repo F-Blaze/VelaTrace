@@ -132,6 +132,8 @@ _NOT_POWER_ENTRY = re.compile(r"CARD|MICRO_?SD|(?<![A-Z0-9])(?:SD|TF)(?![A-Z0-9]
 # Pin names that take a supply in (untyped netlists): VIN/VCC/VDD/VBUS..., IN, 3V3, V+.
 _SUPPLY_PIN = re.compile(r"IN\d*|VI|DC|ADAPTER|V\+|[AD]?P?V(?:CC|DD|IN|BUS|BAT|SYS|MOT|S|M|P)\w*")
 _FAN_SIGNAL = re.compile(r"(?<![A-Z])(?:PWM|TACH\w*|FG)(?![A-Z])")
+_PI_HEADER = re.compile(r"RASPBERRY|(?<![A-Z])RPI|RASPI|PI_?HAT")
+_THREE_V3 = re.compile(r"3V3|3\.3V")
 SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
@@ -333,10 +335,16 @@ def _series_link(design: _Design, comp: Component, max_ohms: int = 1) -> bool:
 
 
 def _decoupled(design: _Design, net: str, cap_ends: dict[str, set[str]], returns: set[str]) -> bool:
-    """A capacitor from net (or one fuse/ferrite/≤1 Ω hop away) to ground or a return net."""
+    """A capacitor from net (or one fuse/ferrite/≤1 Ω/jumper hop away) to ground or a return net.
+    A jumper (JP/SJ/JMP, any number of positions) selects or links the rail, so a cap on any of its
+    other nets serves the pin."""
     if cap_ends.get(net, set()) & returns:
         return True
     for comp, _ in design.nodes[net]:
+        if design.kind[comp.reference] == "jumper" or re.match(r"JMP\d", comp.reference.upper()):
+            if any(cap_ends.get(other, set()) & returns for other in set(comp.nets) - {net}):
+                return True
+            continue
         nets = two_terminal_nets(comp)
         if nets and net in nets and _series_link(design, comp):
             other = nets[1] if nets[0] == net else nets[0]
@@ -1106,9 +1114,12 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         if signals and all(i2c_line(n) or _FAN_SIGNAL.search(net_label(n)) for n in signals):
             continue  # Qwiic/STEMMA I2C port or fan header: an accessory port, not a power entry
+        pi_header = bool(_PI_HEADER.search(f"{conn.value} {conn.footprint}".upper()))
         for net in sorted(nets & design.supplies):
             if net.startswith("unconnected-(") or len(design.nodes[net]) < 2:
                 continue
+            if pi_header and _THREE_V3.search(net_label(net)):
+                continue  # a Raspberry Pi header's 3.3 V pins are the Pi's regulator output, not an input
             if net not in verdict:
                 group = _rail_group(design, net)
                 parts = [design.parts[ref] for n in group for ref in design.refs_on(n)
@@ -1424,6 +1435,8 @@ def check_pair_vias(snapshot: DesignSnapshot) -> list[Finding]:
 # A stretch of fast route this long with no reference fill under it is reported. Shorter breaks
 # (a pour cut around pads and vias near a chip) were judged harmless in every bench ruling (2026-11-05).
 GAP_MM = 8.0
+# Full-speed USB (12 Mbit/s, several-ns edges) is reported only over a longer unreferenced stretch.
+FULL_SPEED_GAP_MM = 15.0
 #                          (issue #62's rule of thumb, not measured)
 GAP_STEP_MM = 0.5        # sample spacing along a track for the fill check
 VIA_HOLE_MM = 0.5        # samples this close to one of the net's own vias sit in its antipad: skipped
@@ -1494,7 +1507,12 @@ def _fast_nets(snapshot: DesignSnapshot) -> dict[str, str]:
     guesses = {net: guess for net, guess in found.interfaces.items() if guess != "clock" or net in sourced}
     nets = ({net: "USB data" for net in _usb_pin_nets(snapshot)}
             | {net: "differential pair" for pair in found.pairs for net in pair} | guesses)
-    return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net)) and net not in adapter}
+    return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net)) and net not in adapter
+            and not _CHIP_SELECT.search(net_label(net))}
+
+
+# Chip selects toggle once per transfer, so their return path is not what limits a link.
+_CHIP_SELECT = re.compile(r"(?<![A-Z0-9])(?:N?CS\d?N?|N?SS|NSS|CE\d?)(?![A-Z0-9])")
 
 
 def _antenna_nets(snapshot: DesignSnapshot) -> set[str]:
@@ -1559,6 +1577,7 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
         return []
     antennas = _antenna_nets(snapshot)
     nets = {net: guess for net, guess in _fast_nets(snapshot).items() if net not in antennas}
+    full_speed = {net for net in nets if _full_speed_usb(snapshot, net, net)}
     fills: dict[str, list] = defaultdict(list)
     for zone in copper.zones:
         if is_ground(zone.net) or is_supply_name(zone.net):
@@ -1582,7 +1601,8 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
             refs = _references(copper, seg.layer)
         polygons = [polygon for ref in refs for polygon in fills.get(ref, ())]
         for length, start in _gaps(seg, polygons, holes[seg.net]) if polygons else ():
-            gaps[seg.net].append((seg.layer, refs, length, start))
+            if seg.net not in full_speed or length > FULL_SPEED_GAP_MM:
+                gaps[seg.net].append((seg.layer, refs, length, start))
     findings = []
     for net, rows in sorted(gaps.items()):
         total = sum(row[2] for row in rows)
@@ -1600,6 +1620,8 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
             fix="Extend the ground pour under the whole route, or move the line over solid copper. If it "
                 "must cross a split between two planes, add a stitching capacitor across it next to the line."))
     for net, layers in sorted(lengths.items()):
+        if net in full_speed and sum(layers.values()) <= FULL_SPEED_GAP_MM:
+            continue
         shown = ", ".join(f"{layer} {length:.1f} mm" for layer, length in sorted(layers.items()))
         findings.append(Finding(
             "hs.return.no_plane", Severity.WARNING,
@@ -1655,7 +1677,8 @@ def check_return_vias(snapshot: DesignSnapshot) -> list[Finding]:
     copper = snapshot.copper
     if copper is None or not copper.planes:
         return []
-    nets = _fast_nets(snapshot)
+    # Full-speed USB (12 Mbit/s) does not notice a return via a few mm further away.
+    nets = {net: guess for net, guess in _fast_nets(snapshot).items() if not _full_speed_usb(snapshot, net, net)}
     ends: dict[str, list] = defaultdict(list)
     for seg in copper.segments:
         if seg.net in nets:
