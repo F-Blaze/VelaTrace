@@ -97,7 +97,7 @@ _NOT_SUPPLY_PIN = re.compile(r"(?:SW|LX|PH|DCC\w*|EN|PG|PGOOD|BOOT|BST)\d*")
 # nodes, enable/shutdown, boot, references, charge-pump and internal-regulator capacitor pins.
 _NOT_SUPPLY_TOKEN = re.compile(
     r"(?:SW|LX|PH|PHASE|DCC\w*|N?EN|PG|PGOOD|BOOT|BST|VCP|CP|CAP|VCAP|CFLY)\d*|SWITCH|N?ENABLE|SHDN|SHUTDOWN|"
-    r"RUN|UVLO|V?REF\w*")
+    r"RUN|UVLO|V?REF\w*|V?FB\d*")
 _LED_VDD_PIN = re.compile(r"V?DD|VCC|V\+")
 # Op-amp offset-null/trim and compensation pins: left open when unused, per datasheets.
 _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
@@ -308,8 +308,8 @@ def _supply_pins(design: _Design, ic: Component) -> dict[str, list[Pin]]:
     Typed netlists: power_in pins, and a power_out regulator output (VOUT/OUT) on a named rail
     feeding something beyond resistors; other outputs (references, charge pumps, internal LDOs
     such as AXP209 VINT) are not supply inputs. Addressable LEDs also count their VDD pin.
-    Pins on a ground/return net, ground-named pins, and switch-node/enable/boot/reference/
-    charge-pump pins typed power never are."""
+    Pins on a ground/return net, ground-named pins, and
+    switch-node/enable/boot/reference/charge-pump/feedback pins typed power never are."""
     typed = any(pin.electrical_type for pin in ic.pins)
     led = _is_addressable(ic)
     result: dict[str, list[Pin]] = defaultdict(list)
@@ -401,8 +401,13 @@ def _is_linear_amp(ic: Component) -> bool:
     return any(_AMP_INPUT_PIN.fullmatch(re.sub(r"[~{}\s]", "", pin.name.upper())) for pin in ic.pins)
 
 
+# Parts drawing microamps whatever their pin count: fuel gauges, power-path controllers (not EEPROMs: writes draw mA).
+_MICROAMP_PART = re.compile(r"MAX1704\d|LTC441[12]")
+
+
 def _r6_low_current(ic: Component) -> bool:
-    return len(terminals(ic)) <= 6 and bool(_LOW_CURRENT_PART.search(ic.value.upper()))
+    value = ic.value.upper()
+    return (len(terminals(ic)) <= 6 and bool(_LOW_CURRENT_PART.search(value))) or bool(_MICROAMP_PART.search(value))
 
 
 def _is_regulator(ic: Component) -> bool:
@@ -473,7 +478,7 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
         # 1-Wire sensors, references and supervisors in TO-92/SOT-23-3 draw microamps and need no bypass;
         # a 3-pin regulator still does (input/output caps).
         tiny = len(terminals(ic)) <= 3 and not _is_regulator(ic)
-        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic) or _r6_low_current(ic) or _is_linear_amp(ic)
+        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic) or _r6_low_current(ic) or _is_linear_amp(ic) or bool(_PAIR_ESD.search(ic.value))
         # A capacitor to any of the IC's own power/ground pin nets also decouples: stacked
         # domains (cap to the neighbouring rail), protection ICs on a local ground (DW01 B-).
         returns = base_returns | {pin.net for pin in ic.pins if pin.net and (
@@ -868,8 +873,8 @@ def _repeats_pin_name(net: str, pin: Pin) -> bool:
 
 # Template labels on a connector pin that only name the header pin's function (Raspberry Pi 40-pin header etc.).
 _R6_STANDARD_LABEL = re.compile(
-    r"GPIO_?\d*|IO_?\d+|[DA]\d{1,2}|P[A-K]?\d{1,3}|ID_S[DC]|[TR]XD?\d?|SDA\d?|SCL\d?|SCLK|SCK|MOSI|MISO|CE\d|CS\d?"
-    r"|PWM\d*|PCM|CLK|FS|DIN|DOUT|SPI\d*|I2C\d*|UART\d*|GCLK\d*")
+    r"\d{1,2}|GPIO_?\d*|IO_?\d+|[DA]\d{1,2}|P[A-K]?\d{1,3}|ID_S(?:[DC]L?|DA)|[TR]XD?\d?|SDA\d?|SCL\d?|SCLK|SCK|MOSI|MISO|CE\d|CS\d?"
+    r"|PWM\d*|PCM|CLK|FS|DIN|DOUT|SPI\d*|I2C\d*|UART\d*|GP?CLK\d*")
 
 
 def _r6_documentation_label(net: str, pin: Pin) -> bool:

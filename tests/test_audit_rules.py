@@ -336,6 +336,14 @@ def test_single_pin_named_net():
     assert [f.severity for f in rules(header, "net")] == [Severity.INFO]
 
 
+def test_header_labels_naming_standard_pin_functions_are_documentation():
+    for label in ("/ID_SCL", "/ID_SDA", "/GPIO4/GPCLK0", "/10"):
+        header = design(part("J1", "Conn_02x20", "Connector_PinHeader_2.54mm:PinHeader_2x20", ("28", label)))
+        assert rules(header, "net") == [], label
+    header = design(part("J1", "Conn_02x20", "Connector_PinHeader_2.54mm:PinHeader_2x20", ("7", "/MOTOR_EN")))
+    assert [f.rule for f in rules(header, "net")] == ["net.single_pin"]
+
+
 def test_single_pin_label_repeating_the_gpio_name_is_documentation():
     for label, pin in (("GP22", "GPIO22"), ("GPIO22", "GPIO22"), ("IO35", "IO35"), ("PB4", "PB4"), ("B4", "PB4")):
         assert rules(design(ic("U1", ("3", label, pin)), cap()), "net") == [], label
@@ -692,6 +700,25 @@ def test_far_cap_is_fine_for_op_amps_but_missing_cap_is_not():
     assert [f.rule for f in rules(design(amp()), "decoupling")] == ["decoupling.missing"]
 
 
+def test_far_cap_is_fine_for_esd_arrays_and_microamp_parts_but_not_an_mcu_or_eeprom():
+    def chip(value):
+        return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)), ("5", "/SDA", "SDA", "bidirectional"),
+                    ("6", "/SCL", "SCL", "input"))
+    far = cap(a="+3V3", pin_pos=((40.0, 10.0), (41.0, 10.0)))
+    for value in ("USBLC6-2SC6", "ESDR0502N", "MAX17048", "LTC4412"):
+        assert rules(design(chip(value), far), "decoupling") == [], value
+    for value in ("ATtiny85", "24LC256"):  # an EEPROM write draws milliamps
+        assert [f.rule for f in rules(design(chip(value), far), "decoupling")] == ["decoupling.far"], value
+
+
+def test_regulator_feedback_pin_is_not_a_supply_input():
+    driver = part("U1", "MCT8316", "Package_DFN_QFN:QFN-40", ("1", "+12V", "VM", "power_in"),
+                  ("2", "GND", "GND", "power_in"), ("3", "/FB", "FB_BK", "power_in"))
+    bulk = cap(ref="C2", a="+12V")
+    assert rules(design(driver, bulk), "decoupling") == []
+
+
 def test_unconnected_supply_pin_needs_no_decoupling():
     module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
                   ("2", "GND", "GND", "power_in"), *exp4_spare())
@@ -748,7 +775,7 @@ def test_cap_one_jumper_away_decouples():
 
 
 def test_many_dangling_labels_on_one_header_become_one_note():
-    pins = [(str(n), f"/{n}", f"Pin_{n}") for n in range(1, 9)]
+    pins = [(str(n), f"/SIG{n}", f"Pin_{n}") for n in range(1, 9)]
     found = rules(design(part("J1", "Conn_01x08", "Connector_PinHeader_2.54mm:PinHeader_1x08", *pins)), "net.single_pin")
     assert len(found) == 1 and found[0].severity == Severity.INFO and len(found[0].nets) == 8
     few = rules(design(part("J1", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", *pins[:2])), "net.single_pin")
