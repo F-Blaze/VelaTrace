@@ -336,6 +336,14 @@ def test_single_pin_named_net():
     assert [f.severity for f in rules(header, "net")] == [Severity.INFO]
 
 
+def test_header_labels_naming_standard_pin_functions_are_documentation():
+    for label in ("/ID_SCL", "/ID_SDA", "/GPIO4/GPCLK0", "/10"):
+        header = design(part("J1", "Conn_02x20", "Connector_PinHeader_2.54mm:PinHeader_2x20", ("28", label)))
+        assert rules(header, "net") == [], label
+    header = design(part("J1", "Conn_02x20", "Connector_PinHeader_2.54mm:PinHeader_2x20", ("7", "/MOTOR_EN")))
+    assert [f.rule for f in rules(header, "net")] == ["net.single_pin"]
+
+
 def test_single_pin_label_repeating_the_gpio_name_is_documentation():
     for label, pin in (("GP22", "GPIO22"), ("GPIO22", "GPIO22"), ("IO35", "IO35"), ("PB4", "PB4"), ("B4", "PB4")):
         assert rules(design(ic("U1", ("3", label, pin)), cap()), "net") == [], label
@@ -680,3 +688,109 @@ def test_info_rules_are_always_info_and_breaking_rules_keep_their_severity():
     got = run_rules(empty, providers=[lambda _s: [Finding(r, s, r) for r, s in kept]])
     assert sorted((f.rule, f.severity) for f in got) == sorted(kept)
     assert not set(audit_rules.INFO_RULES) & {rule for rule, _ in kept}
+
+
+def test_far_cap_is_fine_for_op_amps_but_missing_cap_is_not():
+    def amp(*extra):
+        return part("U1", "TL072", "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+12V", "V+", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "V-", "power_in", (10.0, 12.0)), ("3", "Net-(U1-+)", "+", "input"),
+                    ("2", "Net-(U1--)", "-", "input"), ("1", "OUT", "", "output"), *extra)
+    far = cap(a="+12V", pin_pos=((40.0, 10.0), (41.0, 10.0)))
+    assert rules(design(amp(), far), "decoupling") == []
+    assert [f.rule for f in rules(design(amp()), "decoupling")] == ["decoupling.missing"]
+
+
+def test_far_cap_is_fine_for_esd_arrays_and_microamp_parts_but_not_an_mcu_or_eeprom():
+    def chip(value):
+        return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)), ("5", "/SDA", "SDA", "bidirectional"),
+                    ("6", "/SCL", "SCL", "input"))
+    far = cap(a="+3V3", pin_pos=((40.0, 10.0), (41.0, 10.0)))
+    for value in ("USBLC6-2SC6", "ESDR0502N", "MAX17048", "LTC4412"):
+        assert rules(design(chip(value), far), "decoupling") == [], value
+    for value in ("ATtiny85", "24LC256"):  # an EEPROM write draws milliamps
+        assert [f.rule for f in rules(design(chip(value), far), "decoupling")] == ["decoupling.far"], value
+
+
+def test_regulator_feedback_pin_is_not_a_supply_input():
+    driver = part("U1", "MCT8316", "Package_DFN_QFN:QFN-40", ("1", "+12V", "VM", "power_in"),
+                  ("2", "GND", "GND", "power_in"), ("3", "/FB", "FB_BK", "power_in"))
+    bulk = cap(ref="C2", a="+12V")
+    assert rules(design(driver, bulk), "decoupling") == []
+
+
+def test_unconnected_supply_pin_needs_no_decoupling():
+    module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
+                  ("2", "GND", "GND", "power_in"), *exp4_spare())
+    assert rules(design(module), "decoupling") == []
+
+
+def test_spare_gpio_may_float_but_boot_pins_may_not():
+    mcu = eeprom_or_bridge("ATmega32U4", open_input("3", "PE6"), open_input("4", "P0.3"), open_input("5", "GPIO12"))
+    assert rules(design(mcu), "pin") == []
+    boot = eeprom_or_bridge("STM32F103", open_input("3", "PB2/BOOT1"), open_input("4", "BOOT0"))
+    found = rules(design(boot), "pin")
+    assert "BOOT0" in found[0].title and "BOOT1" in found[0].title
+
+
+def test_qwiic_and_fan_ports_are_not_power_entries():
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    def conn(*signals):
+        return part("J1", "Conn", "Connector_JST:JST_SH_1x04", ("1", "+5V"), ("2", "GND"),
+                    *[(str(n), net) for n, net in enumerate(signals, 3)])
+    for port in (conn("/I2C_SDA", "/I2C_SCL"), conn("/FAN_PWM", "/FAN_TACHO")):
+        assert rules(design(port, reg, cap("C2", "+5V")), "connector") == []
+    found = rules(design(conn("/UART_TX", "/UART_RX"), reg, cap("C2", "+5V")), "connector")
+    assert [f.nets for f in found] == [("+5V",)]
+
+
+
+def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
+    led = part("D1", "LED", "LED_SMD:LED_0603", ("1", "A"), fields={"LCSC": "C2297", "lib_id": "Device:LED"})
+    named = part("C1", "20p_0402_C0G_50V", "Capacitor_SMD:C_0402", ("1", "A"),
+                 fields={"LCSC": "C1554", "lib_id": "lib:20p_0402_C0G_50V"})
+    assert rules(design(ic(), cap(), led, named), "value.missing") == []
+    bare = part("C2", "C", "Capacitor_SMD:C_0402", ("1", "A"), fields={"LCSC": "C1554", "lib_id": "Device:C"})
+    assert [f.refs for f in rules(design(ic(), cap(), bare), "value.missing")] == [("C2",)]
+
+
+def test_raspberry_pi_header_3v3_is_the_pis_output_but_5v_is_still_checked():
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+3V3", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+1V8", "VOUT", "power_out"))
+    def hat(net):
+        return part("J1", "Raspberry_Pi_2_3", "Connector_PinSocket_2.54mm:PinSocket_2x20", ("1", net), ("6", "GND"))
+    assert rules(design(hat("+3V3"), reg, cap("C2", "+3V3")), "connector") == []
+    reg5 = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    assert [f.nets for f in rules(design(hat("+5V"), reg5, cap("C2", "+5V")), "connector")] == [("+5V",)]
+
+
+def test_cap_one_jumper_away_decouples():
+    chip = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "3V0", "VCC", "power_in"),
+                ("2", "GND", "GND", "power_in"), *exp4_spare())
+    jumper = part("JP1", "Jumper_3", "Jumper:SolderJumper_3", ("1", "3V0"), ("2", "VMAIN"), ("3", "3V3_AUX"))
+    assert rules(design(chip, jumper, cap("C1", "VMAIN")), "decoupling") == []
+    assert [f.rule for f in rules(design(chip, jumper), "decoupling")] == ["decoupling.missing"]
+
+
+def test_many_dangling_labels_on_one_header_become_one_note():
+    pins = [(str(n), f"/SIG{n}", f"Pin_{n}") for n in range(1, 9)]
+    found = rules(design(part("J1", "Conn_01x08", "Connector_PinHeader_2.54mm:PinHeader_1x08", *pins)), "net.single_pin")
+    assert len(found) == 1 and found[0].severity == Severity.INFO and len(found[0].nets) == 8
+    few = rules(design(part("J1", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", *pins[:2])), "net.single_pin")
+    assert len(few) == 2
+
+
+def test_regulator_by_part_number_and_marked_up_battery_pin_drive_their_rails():
+    vr = part("VR1", "LM1117MPX-3.3", "My_Library:VREG_LM1117", ("1", "+5V", "VIN", "power_in"),
+              ("2", "+3V3", "VOUT_2", "power_in"), ("3", "GND", "GND", "power_in"))
+    load = part("U3", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    header = part("J4", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+3V3"), ("2", "GND"))
+    assert rules(design(vr, load, header, cap("C1", "+3V3")), "connector") == []
+    charger = part("U1", "MCP73871", "Package_DFN_QFN:QFN-20", ("14", "/VBAT", "V_{BAT}", "power_out"),
+                   ("16", "/VBAT", "V_{BAT_SENSE}", "input"), ("5", "GND", "GND", "power_in"))
+    battery = part("J2", "JST_PH", "Connector_JST:JST_PH_B2B-PH-K_1x02", ("1", "/VBAT"), ("2", "GND"))
+    found = rules(design(charger, load, battery, cap("C2", "/VBAT")), "connector")
+    assert [f.nets for f in found] == [("/VBAT",)]  # a battery input stays flagged, without claiming nothing drives it
+    assert "nothing on the board drives" not in found[0].evidence and "reversed cell" in found[0].evidence
