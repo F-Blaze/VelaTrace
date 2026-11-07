@@ -1,0 +1,259 @@
+{
+ "slug": "seatalk-wifi-bridge",
+ "reviewer": "opus-blind-h2A",
+ "parts_reviewed": 40,
+ "issues": [
+  {
+   "rule": "other:dnp-not-flagged",
+   "severity": "warning",
+   "refs": [
+    "R12",
+    "C7"
+   ],
+   "nets": [
+    "/RXD",
+    "/SEATALK1",
+    "/12VFB"
+   ],
+   "confidence": "high",
+   "evidence": "R12 (0 ohm, R_NOINSTALL) and C7 (47pF, C_NOINSTALL) are drawn as NOINSTALL but the symbol instances have (in_bom yes) (dnp no), so they appear in the BOM/CPL and the netlist carries no DNP mark. R12 bridges /RXD (Q2 drain, R9 4.7k to +12V, U3 RIN) to /SEATALK1 (Q2 gate, Q1 drain, MK5).",
+   "why_it_matters": "An assembler working from the BOM fits R12, which ties Q2 drain to its own gate: Q2 becomes diode-connected on the SeaTalk bus and clamps the shared bus near Vgs(th) via R9, corrupting the bus for every instrument. C7 fitted is mostly harmless (feed-forward cap) but is still an unintended placement.",
+   "time_or_money": "functional risk; set DNP attribute on 2 parts"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "warning",
+   "refs": [
+    "MK1",
+    "MK7",
+    "MK2",
+    "MK8",
+    "U1",
+    "C6"
+   ],
+   "nets": [
+    "+12V",
+    "GND"
+   ],
+   "confidence": "medium",
+   "evidence": "+12V from the SeaTalk harness pads MK1/MK7 goes straight to U1 (AP62300) VIN pin 3 with only C6 10uF; no fuse, no reverse-polarity diode/FET, no TVS on +12V.",
+   "why_it_matters": "Marine 12V bus sees 14.4V+ charging and load-dump/inductive transients; AP62300 is rated 18V operating. A reversed or spiking harness destroys U1 and the 3V3 rail.",
+   "time_or_money": "functional risk; ~$0.15 for SMBJ18A + series Schottky/PFET"
+  },
+  {
+   "rule": "other:bom-pn-mismatch",
+   "severity": "warning",
+   "refs": [
+    "U1"
+   ],
+   "nets": [],
+   "confidence": "high",
+   "evidence": "U1 MPN field AP62300WU-7 but Digikey PN field is 31-AP62200TWU-7TR-ND (an AP62200T part).",
+   "why_it_matters": "Ordering by the distributor PN gets a different (lower-current / different variant) regulator than the MPN and symbol.",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "other:bus-input-unprotected",
+   "severity": "info",
+   "refs": [
+    "Q2",
+    "Q1",
+    "MK5"
+   ],
+   "nets": [
+    "/SEATALK1"
+   ],
+   "confidence": "medium",
+   "evidence": "/SEATALK1 from MK5 goes directly to Q2 gate (pin 1) and Q1 drain with no series resistor, clamp or TVS.",
+   "why_it_matters": "2N7002 Vgs max is +/-20V; bus transients or miswiring to the 12V supply with spikes can punch through the gate oxide. A 1k series R plus a zener/TVS is cheap insurance.",
+   "time_or_money": "robustness; ~$0.05"
+  },
+  {
+   "rule": "other:bom-fields-incomplete",
+   "severity": "info",
+   "refs": [
+    "C2",
+    "C3",
+    "C4",
+    "C5",
+    "C6",
+    "C8",
+    "C9",
+    "C10",
+    "C11",
+    "C12",
+    "C13",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "R9",
+    "R10",
+    "R11",
+    "L1",
+    "D1"
+   ],
+   "nets": [],
+   "confidence": "high",
+   "evidence": "All passives, L1 and D1 have MFG/MPN/Voltage/Dielectric/Tolerance = N/A; ratings only given by the sheet note (6.3V min caps, C6 25V min).",
+   "why_it_matters": "L1 saturation current and C6 voltage/dielectric are not pinned; procurement can substitute an under-rated inductor for a 3A buck.",
+   "time_or_money": "BOM tidy-up"
+  },
+  {
+   "rule": "other:level-shifter-overkill",
+   "severity": "saving",
+   "refs": [
+    "U3",
+    "C8",
+    "C9",
+    "C11",
+    "C12"
+   ],
+   "nets": [
+    "/TXD",
+    "/RXD",
+    "/RIN",
+    "/TOUT"
+   ],
+   "confidence": "low",
+   "evidence": "MAX3221 (RS-232 transceiver with 4 charge-pump caps) is used only to drive Q1 gate (DOUT) and to sense the Q2 drain node (RIN).",
+   "why_it_matters": "A logic-level FET driven straight from GPIO14 and a resistor divider/second FET on the receive side do the same job; the MAX3221 + 4 caps cost ~$1.5 and board area. It does give clean gate drive and +/-25V input tolerance, so this is optional.",
+   "time_or_money": "~$1.5/board, 5 BOM lines"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "unconnected-(U2-CS0-Pad9)",
+    "unconnected-(U2-MISO-Pad10)",
+    "unconnected-(U2-MOSI-Pad13)",
+    "unconnected-(U2-SCLK-Pad14)",
+    "unconnected-(U2-GPIO9-Pad11)",
+    "unconnected-(U2-GPIO10-Pad12)"
+   ],
+   "reason": "ESP-12E flash SPI pins are used by the module's internal flash and must be left unconnected; all carry no-connect flags."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "unconnected-(U2-ADC-Pad2)",
+    "unconnected-(U2-GPIO4-Pad19)",
+    "unconnected-(U2-GPIO5-Pad20)",
+    "unconnected-(U2-GPIO13-Pad7)"
+   ],
+   "reason": "Spare GPIO/ADC deliberately unused, flagged no-connect."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U3"
+   ],
+   "nets": [
+    "unconnected-(U3-~{INVALID}-Pad10)"
+   ],
+   "reason": "INVALID is a status output; leaving it open is fine."
+  },
+  {
+   "rule": "other:strap-tied-to-rail",
+   "refs": [
+    "U3"
+   ],
+   "nets": [
+    "+3V3",
+    "GND"
+   ],
+   "reason": "MAX3221 FORCEON and ~FORCEOFF tied to VCC and ~EN tied to GND keep the transceiver permanently on and receiver enabled - intended."
+  },
+  {
+   "rule": "other:enable-tied-to-rail",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "+3V3"
+   ],
+   "reason": "ESP-12E CH_PD tied directly to +3V3 is a valid always-enabled configuration."
+  },
+  {
+   "rule": "other:reset-no-pullup",
+   "refs": [
+    "U2",
+    "R11",
+    "SW1"
+   ],
+   "nets": [
+    "/~{RST}"
+   ],
+   "reason": "ESP8266 EXT_RSTB has an internal pull-up; R11 1k to GPIO16 is the standard deep-sleep wake link and limits current when SW1 is pressed while GPIO16 drives high."
+  },
+  {
+   "rule": "other:boot-straps",
+   "refs": [
+    "R5",
+    "R6",
+    "R7"
+   ],
+   "nets": [
+    "/UART1_TXD",
+    "/GPIO15",
+    "/BOOT"
+   ],
+   "reason": "GPIO2 pulled up, GPIO15 pulled down, GPIO0 pulled up with SW2 to GND - correct ESP8266 boot strapping."
+  },
+  {
+   "rule": "other:bus-pullup-missing",
+   "refs": [
+    "Q1",
+    "MK5"
+   ],
+   "nets": [
+    "/SEATALK1"
+   ],
+   "reason": "SeaTalk1 is an open-collector bus pulled up inside the existing instruments; the bridge only pulls low (Q1) and senses (Q2)."
+  },
+  {
+   "rule": "other:series-resistor-on-uart",
+   "refs": [
+    "R8",
+    "MK4"
+   ],
+   "nets": [
+    "/UART0_RXD",
+    "/RIN"
+   ],
+   "reason": "R8 1k isolates MAX3221 ROUT so a programmer on MK4 can override RXD for flashing."
+  },
+  {
+   "rule": "other:gate-driven-by-rs232",
+   "refs": [
+    "Q1",
+    "U3"
+   ],
+   "nets": [
+    "/TXD"
+   ],
+   "reason": "Q1 gate driven by MAX3221 DOUT (+/-5.5V) is within 2N7002 Vgs rating; DOUT is always actively driven (FORCEON high, DIN internal pull-up) so no gate pull-down is needed, and Q1 stays off at boot."
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "+3V3"
+   ],
+   "reason": "ESP-12E module carries its own decoupling; board adds 2x22uF + 1uF + 0.1uF on +3V3."
+  }
+ ],
+ "notes": "Seatalk1 bridge: AP62300 buck 12V->3.3V (FB 75k/24k = 3.30V), ESP-12E, MAX3221 used as inverting level shifter; TX = GPIO14 -> DIN -> DOUT -> Q1 open-drain on bus (non-inverting overall), RX = bus -> Q2 inverter (R9 to 12V) -> RIN -> ROUT -> R8 -> RXD (non-inverting). Polarity and boot straps verified. Connections are via test pads (MK*), no real connector. Not assessed: AP62300 EN abs-max vs R10 pull-up to +12V (datasheet not checked), L1 Isat, layout."
+}

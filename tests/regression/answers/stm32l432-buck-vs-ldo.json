@@ -1,0 +1,228 @@
+{
+ "slug": "stm32l432-buck-vs-ldo",
+ "reviewer": "opus-blind-h2C",
+ "parts_reviewed": 28,
+ "issues": [
+  {
+   "rule": "other:footprint.missing",
+   "severity": "error",
+   "refs": [
+    "J4",
+    "J5"
+   ],
+   "nets": [
+    "+BATT",
+    "/Vi_BUCK",
+    "/Vi_LDO",
+    "/VCC",
+    "/Vo_Buck",
+    "/Vo_LDO"
+   ],
+   "confidence": "high",
+   "evidence": "J4 and J5 (Conn_01x03_Pin) have an empty Footprint field in the netlist. They are the only path from +BATT to the regulators (J4.2 -> J4.1 Vi_BUCK / J4.3 Vi_LDO) and from the regulator outputs to /VCC (J5.1 Vo_Buck / J5.3 Vo_LDO -> J5.2 VCC)",
+   "why_it_matters": "Update-PCB would drop or refuse these parts. Without the selector jumpers the MCU gets no power",
+   "time_or_money": "board respin risk"
+  },
+  {
+   "rule": "other:pcb.out_of_sync",
+   "severity": "warning",
+   "refs": [
+    "J1",
+    "R4",
+    "R5",
+    "J4"
+   ],
+   "nets": [],
+   "confidence": "medium",
+   "evidence": "stm32.kicad_pcb has J1 (Conn_01x03), R4 and R5 (value 'R', i.e. symbol default) that are not in the schematic or netlist. Schematic J4 is not on the PCB",
+   "why_it_matters": "Layout does not match the schematic. Stray resistors with no value could be fabricated or assembled",
+   "time_or_money": "rework/respin risk"
+  },
+  {
+   "rule": "value.missing",
+   "severity": "warning",
+   "refs": [
+    "FB1"
+   ],
+   "nets": [
+    "/VCC",
+    "/VDDA"
+   ],
+   "confidence": "high",
+   "evidence": "FB1 value is the symbol default 'FerriteBead', with no MPN or impedance spec. It sits between /VCC and /VDDA (U1.5)",
+   "why_it_matters": "The part cannot be sourced as specified. The VDDA filter performance is undefined",
+   "time_or_money": "1 BOM line unresolved"
+  },
+  {
+   "rule": "value.missing",
+   "severity": "warning",
+   "refs": [
+    "Y1",
+    "C2",
+    "C3"
+   ],
+   "nets": [
+    "/PC14",
+    "/PC15"
+   ],
+   "confidence": "high",
+   "evidence": "Y1 value is the symbol default 'Crystal' (3215 package on PC14/PC15, i.e. a 32.768 kHz LSE), with no frequency, CL or MPN. The C2/C3 load caps are 18 pF",
+   "why_it_matters": "With 18 pF caps CL is about 11-13 pF. If the crystal is a common 6-7 pF low-power LSE part, it runs off-frequency and may fail to start at low LSEDRV drive (AN2867)",
+   "time_or_money": "1 BOM line, RTC accuracy risk"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "info",
+   "refs": [
+    "J2",
+    "J4",
+    "U2",
+    "U3"
+   ],
+   "nets": [
+    "+BATT"
+   ],
+   "confidence": "medium",
+   "evidence": "J2.1 +BATT / J2.2 GND feed U3 VIN (TPS62840, 6.5 V max) or U2 VIN (STLQ020, 5.5 V max) through jumper J4 only. There is no reverse-polarity diode/FET, fuse or TVS",
+   "why_it_matters": "A reversed battery destroys the regulator and possibly the MCU",
+   "time_or_money": "functional risk"
+  },
+  {
+   "rule": "other:swd.no_vtref",
+   "severity": "info",
+   "refs": [
+    "J3"
+   ],
+   "nets": [
+    "/NRST",
+    "/SWDIO",
+    "/SWCLK",
+    "GND"
+   ],
+   "confidence": "medium",
+   "evidence": "The 4-pin SWD header J3 carries only NRST, SWDIO, SWCLK and GND. There is no VCC/VTref pin",
+   "why_it_matters": "ST-LINK probes sense target voltage on VAPP/T_VCC. Without it the probe may report 0 V and refuse to connect, or level-shift wrongly. You must wire VCC from J6/J7 by hand",
+   "time_or_money": "bring-up friction"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "unconnected-(U2-NC/ADJ-Pad4)"
+   ],
+   "reason": "STLQ020C33R is the fixed 3.3 V version. Pin 4 is NC/ADJ and is meant to be left open (no NC flag, but it is correct)"
+  },
+  {
+   "rule": "other:logic_pin_tied_rail",
+   "refs": [
+    "U3"
+   ],
+   "nets": [
+    "GND"
+   ],
+   "reason": "TPS62840 MODE=GND (auto PFM/PWM) and STOP=GND (normal operation) are intentional static configuration"
+  },
+  {
+   "rule": "other:enable_tied_vin",
+   "refs": [
+    "U2",
+    "U3"
+   ],
+   "nets": [
+    "/Vi_LDO",
+    "/Vi_BUCK"
+   ],
+   "reason": "Both regulators are always on when powered. Which one runs is chosen by jumper J4, so no EN control is needed"
+  },
+  {
+   "rule": "other:floating_rail",
+   "refs": [
+    "J4",
+    "J5"
+   ],
+   "nets": [
+    "/Vi_BUCK",
+    "/Vi_LDO",
+    "/Vo_Buck",
+    "/Vo_LDO"
+   ],
+   "reason": "A/B comparison board: the unselected regulator's input and output deliberately float, set by the J4/J5 jumpers"
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U1",
+    "FB1"
+   ],
+   "nets": [
+    "/VDDA"
+   ],
+   "reason": "VDDA has C9 10 nF + C10 1 uF after ferrite FB1 (the ST-recommended filter). VDD pins have C6 4.7 uF + C7/C8 100 nF"
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "unconnected-(U1-PA11-Pad21)",
+    "unconnected-(U1-PA12-Pad22)"
+   ],
+   "reason": "USB pins are unused and carry no-connect flags"
+  },
+  {
+   "rule": "other:boot0_pulldown",
+   "refs": [
+    "R1",
+    "SW2"
+   ],
+   "nets": [
+    "/BOOT0"
+   ],
+   "reason": "PH3/BOOT0 has a 10k pull-down and a push button to VCC for the system bootloader. Correct"
+  },
+  {
+   "rule": "other:swd_pullups",
+   "refs": [
+    "J3",
+    "U1"
+   ],
+   "nets": [
+    "/SWDIO",
+    "/SWCLK"
+   ],
+   "reason": "STM32 has internal pull-up/pull-down on PA13/PA14. No external resistors needed"
+  },
+  {
+   "rule": "other:no_hse",
+   "refs": [
+    "U1"
+   ],
+   "nets": [],
+   "reason": "There is no HSE crystal. The MSI/HSI internal oscillators suffice since USB is not used. Only an LSE for the RTC is fitted"
+  },
+  {
+   "rule": "other:no_vbat",
+   "refs": [
+    "U1"
+   ],
+   "nets": [],
+   "reason": "STM32L432KC in UFQFPN32 has no VBAT pin, so no backup supply is missing"
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U3"
+   ],
+   "nets": [
+    "Net-(U3-SW)"
+   ],
+   "reason": "The SW pin is typed power_in in the SnapEDA symbol but is the switch node driving L1. No decoupling belongs there"
+  }
+ ],
+ "notes": "Buck (TPS62840) vs LDO (STLQ020) comparison board for an STM32L432. Core MCU support (decoupling, VDDA filter, NRST, BOOT0, SWD) is sound. The main real defects are the jumper parts J4/J5 with no footprint and a PCB out of sync with the schematic. The TPS62840 VSET resistor R2 267k could not be checked against the datasheet VSET table from memory. C12 10 uF 0603 output cap is in line with the datasheet's 2.2 uH / 10 uF recommendation, though DC-bias derating at 3.3 V cuts its effective capacitance."
+}

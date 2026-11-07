@@ -1,0 +1,247 @@
+{
+ "slug": "cm5-carrier-board",
+ "reviewer": "opus-blind-h6B",
+ "parts_reviewed": 54,
+ "issues": [
+  {
+   "rule": "decoupling.far",
+   "severity": "warning",
+   "refs": [
+    "U3",
+    "C6",
+    "C7",
+    "C8"
+   ],
+   "nets": [
+    "/CM5_5V"
+   ],
+   "confidence": "high",
+   "evidence": "PCB: the AP3441 buck U3 sits at (138.0,72.9) on B.Cu, but its only /CM5_5V input caps (C6 10u, C7 10u, C8 100n) are at about (149-152.5, 87.6), roughly 17-18 mm from VIN pin 3. The output caps C10-C13 are close (about 5-10 mm).",
+   "why_it_matters": "A synchronous buck's input cap must close the VIN to PGND hot loop within a few mm. At 17 mm the loop inductance gives VIN/LX ringing and spikes, EMI, and possible instability or overstress of the 5.5 V-max AP3441 input.",
+   "time_or_money": "layout change; possible respin"
+  },
+  {
+   "rule": "net.single_pin",
+   "severity": "info",
+   "refs": [
+    "Conn2"
+   ],
+   "nets": [
+    "/PCIe_PWR_EN"
+   ],
+   "confidence": "medium",
+   "evidence": "Label /PCIe_PWR_EN connects only to Conn2 pin 6. The M.2 3.3 V buck U3 EN instead comes from R9 100k to /CM5_5V, so it is always on.",
+   "why_it_matters": "The CM5 cannot power-cycle the M.2 SSD (OS control and recovery are lost). A dangling label usually means a missed connection.",
+   "time_or_money": "functional limitation, $0 fix"
+  },
+  {
+   "rule": "decoupling.missing",
+   "severity": "warning",
+   "refs": [
+    "U1",
+    "U5"
+   ],
+   "nets": [
+    "/CM5_3V3"
+   ],
+   "confidence": "medium",
+   "evidence": "The /CM5_3V3 net (CM5 3.3 V output) has no capacitor at all. RT9742 load switch U1 IN (pin 5) and 74LVC1G07 U5 VCC (pin 5) have no local bypass. Only the In2 3V3 pour is present.",
+   "why_it_matters": "When U1 switches the SD card's inrush onto SD_PWR (C1 10u), the CM5's 3V3 output dips with nothing local to supply it. The RT9742 datasheet recommends an input cap at IN.",
+   "time_or_money": "$0.01/board"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "info",
+   "refs": [
+    "J2",
+    "J5"
+   ],
+   "nets": [
+    "/USB_5V"
+   ],
+   "confidence": "low",
+   "evidence": "USB-C VBUS (/USB_5V) feeds the CM5 5V input through jumper J5 with no fuse, TVS or reverse/overvoltage protection. CC uses only 5.1k Rd (R14/R15), so the board negotiates at most 5 V/3 A. The CM5 recommends a 5 V/5 A supply with peripherals.",
+   "why_it_matters": "Unprotected input feeding an expensive module. Possible brown-outs under an NVMe plus CM5 load.",
+   "time_or_money": "risk to CM5 module"
+  },
+  {
+   "rule": "hs.return.via",
+   "severity": "info",
+   "refs": [
+    "Conn2",
+    "J3"
+   ],
+   "nets": [
+    "/PCIe_TX_P",
+    "/PCIe_TX_N",
+    "/PCIe_RX_P",
+    "/PCIe_RX_N",
+    "/PCIe_CLK_P",
+    "/PCIe_CLK_N"
+   ],
+   "confidence": "low",
+   "evidence": "Each PCIe line changes from F.Cu (In1 GND reference) to B.Cu (In4 GND reference) through one via. The nearest GND via is 1.0-2.2 mm away (TX_P 2.2 mm, RX_N 1.9 mm).",
+   "why_it_matters": "Return current has to find a stitching path between the planes. A closer GND via (<1 mm) per pair is better practice at 5-8 GT/s. Probably tolerable for one short Gen2/3 x1 link.",
+   "time_or_money": "SI margin"
+  },
+  {
+   "rule": "other:usb-no-esd",
+   "severity": "info",
+   "refs": [
+    "J2",
+    "Conn2"
+   ],
+   "nets": [
+    "/USB2_P",
+    "/USB2_N"
+   ],
+   "confidence": "low",
+   "evidence": "USB-C D+/D- (/USB2_P, /USB2_N) go straight to CM5 Conn2 with no ESD array. The Ethernet pairs do have CDDFN10 ESD arrays (U7/U8).",
+   "why_it_matters": "A user-touchable connector has an unprotected path to the CM5 SoC.",
+   "time_or_money": "~$0.10/board"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "other:pcie-pn-swap",
+   "refs": [
+    "Conn2",
+    "J3"
+   ],
+   "nets": [
+    "/PCIe_RX_P",
+    "/PCIe_RX_N",
+    "/PCIe_TX_P",
+    "/PCIe_TX_N"
+   ],
+   "reason": "PCIe data P/N are swapped (RX_N to J3 PETp0 pin 43, TX_N to PERp0 pin 49). Direction is correct (host RX to module PET). PCIe receivers must support lane polarity inversion, so this is legal and eases routing. REFCLK P/N are not swapped."
+  },
+  {
+   "rule": "other:pcie-no-ac-caps",
+   "refs": [
+    "Conn2",
+    "J3"
+   ],
+   "nets": [
+    "/PCIe_TX_P",
+    "/PCIe_TX_N"
+   ],
+   "reason": "No PCIe AC-coupling caps on the carrier. The CM5 carries its own TX coupling caps and the M.2 SSD carries its own, per the Raspberry Pi CM4/CM5 carrier reference."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U7",
+    "U8"
+   ],
+   "nets": [
+    "/TRD0_P",
+    "/TRD0_N",
+    "/TRD1_P",
+    "/TRD1_N",
+    "/TRD2_P",
+    "/TRD2_N",
+    "/TRD3_P",
+    "/TRD3_N"
+   ],
+   "reason": "The CDDFN10-3324P (TPD4EUSB30-style) NC pins 6/7/9/10 tie onto the signal nets for flow-through routing."
+  },
+  {
+   "rule": "other:power-jumper",
+   "refs": [
+    "J5"
+   ],
+   "nets": [
+    "/USB_5V",
+    "/CM5_5V",
+    "/PoE_5V"
+   ],
+   "reason": "3-pin jumper J5 deliberately selects the 5 V source (USB-C or PoE) for /CM5_5V. It does not short the supplies."
+  },
+  {
+   "rule": "hs.pair.skew",
+   "refs": [
+    "J2",
+    "Conn2"
+   ],
+   "nets": [
+    "/USB2_P",
+    "/USB2_N"
+   ],
+   "reason": "About 1.75 mm length difference (97.7 vs 99.4 mm), partly from the Type-C A/B row tie. That is about 11 ps, negligible at 480 Mbit/s. Vias are symmetric (3 each)."
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "R4",
+    "R5",
+    "J6"
+   ],
+   "nets": [
+    "/SDA1",
+    "/SCL1"
+   ],
+   "reason": "One set of 2.2k pull-ups to /CM5_3V3 on GPIO2/3 for the Qwiic port J6."
+  },
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "U4",
+    "D1",
+    "D2",
+    "D3"
+   ],
+   "nets": [
+    "/ETH_LEDG",
+    "/ETH_LEDY",
+    "Net-(D1-K)",
+    "Net-(D2-K)",
+    "Net-(D3-K)"
+   ],
+   "reason": "Every LED has a series resistor (R6/R7 470R for the MagJack LEDs, R3/R11/R12 1k). They are driven by active-low or open-drain sources."
+  },
+  {
+   "rule": "other:buck-feedback",
+   "refs": [
+    "R8",
+    "R10",
+    "U3"
+   ],
+   "nets": [
+    "/FB"
+   ],
+   "reason": "R8 10k / R10 2.2k with 0.6 V Vref gives about 3.33 V for M.2. C9 4.7n is feed-forward. The AP3441 is rated 3 A."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "R13"
+   ],
+   "nets": [
+    "/SD_VDD_Override"
+   ],
+   "reason": "SD_VDD_Override is deliberately strapped low through 1k (normal SD voltage switching)."
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J7"
+   ],
+   "nets": [
+    "/CM5_5V"
+   ],
+   "reason": "[acceptable] J7 is the 4-pin JST-SH fan header (5V/PWM/GND/TACHO), a keyed output; /CM5_5V is fed through jumper J5 from USB_5V or PoE_5V, so it is not an unprotected power entry and a fan header needs no reverse/ESD part",
+   "source": "blind adjudication"
+  },
+  {
+   "rule": "hs.return.via",
+   "refs": [],
+   "nets": [
+    "/PCIe_CLK_nREQ"
+   ],
+   "reason": "[acceptable] Fact true (nearest GND via ~7.4 mm), but PCIe CLKREQ# is an open-drain low-speed sideband signal, not a differential lane; return-path via stitching is irrelevant",
+   "source": "blind adjudication"
+  }
+ ],
+ "notes": "Reviewed the netlist, the 6-layer PCB (In1/In4 GND planes, PCIe/USB/Ethernet lengths and vias, decoupling distances) and the custom footprint pad counts. Not verified: the MB6S and SMAJ58A pad-to-pin polarity in the custom footprints (pad numbers match the symbol, but the cathode mark was not checked); the RT9742GGJ5 enable polarity against the 12k pull-up R2 on SD_PWR_ON; the CM5 FAN_TACHO internal pull-up; and the purpose of R1 2.2k from /USB_5V to GND (a 2.3 mA bleeder, harmless). Impedance and stack-up not checked."
+}

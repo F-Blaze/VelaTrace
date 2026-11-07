@@ -1,0 +1,1978 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<export version="E">
+  <design>
+    <source>seatalk_wifi.kicad_sch</source>
+    <date>2026-10-20T19:29:24</date>
+    <tool>Eeschema 10.0.6</tool>
+    <sheet number="1" name="/" tstamps="/">
+      <title_block>
+        <title>SeaTalk_WiFI</title>
+        <company/>
+        <rev>1</rev>
+        <date>2022-03-03</date>
+        <source>seatalk_wifi.kicad_sch</source>
+        <comment number="1" value="https://github.com/atonizzo/seatalk_wifi"/>
+        <comment number="2" value="2020 (c) Anthony Tonizzo"/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+  </design>
+  <components>
+    <comp ref="C2">
+      <value>0.1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="C" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>55212d5d-9a56-4e08-bc1a-c75669070e68</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C3">
+      <value>22uF</value>
+      <footprint>capacitor_SMD:C_0805_2012Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0805_2012Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="C" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>507f66c7-c410-4b17-b02f-d8f670075e74</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C4">
+      <value>1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="C" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>2eb24db3-025b-4a3a-a10a-af83ec90f414</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C5">
+      <value>22uF</value>
+      <footprint>capacitor_SMD:C_0805_2012Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0805_2012Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="C" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>228d96ee-9dbf-48b7-afd8-f11a591d0ebb</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C6">
+      <value>10uF</value>
+      <footprint>capacitor_SMD:C_1206_3216Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_1206_3216Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="C" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>2751e0d8-5447-4eb4-bd06-1b00b582fd83</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C7">
+      <value>47pF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="C_NOINSTALL" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e0bd8318-b8b5-4e9e-9d48-60561ccf50c5</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C8">
+      <value>0.1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>N/A</datasheet>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">N/A</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="C_1" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>0a8f0974-7073-4736-b8e5-b7d87de9389b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C9">
+      <value>0.1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>N/A</datasheet>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">N/A</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="C_1" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e0683c2e-be22-4843-bb15-96679f004e0e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C10">
+      <value>0.1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>N/A</datasheet>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">N/A</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="C_1" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>f2ccd7ff-014c-437f-9149-258a3c972a5b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C11">
+      <value>0.1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>N/A</datasheet>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">N/A</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="C_1" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>0517da65-bda9-47cd-8fbf-6e2cec17c12d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C12">
+      <value>0.1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>N/A</datasheet>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">N/A</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="C_1" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>04568751-1122-4be4-a432-b9970ab8b4c9</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C13">
+      <value>0.1uF</value>
+      <footprint>capacitor_SMD:C_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="C" description="Non polarized capacitor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Voltage" value="N/A"/>
+      <property name="Dielectric" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="cap capacitor"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>384529bf-696b-4183-84cb-cca28e1c2423</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D1">
+      <value>LED_A1K2</value>
+      <footprint>led_SMD:LED_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Footprint">led_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="LED_A1K2" description="LED generic"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="led diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>bf0fb0ff-999e-4f9e-b84d-eb383827aa31</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="L1">
+      <value>3.3uH</value>
+      <footprint>bourns:INDC3225X120N</footprint>
+      <datasheet>https://www.bourns.com/docs/product-datasheets/srp3212.pdf</datasheet>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Footprint">bourns:INDC3225X120N</field>
+        <field name="Datasheet">https://www.bourns.com/docs/product-datasheets/srp3212.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="L" description="Inductor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="inductor choke coil reactor magnetic"/>
+      <property name="ki_fp_filters" value="Choke_* *Coil* Inductor_* L_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>fcb6dde3-cb52-44f4-bed3-a26b81cadf77</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK1">
+      <value>+12V</value>
+      <footprint>test_point:TestPoint_Pad_3.0x3.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_3.0x3.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="mechanical" part="Pad" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>93e92081-8168-4656-b6d5-e83eff254c5e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK2">
+      <value>GND</value>
+      <footprint>test_point:TestPoint_Pad_3.0x3.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_3.0x3.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="mechanical" part="Pad" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4292ba72-4c27-4740-b5eb-035f50ead95e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK3">
+      <value>TXD</value>
+      <footprint>test_point:TestPoint_Pad_2.0x2.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_2.0x2.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="Pad_2" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e9bb92dc-5cc5-4141-9f72-6b2a1a6d577f</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK4">
+      <value>RXD</value>
+      <footprint>test_point:TestPoint_Pad_2.0x2.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_2.0x2.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="Pad_5" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>9d652747-1d4d-45bc-bcc4-dc8b588e9105</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK5">
+      <value>SeaTalk1</value>
+      <footprint>test_point:TestPoint_Pad_3.0x3.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_3.0x3.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="mechanical" part="Pad" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>29771e24-4118-4caa-bbbc-d0798b82d7fc</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK6">
+      <value>UART1</value>
+      <footprint>test_point:TestPoint_Pad_2.0x2.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_2.0x2.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="Pad_1" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>eb5828fd-cdaf-4397-96a3-e94f616ab8de</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK7">
+      <value>SEATALK_12V</value>
+      <footprint>test_point:TestPoint_Pad_3.0x3.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_3.0x3.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="mechanical" part="Pad" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>a59dce60-e6aa-4180-ac3d-1536d4dba22f</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="MK8">
+      <value>GND</value>
+      <footprint>test_point:TestPoint_Pad_3.0x3.0mm</footprint>
+      <fields>
+        <field name="Footprint">test_point:TestPoint_Pad_3.0x3.0mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="mechanical" part="Pad" description="Pad with connection"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="pad"/>
+      <property name="ki_fp_filters" value="Mounting?Hole* Hole*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>783356e0-498b-4dd5-b4f1-f63bc5887009</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="Q1">
+      <value>2N7002</value>
+      <footprint>package_TO_SOT_SMD:SOT23-3</footprint>
+      <datasheet>https://www.onsemi.com/pdf/datasheet/nds7002a-d.pdf</datasheet>
+      <fields>
+        <field name="MFG">onsemi</field>
+        <field name="MPN">2N7002-G</field>
+        <field name="Digikey PN">TBA</field>
+        <field name="Mouser PN">863-2N7002-G</field>
+        <field name="Footprint">package_TO_SOT_SMD:SOT23-3</field>
+        <field name="Datasheet">https://www.onsemi.com/pdf/datasheet/nds7002a-d.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="Q_NMOS_G1S2D3" description=""/>
+      <property name="MFG" value="onsemi"/>
+      <property name="MPN" value="2N7002-G"/>
+      <property name="Digikey PN" value="TBA"/>
+      <property name="Mouser PN" value="863-2N7002-G"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4d2ef6c2-1a2e-4961-810d-7707be6e9193</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="3"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="Q2">
+      <value>2N7002</value>
+      <footprint>package_TO_SOT_SMD:SOT23-3</footprint>
+      <datasheet>https://www.onsemi.com/pdf/datasheet/nds7002a-d.pdf</datasheet>
+      <fields>
+        <field name="MFG">onsemi</field>
+        <field name="MPN">2N7002-G</field>
+        <field name="Digikey PN">TBA</field>
+        <field name="Mouser PN">863-2N7002-G</field>
+        <field name="Footprint">package_TO_SOT_SMD:SOT23-3</field>
+        <field name="Datasheet">https://www.onsemi.com/pdf/datasheet/nds7002a-d.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="Q_NMOS_G1S2D3" description=""/>
+      <property name="MFG" value="onsemi"/>
+      <property name="MPN" value="2N7002-G"/>
+      <property name="Digikey PN" value="TBA"/>
+      <property name="Mouser PN" value="863-2N7002-G"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>d73663b1-83bb-431b-be38-962a3d213b22</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="3"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R2">
+      <value>330</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>0a581eb6-45f1-4862-b449-5430170655cc</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R3">
+      <value>75K</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>2510a96e-3d98-4496-a0d2-77160da19414</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R4">
+      <value>24K</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>238a3140-61d8-47d2-a808-dbdb2b6fae29</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R5">
+      <value>10K</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>a7a2a3a0-c7bd-47ea-b16d-51238ed42a82</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R6">
+      <value>10K</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>336044e3-c663-4a00-8b9b-0e589b349a02</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R7">
+      <value>10K</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>bc1dea25-e08a-4eaa-ad2f-9be181f9c82e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R8">
+      <value>1000</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>63a667f9-b9ad-45bf-9e92-0a3a430a2f0b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R9">
+      <value>4700</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>81da9e7d-efc1-4873-9c67-7b30682c0dc1</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R10">
+      <value>10K</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>530cefd0-ea5e-49df-9917-f57d66da6bbd</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R11">
+      <value>1K</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>790636e5-e907-4bca-9dbe-81ea67904bbb</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R12">
+      <value>0</value>
+      <footprint>resistor_SMD:R_0603_1608Metric</footprint>
+      <fields>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Footprint">resistor_SMD:R_0603_1608Metric</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="device" part="R_NOINSTALL" description="Resistor"/>
+      <property name="MFG" value="N/A"/>
+      <property name="MPN" value="N/A"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Power" value="N/A"/>
+      <property name="Tolerance" value="N/A"/>
+      <property name="Datasheet_1" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="r res resistor"/>
+      <property name="ki_fp_filters" value="R_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>ee3fa035-ea51-4f38-9299-60a64e58e413</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW1">
+      <value>SW_SPST</value>
+      <footprint>apem:ADTSM31NV</footprint>
+      <fields>
+        <field name="Footprint">apem:ADTSM31NV</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="switch" part="SW_SPST" description="Single Pole Single Throw (SPST) switch"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="switch lever"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>1a9717d8-f4f7-43ef-b00c-6833bbf80e1b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW2">
+      <value>SW_SPST</value>
+      <footprint>apem:ADTSM31NV</footprint>
+      <fields>
+        <field name="Footprint">apem:ADTSM31NV</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="switch" part="SW_SPST" description="Single Pole Single Throw (SPST) switch"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="switch lever"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4e8f0408-fe8c-4bcf-b180-bb0be28d141b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U1">
+      <value>AP62300_SOT23-6</value>
+      <footprint>package_TO_SOT_SMD:SOT23-6</footprint>
+      <datasheet>https://www.diodes.com/assets/Datasheets/AP62300_AP62301_AP62300T.pdf</datasheet>
+      <fields>
+        <field name="MFG">Diodes Inc.</field>
+        <field name="MPN">AP62300WU-7</field>
+        <field name="Digikey PN">31-AP62200TWU-7TR-ND</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Footprint">package_TO_SOT_SMD:SOT23-6</field>
+        <field name="Datasheet">https://www.diodes.com/assets/Datasheets/AP62300_AP62301_AP62300T.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="diodes" part="AP62300_SOT23-6" description="4.2v to 18v Input, 3Al Low Iq Synchronous Buck Converter"/>
+      <property name="MFG" value="Diodes Inc."/>
+      <property name="MPN" value="AP62300WU-7"/>
+      <property name="Digikey PN" value="31-AP62200TWU-7TR-ND"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_keywords" value="switching regulator"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>832e6044-7069-422f-9bcb-84ece31a7797</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="3"/>
+            <pin num="5"/>
+            <pin num="1"/>
+            <pin num="6"/>
+            <pin num="2"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U2">
+      <value>ESP-12E</value>
+      <footprint>espressif:ESP-12E</footprint>
+      <datasheet>https://components101.com/sites/default/files/2021-09/ESP12E-Datasheet.pdf</datasheet>
+      <fields>
+        <field name="MFG">Various Sources</field>
+        <field name="MPN">ESP-12E</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Footprint">espressif:ESP-12E</field>
+        <field name="Datasheet">https://components101.com/sites/default/files/2021-09/ESP12E-Datasheet.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="espressif" part="ESP-12F" description="Wireless module designed around a Tensilica 32 bit MCU."/>
+      <property name="MFG" value="Various Sources"/>
+      <property name="MPN" value="ESP-12E"/>
+      <property name="Digikey PN" value="N/A"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_fp_filters" value="ESP-12E ESP-12E_SMD"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>99491d24-fa4e-4308-8925-f16ba1984483</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="7"/>
+            <pin num="8"/>
+            <pin num="9"/>
+            <pin num="10"/>
+            <pin num="11"/>
+            <pin num="12"/>
+            <pin num="13"/>
+            <pin num="14"/>
+            <pin num="22"/>
+            <pin num="21"/>
+            <pin num="20"/>
+            <pin num="19"/>
+            <pin num="18"/>
+            <pin num="17"/>
+            <pin num="16"/>
+            <pin num="15"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U3">
+      <value>MAX3221CPWR</value>
+      <footprint>package_SO:TSSOP-16_4.4x5mm_P0.65mm</footprint>
+      <datasheet>https://www.ti.com/lit/ds/symlink/max3221.pdf</datasheet>
+      <fields>
+        <field name="MFG">Texas Instruments</field>
+        <field name="MPN">MAX3221CPW</field>
+        <field name="Digikey PN">296-26143-5-ND</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Footprint">package_SO:TSSOP-16_4.4x5mm_P0.65mm</field>
+        <field name="Datasheet">https://www.ti.com/lit/ds/symlink/max3221.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="ti" part="MAX3221_TSSOP16" description=""/>
+      <property name="MFG" value="Texas Instruments"/>
+      <property name="MPN" value="MAX3221CPW"/>
+      <property name="Digikey PN" value="296-26143-5-ND"/>
+      <property name="Mouser PN" value="N/A"/>
+      <property name="Sheetname" value="seatalk_wifi"/>
+      <property name="Sheetfile" value="seatalk_wifi.kicad_sch"/>
+      <property name="ki_fp_filters" value="SSOP* TSSOP*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4a9b5d46-520d-4d96-948e-1c2e7a001928</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="11"/>
+            <pin num="9"/>
+            <pin num="1"/>
+            <pin num="12"/>
+            <pin num="15"/>
+            <pin num="14"/>
+            <pin num="3"/>
+            <pin num="7"/>
+            <pin num="13"/>
+            <pin num="8"/>
+            <pin num="10"/>
+            <pin num="16"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+  </components>
+  <libparts>
+    <libpart lib="" part="C_1">
+      <description>Non polarized capacitor</description>
+      <footprints>
+        <fp>C_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">C</field>
+        <field name="Value">C_1</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Non polarized capacitor</field>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="" part="Pad_1">
+      <description>Pad with connection</description>
+      <footprints>
+        <fp>Mounting?Hole*</fp>
+        <fp>Hole*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">MK</field>
+        <field name="Value">Pad_1</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Pad with connection</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="input"/>
+      </pins>
+    </libpart>
+    <libpart lib="" part="Pad_2">
+      <description>Pad with connection</description>
+      <footprints>
+        <fp>Mounting?Hole*</fp>
+        <fp>Hole*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">MK</field>
+        <field name="Value">Pad_2</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Pad with connection</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="input"/>
+      </pins>
+    </libpart>
+    <libpart lib="" part="Pad_5">
+      <description>Pad with connection</description>
+      <footprints>
+        <fp>Mounting?Hole*</fp>
+        <fp>Hole*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">MK</field>
+        <field name="Value">Pad_5</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Pad with connection</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="input"/>
+      </pins>
+    </libpart>
+    <libpart lib="device" part="C">
+      <description>Non polarized capacitor</description>
+      <footprints>
+        <fp>C_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">C</field>
+        <field name="Value">C</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Non polarized capacitor</field>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="device" part="C_NOINSTALL">
+      <description>Non polarized capacitor</description>
+      <footprints>
+        <fp>C_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">C</field>
+        <field name="Value">C_NOINSTALL</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Non polarized capacitor</field>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Voltage">N/A</field>
+        <field name="Dielectric">N/A</field>
+        <field name="Tolerance">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="device" part="L">
+      <description>Inductor</description>
+      <footprints>
+        <fp>Choke_*</fp>
+        <fp>*Coil*</fp>
+        <fp>Inductor_*</fp>
+        <fp>L_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">L</field>
+        <field name="Value">L</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Inductor</field>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="passive"/>
+        <pin num="2" name="2" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="device" part="LED_A1K2">
+      <description>LED generic</description>
+      <footprints>
+        <fp>LED*</fp>
+        <fp>LED_SMD:*</fp>
+        <fp>LED_THT:*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">D</field>
+        <field name="Value">LED_A1K2</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">LED generic</field>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="A" type="passive"/>
+        <pin num="2" name="K" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="device" part="Q_NMOS_G1S2D3">
+      <fields>
+        <field name="Reference">Q</field>
+        <field name="Value">Q_NMOS_G1S2D3</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <pins>
+        <pin num="1" name="G" type="input"/>
+        <pin num="2" name="S" type="passive"/>
+        <pin num="3" name="D" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="device" part="R">
+      <description>Resistor</description>
+      <footprints>
+        <fp>R_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">R</field>
+        <field name="Value">R</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Resistor</field>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Datasheet_1">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+        <field name="Tolerance">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="device" part="R_NOINSTALL">
+      <description>Resistor</description>
+      <footprints>
+        <fp>R_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">R</field>
+        <field name="Value">R_NOINSTALL</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Resistor</field>
+        <field name="MFG">N/A</field>
+        <field name="MPN">N/A</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+        <field name="Power">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="diodes" part="AP62300_SOT23-6">
+      <description>4.2v to 18v Input, 3Al Low Iq Synchronous Buck Converter</description>
+      <docs>https://www.diodes.com/assets/Datasheets/AP62300_AP62301_AP62300T.pdf</docs>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">AP62300_SOT23-6</field>
+        <field name="Footprint">package_TO_SOT_SMD:SOT23-6</field>
+        <field name="Datasheet">https://www.diodes.com/assets/Datasheets/AP62300_AP62301_AP62300T.pdf</field>
+        <field name="Description">4.2v to 18v Input, 3Al Low Iq Synchronous Buck Converter</field>
+        <field name="MFG">Diodes Inc.</field>
+        <field name="MPN">AP62300WU-7</field>
+        <field name="Digikey PN">31-AP62200TWU-7TR-ND</field>
+        <field name="Mouser PN">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="GND" type="power_in"/>
+        <pin num="2" name="SW" type="power_out"/>
+        <pin num="3" name="VIN" type="power_in"/>
+        <pin num="4" name="FB" type="input"/>
+        <pin num="5" name="EN" type="input"/>
+        <pin num="6" name="BST" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="espressif" part="ESP-12F">
+      <description>Wireless module designed around a Tensilica 32 bit MCU.</description>
+      <docs>https://components101.com/sites/default/files/2021-09/ESP12E-Datasheet.pdf</docs>
+      <footprints>
+        <fp>ESP-12E</fp>
+        <fp>ESP-12E_SMD</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">ESP-12F</field>
+        <field name="Footprint">misc:ESP-12E</field>
+        <field name="Datasheet">https://components101.com/sites/default/files/2021-09/ESP12E-Datasheet.pdf</field>
+        <field name="Description">Wireless module designed around a Tensilica 32 bit MCU.</field>
+        <field name="MFG">Various Sources</field>
+        <field name="MPN">ESP-12E</field>
+        <field name="Digikey PN">N/A</field>
+        <field name="Mouser PN">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="RST" type="input"/>
+        <pin num="2" name="ADC" type="passive"/>
+        <pin num="3" name="CH_PD" type="input"/>
+        <pin num="4" name="GPIO16" type="bidirectional"/>
+        <pin num="5" name="GPIO14" type="bidirectional"/>
+        <pin num="6" name="GPIO12" type="bidirectional"/>
+        <pin num="7" name="GPIO13" type="bidirectional"/>
+        <pin num="8" name="VCC" type="power_in"/>
+        <pin num="9" name="CS0" type="bidirectional"/>
+        <pin num="10" name="MISO" type="bidirectional"/>
+        <pin num="11" name="GPIO9" type="bidirectional"/>
+        <pin num="12" name="GPIO10" type="bidirectional"/>
+        <pin num="13" name="MOSI" type="bidirectional"/>
+        <pin num="14" name="SCLK" type="bidirectional"/>
+        <pin num="15" name="GND" type="power_in"/>
+        <pin num="16" name="GPIO15" type="bidirectional"/>
+        <pin num="17" name="GPIO2" type="bidirectional"/>
+        <pin num="18" name="GPIO0" type="bidirectional"/>
+        <pin num="19" name="GPIO4" type="bidirectional"/>
+        <pin num="20" name="GPIO5" type="bidirectional"/>
+        <pin num="21" name="GPIO3" type="input"/>
+        <pin num="22" name="GPIO1" type="output"/>
+      </pins>
+    </libpart>
+    <libpart lib="mechanical" part="Pad">
+      <description>Pad with connection</description>
+      <footprints>
+        <fp>Mounting?Hole*</fp>
+        <fp>Hole*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">MK</field>
+        <field name="Value">Pad</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Pad with connection</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="input"/>
+      </pins>
+    </libpart>
+    <libpart lib="switch" part="SW_SPST">
+      <description>Single Pole Single Throw (SPST) switch</description>
+      <fields>
+        <field name="Reference">SW</field>
+        <field name="Value">SW_SPST</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Single Pole Single Throw (SPST) switch</field>
+      </fields>
+      <pins>
+        <pin num="1" name="A" type="passive"/>
+        <pin num="2" name="B" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="ti" part="MAX3221_TSSOP16">
+      <docs>https://www.ti.com/lit/ds/symlink/max3221.pdf</docs>
+      <footprints>
+        <fp>SSOP*</fp>
+        <fp>TSSOP*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">MAX3221_TSSOP16</field>
+        <field name="Footprint">package_SO:TSSOP-16_4.4x5mm_P0.65mm</field>
+        <field name="Datasheet">https://www.ti.com/lit/ds/symlink/max3221.pdf</field>
+        <field name="Description"/>
+        <field name="MFG">Texas Instruments</field>
+        <field name="MPN">MAX3221CPW</field>
+        <field name="Digikey PN">296-26143-5-ND</field>
+        <field name="Mouser PN">N/A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="~{EN}" type="input"/>
+        <pin num="2" name="C1+" type="passive"/>
+        <pin num="3" name="V+" type="power_out"/>
+        <pin num="4" name="C1-" type="passive"/>
+        <pin num="5" name="C2+" type="passive"/>
+        <pin num="6" name="C2-" type="passive"/>
+        <pin num="7" name="V-" type="power_out"/>
+        <pin num="8" name="RIN" type="input"/>
+        <pin num="9" name="ROUT" type="output"/>
+        <pin num="10" name="~{INVALID}" type="output"/>
+        <pin num="11" name="DIN" type="input"/>
+        <pin num="12" name="FORCEON" type="input"/>
+        <pin num="13" name="DOUT" type="output"/>
+        <pin num="14" name="GND" type="power_in"/>
+        <pin num="15" name="VCC" type="power_in"/>
+        <pin num="16" name="~{FORCEOFF}" type="input"/>
+      </pins>
+    </libpart>
+  </libparts>
+  <libraries/>
+  <nets>
+    <net code="1" name="+3V3" class="Default">
+      <node ref="C10" pin="1" pintype="passive"/>
+      <node ref="C2" pin="1" pintype="passive"/>
+      <node ref="C3" pin="1" pintype="passive"/>
+      <node ref="C4" pin="1" pintype="passive"/>
+      <node ref="C5" pin="1" pintype="passive"/>
+      <node ref="C7" pin="1" pintype="passive"/>
+      <node ref="L1" pin="1" pinfunction="1_1" pintype="passive"/>
+      <node ref="R2" pin="1" pintype="passive"/>
+      <node ref="R3" pin="1" pintype="passive"/>
+      <node ref="R5" pin="1" pintype="passive"/>
+      <node ref="R7" pin="1" pintype="passive"/>
+      <node ref="U2" pin="3" pinfunction="CH_PD_3" pintype="input"/>
+      <node ref="U2" pin="8" pinfunction="VCC_8" pintype="power_in"/>
+      <node ref="U3" pin="12" pinfunction="FORCEON_12" pintype="input"/>
+      <node ref="U3" pin="15" pinfunction="VCC_15" pintype="power_in"/>
+      <node ref="U3" pin="16" pinfunction="~{FORCEOFF}_16" pintype="input"/>
+    </net>
+    <net code="2" name="+12V" class="Default">
+      <node ref="C6" pin="1" pintype="passive"/>
+      <node ref="MK1" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="MK7" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="R10" pin="1" pintype="passive"/>
+      <node ref="R9" pin="2" pintype="passive"/>
+      <node ref="U1" pin="3" pinfunction="VIN_3" pintype="power_in"/>
+    </net>
+    <net code="3" name="/12VFB" class="Default">
+      <node ref="C7" pin="2" pintype="passive"/>
+      <node ref="R3" pin="2" pintype="passive"/>
+      <node ref="R4" pin="1" pintype="passive"/>
+      <node ref="U1" pin="4" pinfunction="FB_4" pintype="input"/>
+    </net>
+    <net code="4" name="/BOOT" class="Default">
+      <node ref="R7" pin="2" pintype="passive"/>
+      <node ref="SW2" pin="2" pinfunction="B_2" pintype="passive"/>
+      <node ref="U2" pin="18" pinfunction="GPIO0_18" pintype="bidirectional"/>
+    </net>
+    <net code="5" name="/BST" class="Default">
+      <node ref="C13" pin="1" pintype="passive"/>
+      <node ref="U1" pin="6" pinfunction="BST_6" pintype="passive"/>
+    </net>
+    <net code="6" name="/C1M" class="Default">
+      <node ref="C8" pin="2" pintype="passive"/>
+      <node ref="U3" pin="4" pinfunction="C1-_4" pintype="passive"/>
+    </net>
+    <net code="7" name="/C1P" class="Default">
+      <node ref="C8" pin="1" pintype="passive"/>
+      <node ref="U3" pin="2" pinfunction="C1+_2" pintype="passive"/>
+    </net>
+    <net code="8" name="/C2M" class="Default">
+      <node ref="C9" pin="2" pintype="passive"/>
+      <node ref="U3" pin="6" pinfunction="C2-_6" pintype="passive"/>
+    </net>
+    <net code="9" name="/C2P" class="Default">
+      <node ref="C9" pin="1" pintype="passive"/>
+      <node ref="U3" pin="5" pinfunction="C2+_5" pintype="passive"/>
+    </net>
+    <net code="10" name="/GPIO15" class="Default">
+      <node ref="R6" pin="1" pintype="passive"/>
+      <node ref="U2" pin="16" pinfunction="GPIO15_16" pintype="bidirectional"/>
+    </net>
+    <net code="11" name="/LED" class="Default">
+      <node ref="D1" pin="2" pinfunction="K_2" pintype="passive"/>
+      <node ref="U2" pin="6" pinfunction="GPIO12_6" pintype="bidirectional"/>
+    </net>
+    <net code="12" name="/RIN" class="Default">
+      <node ref="R8" pin="2" pintype="passive"/>
+      <node ref="U3" pin="9" pinfunction="ROUT_9" pintype="output"/>
+    </net>
+    <net code="13" name="/RXD" class="Default">
+      <node ref="Q2" pin="3" pinfunction="D_3" pintype="passive"/>
+      <node ref="R12" pin="1" pintype="passive"/>
+      <node ref="R9" pin="1" pintype="passive"/>
+      <node ref="U3" pin="8" pinfunction="RIN_8" pintype="input"/>
+    </net>
+    <net code="14" name="/SEATALK1" class="Default">
+      <node ref="MK5" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="Q1" pin="3" pinfunction="D_3" pintype="passive"/>
+      <node ref="Q2" pin="1" pinfunction="G_1" pintype="input"/>
+      <node ref="R12" pin="2" pintype="passive"/>
+    </net>
+    <net code="15" name="/SW" class="Default">
+      <node ref="C13" pin="2" pintype="passive"/>
+      <node ref="L1" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U1" pin="2" pinfunction="SW_2" pintype="power_out"/>
+    </net>
+    <net code="16" name="/SW_EN" class="Default">
+      <node ref="R10" pin="2" pintype="passive"/>
+      <node ref="U1" pin="5" pinfunction="EN_5" pintype="input"/>
+    </net>
+    <net code="17" name="/TOUT" class="Default">
+      <node ref="U2" pin="5" pinfunction="GPIO14_5" pintype="bidirectional"/>
+      <node ref="U3" pin="11" pinfunction="DIN_11" pintype="input"/>
+    </net>
+    <net code="18" name="/TXD" class="Default">
+      <node ref="Q1" pin="1" pinfunction="G_1" pintype="input"/>
+      <node ref="U3" pin="13" pinfunction="DOUT_13" pintype="output"/>
+    </net>
+    <net code="19" name="/UART0_RXD" class="Default">
+      <node ref="MK4" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="R8" pin="1" pintype="passive"/>
+      <node ref="U2" pin="21" pinfunction="UART0_RXD_21" pintype="input"/>
+    </net>
+    <net code="20" name="/UART0_TXD" class="Default">
+      <node ref="MK3" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="U2" pin="22" pinfunction="UART0_TXD_22" pintype="output"/>
+    </net>
+    <net code="21" name="/UART1_TXD" class="Default">
+      <node ref="MK6" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="R5" pin="2" pintype="passive"/>
+      <node ref="U2" pin="17" pinfunction="UART1_TXD_17" pintype="output"/>
+    </net>
+    <net code="22" name="/VM" class="Default">
+      <node ref="C11" pin="1" pintype="passive"/>
+      <node ref="U3" pin="7" pinfunction="V-_7" pintype="power_out"/>
+    </net>
+    <net code="23" name="/VP" class="Default">
+      <node ref="C12" pin="1" pintype="passive"/>
+      <node ref="U3" pin="3" pinfunction="V+_3" pintype="power_out"/>
+    </net>
+    <net code="24" name="/~{RST}" class="Default">
+      <node ref="R11" pin="1" pintype="passive"/>
+      <node ref="SW1" pin="2" pinfunction="B_2" pintype="passive"/>
+      <node ref="U2" pin="1" pinfunction="RST_1" pintype="input"/>
+    </net>
+    <net code="25" name="GND" class="Default">
+      <node ref="C10" pin="2" pintype="passive"/>
+      <node ref="C11" pin="2" pintype="passive"/>
+      <node ref="C12" pin="2" pintype="passive"/>
+      <node ref="C2" pin="2" pintype="passive"/>
+      <node ref="C3" pin="2" pintype="passive"/>
+      <node ref="C4" pin="2" pintype="passive"/>
+      <node ref="C5" pin="2" pintype="passive"/>
+      <node ref="C6" pin="2" pintype="passive"/>
+      <node ref="MK2" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="MK8" pin="1" pinfunction="1_1" pintype="input"/>
+      <node ref="Q1" pin="2" pinfunction="S_2" pintype="passive"/>
+      <node ref="Q2" pin="2" pinfunction="S_2" pintype="passive"/>
+      <node ref="R4" pin="2" pintype="passive"/>
+      <node ref="R6" pin="2" pintype="passive"/>
+      <node ref="SW1" pin="1" pinfunction="A_1" pintype="passive"/>
+      <node ref="SW2" pin="1" pinfunction="A_1" pintype="passive"/>
+      <node ref="U1" pin="1" pinfunction="GND_1" pintype="power_in"/>
+      <node ref="U2" pin="15" pinfunction="GND_15" pintype="power_in"/>
+      <node ref="U3" pin="1" pinfunction="~{EN}_1" pintype="input"/>
+      <node ref="U3" pin="14" pinfunction="GND_14" pintype="power_in"/>
+    </net>
+    <net code="26" name="Net-(D1-A)" class="Default">
+      <node ref="D1" pin="1" pinfunction="A_1" pintype="passive"/>
+      <node ref="R2" pin="2" pintype="passive"/>
+    </net>
+    <net code="27" name="Net-(U2-GPIO16)" class="Default">
+      <node ref="R11" pin="2" pintype="passive"/>
+      <node ref="U2" pin="4" pinfunction="GPIO16_4" pintype="bidirectional"/>
+    </net>
+    <net code="28" name="unconnected-(U2-ADC-Pad2)" class="Default">
+      <node ref="U2" pin="2" pinfunction="ADC_2" pintype="passive+no_connect"/>
+    </net>
+    <net code="29" name="unconnected-(U2-CS0-Pad9)" class="Default">
+      <node ref="U2" pin="9" pinfunction="CS0_9" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="30" name="unconnected-(U2-GPIO4-Pad19)" class="Default">
+      <node ref="U2" pin="19" pinfunction="GPIO4_19" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="31" name="unconnected-(U2-GPIO5-Pad20)" class="Default">
+      <node ref="U2" pin="20" pinfunction="GPIO5_20" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="32" name="unconnected-(U2-GPIO9-Pad11)" class="Default">
+      <node ref="U2" pin="11" pinfunction="GPIO9_11" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="33" name="unconnected-(U2-GPIO10-Pad12)" class="Default">
+      <node ref="U2" pin="12" pinfunction="GPIO10_12" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="34" name="unconnected-(U2-GPIO13-Pad7)" class="Default">
+      <node ref="U2" pin="7" pinfunction="GPIO13_7" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="35" name="unconnected-(U2-MISO-Pad10)" class="Default">
+      <node ref="U2" pin="10" pinfunction="MISO_10" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="36" name="unconnected-(U2-MOSI-Pad13)" class="Default">
+      <node ref="U2" pin="13" pinfunction="MOSI_13" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="37" name="unconnected-(U2-SCLK-Pad14)" class="Default">
+      <node ref="U2" pin="14" pinfunction="SCLK_14" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="38" name="unconnected-(U3-~{INVALID}-Pad10)" class="Default">
+      <node ref="U3" pin="10" pinfunction="~{INVALID}_10" pintype="output+no_connect"/>
+    </net>
+  </nets>
+</export>

@@ -23,6 +23,6 @@ jobs:
       - name: Verify mandatory SDK and UI dependencies
         run: python -c "import kipy; from PySide6.QtWidgets import QApplication; app = QApplication([])"
       - name: Syntax and undefined-name checks
-        run: python -m ruff check src tests launch.py
+        run: python -m ruff check src tests tools launch.py
       - name: Offline services, SDK objects, and UI tests
         run: python -m pytest

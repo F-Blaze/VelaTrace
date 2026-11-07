@@ -34,8 +34,13 @@ def rules(snapshot, rule_prefix):
     return [item for item in run_rules(snapshot, providers=()) if item.rule.startswith(rule_prefix)]
 
 
-def ic(ref="U1", *extra, value="MCU", footprint="Package_QFP:LQFP-32"):
-    return part(ref, value, footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"), *extra)
+def exp4_spare(count=2):
+    """Unconnected spare pads: ICs in these fixtures have more than the 3 pins that exempt a part from bypass checks."""
+    return [(f"9{n}", "", "NC") for n in range(count)]
+
+
+def ic(ref="U1", *extra, value="MCU", footprint="Package_QFP:LQFP-32", spare=2):
+    return part(ref, value, footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"), *extra, *exp4_spare(spare))
 
 
 def cap(ref="C1", a="+3V3", b="GND", value="100nF", pos=None, pin_pos=(None, None)):
@@ -90,7 +95,7 @@ def test_decoupling_missing_and_present():
 
 def test_decoupling_uses_pin_types_when_present():
     typed = part("U1", "SENSOR", "Package_SO:SOIC-8", ("1", "+3V3", "EN", "input"),
-                 ("2", "GND", "GND", "power_in"), ("3", "Net-(U1-VDD)", "VDD", "power_in"))
+                 ("2", "GND", "GND", "power_in"), ("3", "Net-(U1-VDD)", "VDD", "power_in"), *exp4_spare(1))
     found = rules(design(typed, cap("C1", "+3V3", "GND")), "decoupling")
     # EN tied to +3V3 is not a supply pin; the filtered VDD net has no capacitor.
     assert [f.nets for f in found] == [("Net-(U1-VDD)",)]
@@ -109,7 +114,7 @@ def test_decoupling_far_uses_pad_positions():
                    ("2", "GND", "GND", "", (10.0, 12.0)))
     far = cap(pin_pos=((22.0, 10.0), (23.0, 10.0)))
     found = rules(design(near_ic, far), "decoupling")
-    assert [(f.rule, f.severity, f.refs) for f in found] == [("decoupling.far", Severity.WARNING, ("U1", "C1"))]
+    assert [(f.rule, f.severity, f.refs) for f in found] == [("decoupling.far", Severity.INFO, ("U1", "C1"))]  # experimental
     assert "12.0 mm" in found[0].title
     close = cap(pin_pos=((12.0, 10.0), (13.0, 10.0)))
     assert rules(design(near_ic, close), "decoupling") == []
@@ -122,7 +127,7 @@ def missing(*parts):
 
 
 def typed_chip(*pins, ref="U1", value="CHIP"):
-    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins)
+    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins, *exp4_spare())
 
 
 def test_decoupling_op_amp_and_mcu_supply_without_a_capacitor_is_still_flagged():
@@ -233,6 +238,65 @@ def test_i2c_is_silent_when_it_cannot_judge():
     assert rules(spi, "i2c") == []
 
 
+def i2c_mcu(*extra):
+    """An MCU with GPIO-named pins whose PB9 drives SDA (a likely I2C master)."""
+    return part("U1", "STM32F103", "Package_QFP:LQFP-48", ("1", "+3V3", "VDD"), ("2", "GND", "GND"),
+                ("3", "SDA", "PB9"), ("4", "GPIO_A", "PA0"), ("5", "GPIO_B", "PA1"), ("6", "GPIO_C", "PA2"), *extra)
+
+
+def i2c_sensor(ref="U2", *extra):
+    return part(ref, "SHT31", "Package_DFN_QFN:DFN-8", ("1", "+3V3", "VDD"), ("2", "GND", "GND"),
+                ("3", "SDA", "SDA"), *extra)
+
+
+def i2c_jumper(ref, a, b):
+    return part(ref, "I2C_PUE", "Jumper:SolderJumper_2_Open", ("1", a, "A"), ("2", b, "B"))
+
+
+def i2c_header():
+    return part("J1", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "SDA"), ("2", "GND"))
+
+
+def test_i2c_pullups_behind_a_jumper_are_not_missing():
+    for chain in ((res("R3", "SDA", "Net-(JP1-B)"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)")),   # bus -> R -> JP -> rail
+                  (i2c_jumper("JP1", "SDA", "Net-(JP1-B)"), res("R3", "Net-(JP1-B)", "+3V3"))):  # bus -> JP -> R -> rail
+        found = rules(design(i2c_mcu(), i2c_sensor(), cap(), *chain), "i2c")
+        assert found == []  # the designer left them optional on purpose (the host provides pull-ups)
+    # A zero-ohm link behind the jumper is no pull-up; a real resistor straight to the rail needs no note.
+    zero = design(i2c_mcu(), i2c_sensor(), cap(), res("R3", "SDA", "Net-(JP1-B)", "0R"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)"))
+    assert [f.rule for f in rules(zero, "i2c")] == ["i2c.pullup.missing"]
+    direct = design(i2c_mcu(), i2c_sensor(), cap(), res("R3", "SDA", "+3V3"), i2c_jumper("JP1", "+3V3", "Net-(JP1-B)"))
+    assert rules(direct, "i2c") == []
+
+
+def test_i2c_without_any_pullup_and_an_onboard_mcu_is_still_missing():
+    for extra in ((), (i2c_header(),)):
+        found = rules(design(i2c_mcu(), i2c_sensor(), cap(), *extra), "i2c")
+        assert [f.rule for f in found] == ["i2c.pullup.missing"]
+
+
+def test_i2c_bus_of_a_plug_in_board_without_a_master_is_left_to_the_host():
+    assert rules(design(i2c_sensor(), cap(), i2c_header()), "i2c") == []
+    # The same slave alone with nothing else attached still reads as a missing pull-up.
+    assert [f.rule for f in rules(design(i2c_sensor(), i2c_sensor("U3"), cap()), "i2c")] == ["i2c.pullup.missing"]
+
+
+def test_i2c_named_nets_that_are_spi_are_skipped():
+    lcd = part("LCD1", "ST7789", "Display:LCD-SMD", ("1", "SDA", "SDA"), ("2", "SCL", "SCL"), ("3", "CS", "CS"),
+               ("4", "DC", "RS"), ("5", "RST", "RES"), ("6", "GND", "GND"))
+    spi_pins = ic("U1", ("3", "SDA", "GPIO19"), ("4", "SCL", "GPIO18"), ("5", "CS", "GPIO17"), ("6", "DC", "GPIO21"),
+                  ("7", "RST", "GPIO16"))
+    assert rules(design(spi_pins, lcd, cap()), "i2c") == []
+    # An I2C OLED whose D/C pin is only an address strap and which has just a RES line is still I2C.
+    oled = part("U2", "SSD1306", "Package_QFN:QFN-24", ("1", "SDA", "SDA"), ("2", "SCL", "SCL"), ("3", "GND", "D/C"),
+                ("4", "RST", "RES"), ("5", "GND", "GND"))
+    i2c_pins = ic("U1", ("3", "SDA", "GPIO19"), ("4", "SCL", "GPIO18"), ("5", "RST", "GPIO16"))
+    assert {f.rule for f in rules(design(i2c_pins, oled, cap()), "i2c")} == {"i2c.pullup.missing"}
+    # A display line shared through a jumper crossover carries the SPI name too: SDA_SCLK, SCL_MOSI.
+    dual = design(ic("U1", ("3", "SDA_SCLK", "GPIO14")), ic("U2", ("3", "SDA_SCLK", "SDA"), value="DISPLAY"), cap())
+    assert rules(dual, "i2c") == []
+
+
 # --- LEDs -------------------------------------------------------------------------------
 
 def led(ref, a, k, a_name="A", k_name="K"):
@@ -272,6 +336,24 @@ def test_single_pin_named_net():
     assert [f.severity for f in rules(header, "net")] == [Severity.INFO]
 
 
+def test_header_labels_naming_standard_pin_functions_are_documentation():
+    for label in ("/ID_SCL", "/ID_SDA", "/GPIO4/GPCLK0", "/10"):
+        header = design(part("J1", "Conn_02x20", "Connector_PinHeader_2.54mm:PinHeader_2x20", ("28", label)))
+        assert rules(header, "net") == [], label
+    header = design(part("J1", "Conn_02x20", "Connector_PinHeader_2.54mm:PinHeader_2x20", ("7", "/MOTOR_EN")))
+    assert [f.rule for f in rules(header, "net")] == ["net.single_pin"]
+
+
+def test_single_pin_label_repeating_the_gpio_name_is_documentation():
+    for label, pin in (("GP22", "GPIO22"), ("GPIO22", "GPIO22"), ("IO35", "IO35"), ("PB4", "PB4"), ("B4", "PB4")):
+        assert rules(design(ic("U1", ("3", label, pin)), cap()), "net") == [], label
+    # A functional name on an MCU pin is still a possible dangling label.
+    found = rules(design(ic("U1", ("3", "LED3", "PB10")), cap()), "net")
+    assert [(f.rule, f.nets) for f in found] == [("net.single_pin", ("LED3",))]
+    other_pin = rules(design(ic("U1", ("3", "GPIO22", "GPIO23")), cap()), "net")
+    assert [f.rule for f in other_pin] == ["net.single_pin"]
+
+
 def test_floating_ic_inputs_need_pin_types():
     def chip(kind):
         return part("U1", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
@@ -280,16 +362,52 @@ def test_floating_ic_inputs_need_pin_types():
     assert [(f.rule, f.severity, f.refs) for f in found] == [("pin.input_floating", Severity.INFO, ("U1",))]  # beta rule
     assert "EN" in found[0].title
     assert rules(design(chip("input+no_connect")), "pin") == []
-    assert rules(design(chip("passive")), "pin") == []
+    assert rules(design(chip("passive")), "pin")[0].rule == "pin.input_floating"  # loosely typed control pin
+
+
+def eeprom_or_bridge(value, *pins, mpn=None):
+    return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("1", "+3V3", "VCC", "power_in"),
+                ("2", "GND", "GND", "power_in"), *pins, fields={"MPN": mpn} if mpn else None)
+
+
+def open_input(number, name):
+    return (number, f"unconnected-(U1-{name}-Pad{number})", name, "input")
+
+
+def test_floating_inputs_with_internal_pulls_are_allowed_per_part_family():
+    eeprom = eeprom_or_bridge("24C02", open_input("3", "A0"), open_input("4", "A1"), open_input("5", "A2"),
+                              open_input("6", "WP"))
+    assert rules(design(eeprom), "pin") == []
+    by_mpn = eeprom_or_bridge("EEPROM", open_input("3", "A0"), open_input("6", "WP"), mpn="FM24C64B-G")
+    assert rules(design(by_mpn), "pin") == []
+    modem = [open_input(str(n), name) for n, name in enumerate(["~{CTS}", "~{DSR}", "~{RI}", "~{DCD}", "R232"], 3)]
+    assert rules(design(eeprom_or_bridge("CH340C", *modem)), "pin") == []
+    # Only the listed pins: another open input of the same part is still reported.
+    found = rules(design(eeprom_or_bridge("CH340C", *modem, open_input("9", "RXD"))), "pin")
+    assert [(f.rule, f.refs) for f in found] == [("pin.input_floating", ("U1",))] and "RXD" in found[0].title
+    assert "A3" in rules(design(eeprom_or_bridge("24C02", open_input("3", "A3"))), "pin")[0].title
+
+
+def test_floating_inputs_stay_flagged_where_a_pin_must_be_driven():
+    reset = part("U1", "STM32F103", "Package_QFP:LQFP-48", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"),
+                 open_input("3", "NRST"))
+    opamp = part("U1", "LM358", "Package_SO:SOIC-8", ("1", "+5V", "V+", "power_in"), ("2", "GND", "V-", "power_in"),
+                 open_input("3", "+"))
+    gate = part("U1", "74HC00", "Package_SO:SOIC-14", ("1", "+3V3", "VCC", "power_in"), ("2", "GND", "GND", "power_in"),
+                open_input("3", "A"))
+    for chip in (reset, opamp, gate):
+        assert [f.rule for f in rules(design(chip), "pin")] == ["pin.input_floating"]
 
 
 # --- duplicates -------------------------------------------------------------------------
 
 def test_identical_parallel_ics():
-    twins = design(ic("U1", ("3", "OUT"), value="TMP36"), ic("U2", ("3", "OUT"), value="TMP36"), cap())
+    twins = design(ic("U1", ("3", "OUT"), ("4", "GND"), value="TMP36", spare=0),
+                   ic("U2", ("3", "OUT"), ("4", "GND"), value="TMP36", spare=0), cap())
     found = rules(twins, "duplicate")
     assert [(f.severity, f.refs) for f in found] == [(Severity.SAVING, ("U1", "U2"))]
-    on_bus = design(ic("U1", ("3", "SDA"), value="TMP102"), ic("U2", ("3", "SDA"), value="TMP102"), cap())
+    on_bus = design(ic("U1", ("3", "SDA"), ("4", "GND"), value="TMP102", spare=0),
+                    ic("U2", ("3", "SDA"), ("4", "GND"), value="TMP102", spare=0), cap())
     assert [f.severity for f in rules(on_bus, "duplicate")] == [Severity.WARNING]
     strapped = design(ic("U1", ("3", "SDA"), ("4", "GND"), value="TMP102"),
                       ic("U2", ("3", "SDA"), ("4", "+3V3"), value="TMP102"), cap())
@@ -352,12 +470,29 @@ def test_screw_terminal_into_a_regulator_without_protection_is_flagged():
     assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("+12V",))]
 
 
-def test_battery_connector_into_a_charger_without_protection_is_flagged():
+@pytest.mark.parametrize("value,pin", [("CH217A", "IN"), ("TPS2115A", "IN1"), ("LM66100", "VIN"),
+                                       ("TPS25940", "IN"), ("Load_Switch", "VIN")])
+def test_connector_rail_into_a_protecting_ic_is_not_flagged(value, pin):
+    usb = part("J1", "USB_A", "Connector_USB:USB_A", ("1", "VBUS"), ("2", "GND"))
+    switch = part("U2", value, "Package_TO_SOT_SMD:SOT-23-5", ("1", "VBUS", pin, "power_in"),
+                  ("2", "GND", "GND", "power_in"), ("3", "VSW", "OUT", "power_out"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "VSW", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert rules(design(usb, switch, load, cap("C1", "VBUS")), "connector") == []
+    # The same rail into an ordinary regulator is still an unprotected input.
+    reg = part("U3", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "VBUS", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "VSW", "VOUT", "power_out"))
+    assert [f.rule for f in rules(design(usb, reg, load, cap("C1", "VBUS")), "connector")] == [
+        "connector.power_unprotected"]
+
+
+def test_battery_connector_into_a_charger_bat_pin_is_managed_but_its_input_is_not():
     batt = part("J5", "Battery", "Connector_JST:JST_PH_B2B", ("1", "VBAT"), ("2", "GND"))
     charger = part("U4", "Charger", "Package_SO:SOIC-8", ("1", "VBAT", "BAT", "power_out"),
                    ("2", "VBUS", "IN", "power_in"), ("3", "GND", "GND", "power_in"))
-    found = rules(design(batt, charger, cap("C1", "VBAT")), "connector")
-    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("VBAT",))]
+    assert rules(design(batt, charger, cap("C1", "VBAT")), "connector") == []
+    barrel = part("J6", "Barrel", "Connector_BarrelJack:BarrelJack", ("1", "VBUS"), ("2", "GND"))
+    found = rules(design(barrel, charger, cap("C1", "VBAT"), cap("C2", "VBUS")), "connector")
+    assert [(f.rule, f.nets) for f in found] == [("connector.power_unprotected", ("VBUS",))]
 
 
 def test_zero_ohm_short_and_unset_values():
@@ -367,7 +502,7 @@ def test_zero_ohm_short_and_unset_values():
     assert rules(jumper, "value") == []
     unset = design(ic(), cap("C1", value="C"), res("R2", "A", "B", "R"))
     found = rules(unset, "value")
-    assert [(f.rule, f.severity, f.refs) for f in found] == [("value.missing", Severity.WARNING, ("C1", "R2"))]
+    assert [(f.rule, f.severity, f.refs) for f in found] == [("value.missing", Severity.INFO, ("C1", "R2"))]
     assert rules(design(ic(), cap("C1", value="100nF"), res("R2", "A", "B", "10k"),
                         part("TP1", "~", "TestPoint:TestPoint_Pad_D1.0mm", ("1", "A")),
                         part("H1", "~", "MountingHole:MountingHole_3.2mm_M3", ("1", "")),
@@ -393,7 +528,7 @@ def test_value_missing_covers_more_kinds_and_symbol_names():
         part("R4", "Rset", "Resistor_SMD:R_0402", ("1", "A")),
         part("R5", "Custom_Sym", "Resistor_SMD:R_0402", ("1", "A"), fields={"lib_id": "Device:Custom_Sym"}),
         part("U3", "LM358", bare, ("1", "A"), fields={"lib_id": "Amplifier_Operational:LM358"}))
-    assert found == [(Severity.WARNING, ("D2", "F1", "FB1", "J1", "K1", "R3", "R4", "R5", "U2", "Y1"))]
+    assert found == [(Severity.INFO, ("D2", "F1", "FB1", "J1", "K1", "R3", "R4", "R5", "U2", "Y1"))]
 
 
 def test_value_missing_skips_copper_parts_and_part_number_symbols():
@@ -407,7 +542,19 @@ def test_value_missing_skips_copper_parts_and_part_number_symbols():
              fields={"lib_id": "Switch:SW_Push"})) == []
     # Still flagged when the value is empty.
     assert values_missing(part("SW2", "~", "Button_Switch_SMD:SW_SPST_TL3342", ("1", "A"))) == [
-        (Severity.WARNING, ("SW2",))]
+        (Severity.INFO, ("SW2",))]
+
+
+def test_value_missing_part_number_symbol_name_is_a_real_value():
+    rgb = lambda ref, value, symbol: part(ref, value, "LED_SMD:LED_RGB", ("1", "A"),  # noqa: E731
+                                     fields={"lib_id": f"LED:{symbol}"})
+    assert values_missing(rgb("D3", "ASMB-MTB0-0A3A2", "ASMB-MTB0-0A3A2"), part(
+        "D4", "WS2812B", "LED_SMD:LED_5050", ("1", "A"), fields={"lib_id": "LED:WS2812B"})) == []
+    # A generic symbol name left as the value is still missing.
+    assert values_missing(rgb("D5", "LED_RGB_Common", "LED_RGB_Common"), rgb("D6", "LED", "LED")) == [
+        (Severity.INFO, ("D5", "D6"))]
+    assert values_missing(part("RN1", "R_Pack04", "Resistor_SMD:R_Array", ("1", "A"),
+                               fields={"lib_id": "Device:R_Pack04"})) == [(Severity.INFO, ("RN1",))]
 
 
 def test_value_missing_order_code_only_is_softer():
@@ -424,10 +571,10 @@ def test_value_missing_generic_value_with_mpn_or_stock_id_is_fine():
     named = lambda ref, fields: part(ref, "LED", "LED_SMD:LED_0603", ("1", "A"), fields=fields)  # noqa: E731
     assert values_missing(named("D1", {"MPN": "19-217/GHC"}), named("D2", {"UST_ID": "42"}),
                    named("D3", {"Stock": "S-7"})) == []
-    assert values_missing(named("D4", {"UST_ID": ""})) == [(Severity.WARNING, ("D4",))]
+    assert values_missing(named("D4", {"UST_ID": ""})) == [(Severity.INFO, ("D4",))]
     # An empty value stays missing whatever else identifies the part.
     assert values_missing(part("D5", "~", "LED_SMD:LED_0603", ("1", "A"), fields={"MPN": "19-217"})) == [
-        (Severity.WARNING, ("D5",))]
+        (Severity.INFO, ("D5",))]
 
 
 def test_coverage_note_when_no_ground_is_named():
@@ -477,3 +624,173 @@ def test_fixture_netlist_flags_the_duplicate_sensor_only():
     found = run_rules(read_xml_netlist(FIXTURES / "necessity.xml"), providers=())
     assert [(f.rule, f.severity, f.refs) for f in found] == [
         ("duplicate.parallel_ic", Severity.SAVING, ("U1", "U2"))]
+
+
+# --- experimental gate ---------------------------------------------------------------------
+
+def gate_board():
+    # U1 has no decoupling cap (experimental) and an unrelated saving-free 'LED on 3V3 to GND' is fine.
+    return design(ic(), led("D1", "+3V3", "GND"), ic("U2", ("3", "SDA1")))
+
+
+def test_gate_experimental_rules_are_the_light_beta_rules():
+    assert audit_rules.EXPERIMENTAL_RULES == audit_rules.BETA_RULES - {
+        rule for rule in audit_rules.BETA_RULES if rule.startswith(("hs.", "fit."))}
+    assert {"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating"} \
+        <= audit_rules.EXPERIMENTAL_RULES
+    assert not any(rule.startswith(("hs.", "fit.")) for rule in audit_rules.EXPERIMENTAL_RULES)
+
+
+def test_gate_run_rules_shows_experimental_by_default_and_can_hide_and_count_them():
+    everything = run_rules(gate_board(), providers=())
+    assert {item.rule for item in everything} & audit_rules.EXPERIMENTAL_RULES
+    hidden = []
+    shown = run_rules(gate_board(), providers=(), include_experimental=False, hidden=hidden)
+    assert hidden and all(item.rule in audit_rules.EXPERIMENTAL_RULES for item in hidden)
+    assert not [item for item in shown if item.rule in audit_rules.EXPERIMENTAL_RULES]
+    assert all(item.severity == Severity.INFO for item in hidden)  # same INFO notes as with the flag
+    assert sorted(shown + hidden, key=repr) == sorted(everything, key=repr)
+    assert run_rules(gate_board(), providers=(), include_experimental=False) == shown  # hidden is optional
+
+
+def test_gate_other_findings_and_providers_are_unaffected():
+    def extra(snapshot):
+        return [Finding("bom.example", Severity.WARNING, "extra")]
+    found = run_rules(gate_board(), providers=(extra,), include_experimental=False)
+    assert [item.severity for item in found if item.rule == "bom.example"] == [Severity.WARNING]
+    plain = {item.rule for item in run_rules(gate_board(), providers=(), include_experimental=False)}
+    assert {item.rule for item in found} - {"bom.example"} == plain
+
+
+def test_gate_run_heavy_keeps_beta_notes():
+    from test_audit_heavy import skewed
+    found = audit_rules.run_heavy(skewed(), providers=())
+    assert found and all(item.severity == Severity.INFO for item in found)
+    assert any(item.rule == "hs.pair.skew" for item in found)
+
+
+def test_gate_experimental_note_wording():
+    assert audit_rules.experimental_note(3) == "3 experimental notes hidden (Setup \u2192 Hide experimental checks is on)"
+    assert audit_rules.experimental_note(1).startswith("1 experimental note hidden")
+
+
+def test_info_rules_are_always_info_and_breaking_rules_keep_their_severity():
+    def emit(rule_names, severity):
+        def provider(_snapshot):
+            return [Finding(name, severity, name) for name in rule_names]
+        return provider
+    empty = design()
+    info = sorted(audit_rules.INFO_RULES)
+    assert {item.severity for item in run_rules(empty, providers=[emit(info, Severity.ERROR)])} == {Severity.INFO}
+    assert {item.severity for item in audit_rules.run_heavy(empty, [emit(info, Severity.WARNING)])} == {Severity.INFO}
+    kept = [("value.zero_ohm_short", Severity.ERROR), ("led.no_resistor", Severity.WARNING),
+            ("net.label_scope", Severity.WARNING)]
+    got = run_rules(empty, providers=[lambda _s: [Finding(r, s, r) for r, s in kept]])
+    assert sorted((f.rule, f.severity) for f in got) == sorted(kept)
+    assert not set(audit_rules.INFO_RULES) & {rule for rule, _ in kept}
+
+
+def test_far_cap_is_fine_for_op_amps_but_missing_cap_is_not():
+    def amp(*extra):
+        return part("U1", "TL072", "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+12V", "V+", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "V-", "power_in", (10.0, 12.0)), ("3", "Net-(U1-+)", "+", "input"),
+                    ("2", "Net-(U1--)", "-", "input"), ("1", "OUT", "", "output"), *extra)
+    far = cap(a="+12V", pin_pos=((40.0, 10.0), (41.0, 10.0)))
+    assert rules(design(amp(), far), "decoupling") == []
+    assert [f.rule for f in rules(design(amp()), "decoupling")] == ["decoupling.missing"]
+
+
+def test_far_cap_is_fine_for_esd_arrays_and_microamp_parts_but_not_an_mcu_or_eeprom():
+    def chip(value):
+        return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)), ("5", "/SDA", "SDA", "bidirectional"),
+                    ("6", "/SCL", "SCL", "input"))
+    far = cap(a="+3V3", pin_pos=((40.0, 10.0), (41.0, 10.0)))
+    for value in ("USBLC6-2SC6", "ESDR0502N", "MAX17048", "LTC4412"):
+        assert rules(design(chip(value), far), "decoupling") == [], value
+    for value in ("ATtiny85", "24LC256"):  # an EEPROM write draws milliamps
+        assert [f.rule for f in rules(design(chip(value), far), "decoupling")] == ["decoupling.far"], value
+
+
+def test_regulator_feedback_pin_is_not_a_supply_input():
+    driver = part("U1", "MCT8316", "Package_DFN_QFN:QFN-40", ("1", "+12V", "VM", "power_in"),
+                  ("2", "GND", "GND", "power_in"), ("3", "/FB", "FB_BK", "power_in"))
+    bulk = cap(ref="C2", a="+12V")
+    assert rules(design(driver, bulk), "decoupling") == []
+
+
+def test_unconnected_supply_pin_needs_no_decoupling():
+    module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
+                  ("2", "GND", "GND", "power_in"), *exp4_spare())
+    assert rules(design(module), "decoupling") == []
+
+
+def test_spare_gpio_may_float_but_boot_pins_may_not():
+    mcu = eeprom_or_bridge("ATmega32U4", open_input("3", "PE6"), open_input("4", "P0.3"), open_input("5", "GPIO12"))
+    assert rules(design(mcu), "pin") == []
+    boot = eeprom_or_bridge("STM32F103", open_input("3", "PB2/BOOT1"), open_input("4", "BOOT0"))
+    found = rules(design(boot), "pin")
+    assert "BOOT0" in found[0].title and "BOOT1" in found[0].title
+
+
+def test_qwiic_and_fan_ports_are_not_power_entries():
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    def conn(*signals):
+        return part("J1", "Conn", "Connector_JST:JST_SH_1x04", ("1", "+5V"), ("2", "GND"),
+                    *[(str(n), net) for n, net in enumerate(signals, 3)])
+    for port in (conn("/I2C_SDA", "/I2C_SCL"), conn("/FAN_PWM", "/FAN_TACHO")):
+        assert rules(design(port, reg, cap("C2", "+5V")), "connector") == []
+    found = rules(design(conn("/UART_TX", "/UART_RX"), reg, cap("C2", "+5V")), "connector")
+    assert [f.nets for f in found] == [("+5V",)]
+
+
+
+def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
+    led = part("D1", "LED", "LED_SMD:LED_0603", ("1", "A"), fields={"LCSC": "C2297", "lib_id": "Device:LED"})
+    named = part("C1", "20p_0402_C0G_50V", "Capacitor_SMD:C_0402", ("1", "A"),
+                 fields={"LCSC": "C1554", "lib_id": "lib:20p_0402_C0G_50V"})
+    assert rules(design(ic(), cap(), led, named), "value.missing") == []
+    bare = part("C2", "C", "Capacitor_SMD:C_0402", ("1", "A"), fields={"LCSC": "C1554", "lib_id": "Device:C"})
+    assert [f.refs for f in rules(design(ic(), cap(), bare), "value.missing")] == [("C2",)]
+
+
+def test_raspberry_pi_header_3v3_is_the_pis_output_but_5v_is_still_checked():
+    reg = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+3V3", "VIN", "power_in"),
+               ("2", "GND", "GND", "power_in"), ("3", "+1V8", "VOUT", "power_out"))
+    def hat(net):
+        return part("J1", "Raspberry_Pi_2_3", "Connector_PinSocket_2.54mm:PinSocket_2x20", ("1", net), ("6", "GND"))
+    assert rules(design(hat("+3V3"), reg, cap("C2", "+3V3")), "connector") == []
+    reg5 = part("U2", "LDO", "Package_TO_SOT_SMD:SOT-23-5", ("1", "+5V", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", "+3V3", "VOUT", "power_out"))
+    assert [f.nets for f in rules(design(hat("+5V"), reg5, cap("C2", "+5V")), "connector")] == [("+5V",)]
+
+
+def test_cap_one_jumper_away_decouples():
+    chip = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "3V0", "VCC", "power_in"),
+                ("2", "GND", "GND", "power_in"), *exp4_spare())
+    jumper = part("JP1", "Jumper_3", "Jumper:SolderJumper_3", ("1", "3V0"), ("2", "VMAIN"), ("3", "3V3_AUX"))
+    assert rules(design(chip, jumper, cap("C1", "VMAIN")), "decoupling") == []
+    assert [f.rule for f in rules(design(chip, jumper), "decoupling")] == ["decoupling.missing"]
+
+
+def test_many_dangling_labels_on_one_header_become_one_note():
+    pins = [(str(n), f"/SIG{n}", f"Pin_{n}") for n in range(1, 9)]
+    found = rules(design(part("J1", "Conn_01x08", "Connector_PinHeader_2.54mm:PinHeader_1x08", *pins)), "net.single_pin")
+    assert len(found) == 1 and found[0].severity == Severity.INFO and len(found[0].nets) == 8
+    few = rules(design(part("J1", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", *pins[:2])), "net.single_pin")
+    assert len(few) == 2
+
+
+def test_regulator_by_part_number_and_marked_up_battery_pin_drive_their_rails():
+    vr = part("VR1", "LM1117MPX-3.3", "My_Library:VREG_LM1117", ("1", "+5V", "VIN", "power_in"),
+              ("2", "+3V3", "VOUT_2", "power_in"), ("3", "GND", "GND", "power_in"))
+    load = part("U3", "MCU", "Package_QFP:LQFP-32", ("1", "+3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    header = part("J4", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+3V3"), ("2", "GND"))
+    assert rules(design(vr, load, header, cap("C1", "+3V3")), "connector") == []
+    charger = part("U1", "MCP73871", "Package_DFN_QFN:QFN-20", ("14", "/VBAT", "V_{BAT}", "power_out"),
+                   ("16", "/VBAT", "V_{BAT_SENSE}", "input"), ("5", "GND", "GND", "power_in"))
+    battery = part("J2", "JST_PH", "Connector_JST:JST_PH_B2B-PH-K_1x02", ("1", "/VBAT"), ("2", "GND"))
+    found = rules(design(charger, load, battery, cap("C2", "/VBAT")), "connector")
+    assert [f.nets for f in found] == [("/VBAT",)]  # a battery input stays flagged, without claiming nothing drives it
+    assert "nothing on the board drives" not in found[0].evidence and "reversed cell" in found[0].evidence
