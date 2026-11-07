@@ -494,3 +494,42 @@ class RecallTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+R0805 = "Resistor_SMD:R_0805_2012Metric"
+R0805_HAND = "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+
+
+def ck4_rules(*parts):
+    return [f for f in bom_findings(snapshot(*parts)) if f.rule == "bom.package_merge"]
+
+
+def test_ck4_pad_variant_of_one_chip_size_is_a_package_merge():
+    # Round 5 (noahfc): R1 on the stock footprint, R3/R6 on the HandSolder variant, same 10K / LCSC code.
+    found = ck4_rules(
+        two_pin("R1", "10K", R0805, "+5V", "/RESET", LCSC="C84376"),
+        two_pin("R3", "10K", R0805_HAND, "+3V3", "/SCL", LCSC="C84376"),
+        two_pin("R6", "10K", R0805_HAND, "+3V3", "/SDA", LCSC="C84376"))
+    assert len(found) == 1 and found[0].refs == ("R1", "R3", "R6")
+    assert "R_0805_2012Metric_Pad1.20x1.40mm_HandSolder" in found[0].title
+
+
+def test_ck4_pad_variant_merge_keeps_the_order_code_and_mpn_guards():
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET", LCSC="C84376"),
+                         two_pin("R3", "10K", R0805_HAND, "+3V3", "/SCL", LCSC="C17414"))
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET", MPN="RC0805FR-0710KL"),
+                         two_pin("R3", "10K", R0805_HAND, "+3V3", "/SCL", MPN="ERJ-6ENF1002V"))
+    assert not ck4_rules(two_pin("R1", "10K 1%", R0805, "+5V", "/RESET"),
+                         two_pin("R3", "10K 5%", R0805_HAND, "+3V3", "/SCL"))
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET"),
+                         two_pin("R3", "10K", R0805, "+3V3", "/SCL"))
+
+
+def test_package_merge_ignores_a_footprint_that_differs_only_in_library_name():
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET", LCSC="C84376"),
+                         two_pin("R2", "10K", "MyProject:R_0805_2012Metric", "+3V3", "/SCL", LCSC="C84376"))
+
+
+def test_snapeda_mp_field_is_an_mpn():
+    from velatrace.bom import mpn_of
+    assert mpn_of(Component("D14", "ESD", "Diode_SMD:D_0402", (), {"MP": "ESDALC6V1-1U2"})) == "ESDALC6V1-1U2"

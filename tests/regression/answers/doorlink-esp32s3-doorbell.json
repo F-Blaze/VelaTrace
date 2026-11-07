@@ -1,0 +1,335 @@
+{
+ "slug": "doorlink-esp32s3-doorbell",
+ "reviewer": "opus-blind-h3B",
+ "parts_reviewed": 96,
+ "issues": [
+  {
+   "rule": "pin.input_floating",
+   "severity": "error",
+   "refs": [
+    "U2",
+    "R26",
+    "J5"
+   ],
+   "nets": [
+    "/BATT_THERM"
+   ],
+   "confidence": "medium",
+   "evidence": "MCP73871 THERM (pin 5) net /BATT_THERM connects only to R26 (10k to GND) and J5 (optional NTC solder pads). R26 is marked DNP (dnp yes) and J5 is in_bom=no / labelled 'OPTIONAL BATTERY NTC'.",
+   "why_it_matters": "In the default build THERM floats; the 50 uA THERM source pulls it above the cold threshold, so the charger reports a temperature fault and does not charge. R26 must be fitted when no NTC is used (10k to VSS is the documented way to disable thermistor sensing).",
+   "time_or_money": "battery never charges / rework"
+  },
+  {
+   "rule": "hs.return.no_plane",
+   "severity": "warning",
+   "refs": [
+    "J2",
+    "U5",
+    "R34",
+    "R35",
+    "U1"
+   ],
+   "nets": [
+    "/U5_IO2",
+    "/U5_IO3",
+    "/GPIO19",
+    "/GPIO20"
+   ],
+   "confidence": "medium",
+   "evidence": "2-layer board; USB D+/D- (~71-73 mm, F.Cu, 0.25 mm) run from J2 (y~143) to R34/R35 (y~81). B.Cu GND pour only spans y 56-125 and is cut by B.Cu routing: ~42 mm of D+ and ~41 mm of D- have no GND copper beneath (computed from filled zone polygons).",
+   "why_it_matters": "USB FS from the ESP32-S3 is tolerant, but an unreferenced 70 mm pair radiates and is susceptible to ESD/noise near the connector; a solid return under the pair is cheap to add.",
+   "time_or_money": "EMI / enumeration robustness"
+  },
+  {
+   "rule": "hs.return.no_plane",
+   "severity": "info",
+   "refs": [
+    "U1",
+    "J3",
+    "R15",
+    "R16"
+   ],
+   "nets": [
+    "/CAM_XCLK",
+    "/CAM_PCLK",
+    "/CAM_XCLK_2V8"
+   ],
+   "confidence": "low",
+   "evidence": "Camera XCLK (20-24 MHz) has 20.5 mm on B.Cu with no plane on F.Cu and ~23 of 29.5 mm unreferenced in total; PCLK ~10.7 of 16.6 mm unreferenced; DVP data lines similar.",
+   "why_it_matters": "Fast camera clocks without a return plane add ringing/EMI and can corrupt DVP capture next to the Wi-Fi module.",
+   "time_or_money": "image glitches / EMI"
+  },
+  {
+   "rule": "other:usb-vbus-cap-too-large",
+   "severity": "info",
+   "refs": [
+    "C24",
+    "J2"
+   ],
+   "nets": [
+    "+5V"
+   ],
+   "confidence": "low",
+   "evidence": "C24 22 uF directly on USB VBUS (+5V) at the MCP73871 input.",
+   "why_it_matters": "USB spec limits device VBUS capacitance at attach to 10 uF (inrush); most hosts tolerate it.",
+   "time_or_money": "compliance only"
+  },
+  {
+   "rule": "other:vpcc-threshold-high",
+   "severity": "info",
+   "refs": [
+    "R27",
+    "R28",
+    "U2"
+   ],
+   "nets": [
+    "Net-(U2-VPCC)",
+    "+5V"
+   ],
+   "confidence": "low",
+   "evidence": "VPCC divider R27 330k / R28 110k from +5V: VPCC loop (1.23 V) engages at ~4.92 V input.",
+   "why_it_matters": "With normal USB cable droop (4.75 V) the MCP73871 will throttle charge current, giving slow charging; ~4.5 V is more typical.",
+   "time_or_money": "slow charging"
+  },
+  {
+   "rule": "other:i2s-sd-pulldown-missing",
+   "severity": "info",
+   "refs": [
+    "MK1"
+   ],
+   "nets": [
+    "/GPIO6"
+   ],
+   "confidence": "low",
+   "evidence": "ICS-43434 SD (pin 6) goes straight to GPIO6 and header J4 with no pull-down.",
+   "why_it_matters": "InvenSense recommends ~100k pull-down on SD to discharge the line while the mic tri-states the unused slot; otherwise the ESP may sample floating data unless an internal pull-down is enabled.",
+   "time_or_money": "$0.002/board"
+  },
+  {
+   "rule": "bom.value_normalise",
+   "severity": "info",
+   "refs": [
+    "R3",
+    "R30",
+    "R37",
+    "R39",
+    "R40",
+    "J1",
+    "J6",
+    "C32",
+    "C1"
+   ],
+   "nets": [],
+   "confidence": "medium",
+   "evidence": "LCSC fields with stray whitespace: R3/R30 ' C21190' vs R37/R39/R40 'C21190'; J1/J6 'C131337 '. C32 10u uses LCSC C90053 while other 10u 0603 caps use C19702. Many passives (all 0.1u/1u caps, R2, R6, R9...) have no LCSC number at all.",
+   "why_it_matters": "Same part splits into multiple BOM lines or fails LCSC matching at assembly upload.",
+   "time_or_money": "1-2 BOM lines"
+  },
+  {
+   "rule": "other:value-nonstandard",
+   "severity": "info",
+   "refs": [
+    "R25"
+   ],
+   "nets": [
+    "Net-(U2-PROG3)"
+   ],
+   "confidence": "low",
+   "evidence": "R25 PROG3 (termination current) value '25k', not an E24/E96 value (24k / 24.9k / 25.5k).",
+   "why_it_matters": "Not orderable as written.",
+   "time_or_money": "BOM clarification"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "info",
+   "refs": [
+    "J1",
+    "J2"
+   ],
+   "nets": [
+    "+BATT",
+    "+5V"
+   ],
+   "confidence": "low",
+   "evidence": "LiPo connector J1 (JST-PH) goes straight to MCP73871 VBAT with no reverse-polarity protection; USB VBUS has no fuse/TVS (U5 SRV05-4 VP is on +3V3, protecting data lines only).",
+   "why_it_matters": "JST-PH LiPo polarity is not standardised between vendors; a reversed pack destroys the charger. Typical hobby risk.",
+   "time_or_money": "functional risk"
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D2",
+    "D3"
+   ],
+   "nets": [],
+   "severity": "warning",
+   "confidence": "medium",
+   "evidence": "D2/D3 have value \"LED\" with no MPN, LCSC or colour, while about half the BOM (e.g. R1 C15401) carries LCSC numbers. The LED part and colour are unspecified for ordering.",
+   "source": "blind adjudication"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "value.zero_ohm_short",
+   "refs": [
+    "R36",
+    "U9"
+   ],
+   "nets": [
+    "+3V3",
+    "/CAM_3V3"
+   ],
+   "reason": "R36 0R bypasses the TPS22919 camera load switch but is marked DNP: a population option only."
+  },
+  {
+   "rule": "value.zero_ohm_short",
+   "refs": [
+    "R31"
+   ],
+   "nets": [
+    "/PIR_SENSOR_OUT",
+    "/GPIO42_AUX"
+   ],
+   "reason": "R31 (PIR to GPIO42/CAM_PWR_EN) is DNP, so the PIR output does not fight GPIO42."
+  },
+  {
+   "rule": "value.zero_ohm",
+   "refs": [
+    "R11",
+    "R21"
+   ],
+   "nets": [
+    "Net-(J3-CAM24_AFVDD)",
+    "Net-(J3-CAM23_AF_GND)"
+   ],
+   "reason": "Autofocus supply 0R links are DNP options with test points."
+  },
+  {
+   "rule": "value.zero_ohm",
+   "refs": [
+    "R32",
+    "U4"
+   ],
+   "nets": [
+    "Net-(U4-GAIN_SLOT)",
+    "/SYS"
+   ],
+   "reason": "0R strapping MAX98357A GAIN_SLOT to VDD (6 dB gain) is intentional and leaves a gain-option footprint."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "unconnected-(U1-IO35-Pad28)",
+    "unconnected-(U1-IO36-Pad29)",
+    "unconnected-(U1-IO37-Pad30)"
+   ],
+   "reason": "IO35-37 are used internally by octal PSRAM on WROOM-1 N*R8 modules and must stay unconnected ('PSRAM' note)."
+  },
+  {
+   "rule": "hs.pair.vias",
+   "refs": [
+    "J2",
+    "U5"
+   ],
+   "nets": [
+    "/U5_IO2",
+    "/U5_IO3"
+   ],
+   "reason": "D+ has 2 vias and ~1.4 mm more length than D-; irrelevant at USB full-speed 12 Mb/s (the S3's only USB mode)."
+  },
+  {
+   "rule": "i2c.pullup.mixed_rails",
+   "refs": [
+    "R13",
+    "R14",
+    "J3"
+   ],
+   "nets": [
+    "/CAM_SDA",
+    "/CAM_SCL",
+    "+2V8"
+   ],
+   "reason": "SCCB pull-ups go to the camera's 2.8 V DOVDD on purpose, so the OV5640 never sees 3.3 V; the ESP32 VIH (~2.48 V) is still met."
+  },
+  {
+   "rule": "other:level-shift-divider",
+   "refs": [
+    "R15",
+    "R16",
+    "R17",
+    "R18",
+    "R19",
+    "R20"
+   ],
+   "nets": [
+    "/CAM_XCLK_2V8",
+    "/CAM_RST_2V8",
+    "/CAM_PWDN_2V8"
+   ],
+   "reason": "Resistive dividers (680/3k9, 10k/56k) bring the ESP's 3.3 V outputs to ~2.8 V for the camera; this is intentional."
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "+3V3"
+   ],
+   "reason": "The WROOM-1 module has internal decoupling; C1 10u + C2 0.1u sit ~6 mm from pin 2."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U2",
+    "U8",
+    "U9",
+    "U4",
+    "J2",
+    "J3",
+    "U5"
+   ],
+   "nets": [
+    "unconnected-(U2-~{PG}-Pad6)",
+    "unconnected-(U2-STAT2-Pad7)",
+    "unconnected-(U8-PG-Pad5)",
+    "unconnected-(U9-QOD-Pad5)"
+   ],
+   "reason": "Unused open-drain status outputs, NC pins, SBU and unused TVS channel are left open on purpose."
+  },
+  {
+   "rule": "fit.pin_order",
+   "refs": [
+    "U6"
+   ],
+   "nets": [
+    "+1V5",
+    "/CAM_3V3"
+   ],
+   "reason": "The DS8561-15S3 SOT-23-3 pinout (1 GND, 2 VOUT, 3 VIN) matches the XC6206 symbol used."
+  },
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "D2"
+   ],
+   "nets": [
+    "Net-(D2-K)"
+   ],
+   "reason": "The charger STAT1 LED has R2 2k from +5V; status LED D3 has R3; the doorbell button LED has R9."
+  },
+  {
+   "rule": "fit.pad_count",
+   "refs": [
+    "J2"
+   ],
+   "nets": [],
+   "reason": "[wrong] The footprint is KiCad Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12, made for this exact part: A1..B12 signal pads plus 4 shell tabs all numbered SH. The extra count comes from counting SH as a pin; the part fits.",
+   "source": "blind adjudication"
+  }
+ ],
+ "notes": "Checked these pinouts from memory against the netlist and PCB pads: ESP32-S3-WROOM-1, MCP73871 QFN-20, TPS63802 DLA (FB divider 511k/91k gives 3.31 V at VFB 0.5 V), MAX98357A TQFN-16, ICS-43434, SRV05-4, TPS22919, XC6206. All consistent. I did not verify the OV5640 24-pin FPC orientation (Hirose FH12 contact side vs the reversed CAM1..24 numbering in the custom symbol); check it against the actual camera flex before ordering. The MCP73871 THERM-float behaviour is based on memory of the datasheet, not re-read. U1, MK1, J5 and J9 are in_bom=no (hand-fit). The long I2S BCLK/WS runs (GPIO4/5, ~120-140 mm, shared with the J4 header) are noted but not flagged. Other LCSC part numbers (C84419, C90053, C202112, C131337) were not looked up."
+}

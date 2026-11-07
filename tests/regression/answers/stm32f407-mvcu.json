@@ -1,0 +1,337 @@
+{
+ "slug": "stm32f407-mvcu",
+ "reviewer": "opus-blind-g3",
+ "parts_reviewed": 114,
+ "issues": [
+  {
+   "rule": "other:current_sensor_shorts_rail",
+   "severity": "error",
+   "refs": [
+    "U11"
+   ],
+   "nets": [
+    "+5V",
+    "GND"
+   ],
+   "confidence": "high",
+   "evidence": "ACS712 primary IP+ (pins 1,2) is on +5V and IP- (pins 3,4) is on GND: the ~1.2 mOhm current path is placed directly across the 5V rail",
+   "why_it_matters": "dead short of +5V; the sensor primary must sit in series with the measured load, not between rail and ground",
+   "time_or_money": "board does not power up; respin"
+  },
+  {
+   "rule": "other:buffer_direction_reversed",
+   "severity": "error",
+   "refs": [
+    "U1",
+    "R6",
+    "J3"
+   ],
+   "nets": [
+    "/SD_MISO",
+    "/DO_LLS"
+   ],
+   "confidence": "high",
+   "evidence": "74LS125 gate 4: input 4A (pin 12) is fed from the MCU MISO pin via R6, and output 4Y (pin 11) drives SD DAT0 (card data out). Both the card and the buffer drive DAT0 and nothing drives PC11",
+   "why_it_matters": "SD card reads impossible; output contention on DAT0",
+   "time_or_money": "SD logging broken; respin"
+  },
+  {
+   "rule": "other:ttl_part_on_3v3",
+   "severity": "error",
+   "refs": [
+    "U1",
+    "R2",
+    "R4",
+    "R5",
+    "R6"
+   ],
+   "nets": [
+    "+3.3V",
+    "Net-(R2-Pad1)",
+    "Net-(R4-Pad1)",
+    "Net-(R5-Pad1)",
+    "Net-(R6-Pad1)"
+   ],
+   "confidence": "high",
+   "evidence": "74LS125 VCC on +3.3V (LS-TTL is specified 4.75-5.25V); its inputs are driven through 3.3k series resistors, and IIL = -0.4 mA x 3.3k = 1.3V so a logic low (VIL 0.8V) cannot be reached",
+   "why_it_matters": "the SD level-shifter does not work; both sides are 3.3V anyway, so U1 and R2/R4/R5/R6 can simply be removed and the card wired direct",
+   "time_or_money": "remove 5 parts; SD path non-functional as drawn"
+  },
+  {
+   "rule": "other:7seg_decoder_mismatch",
+   "severity": "error",
+   "refs": [
+    "U8",
+    "U10"
+   ],
+   "nets": [
+    "Net-(U10-A)",
+    "Net-(U10-G)",
+    "GND"
+   ],
+   "confidence": "high",
+   "evidence": "74LS47 (active-low open-collector outputs, for common-anode displays) drives a D168K, which the symbol describes as common cathode with CC pins 3/8 tied to GND; segments connect directly to the OC outputs with no resistors",
+   "why_it_matters": "nothing sources segment current, so the display never lights; use 74LS48/CD4511 with segment resistors, or a CA display to +5V with resistors",
+   "time_or_money": "display non-functional; 7+ resistors and a part change"
+  },
+  {
+   "rule": "other:ldo_vin_exceeds_rating",
+   "severity": "error",
+   "refs": [
+    "U6",
+    "U7"
+   ],
+   "nets": [
+    "/mornsun_Vin",
+    "Net-(J18-Pin_2)"
+   ],
+   "confidence": "medium",
+   "evidence": "AMS1117-5.0 VI is on /mornsun_Vin, the 24V input of the URB2405 isolated converter (18-36V range); AMS1117 abs-max input is 15V. Its output is hard-wired in parallel with the URB2405 +Vo, and its GND is the secondary GND while its input returns on /mornsun_minus (isolation bridged only via J16)",
+   "why_it_matters": "if both are fitted and fed 24V the LDO is destroyed (and would dissipate (24-5)*I anyway); parallel regulator outputs and an LDO across the isolation barrier defeat the isolated supply",
+   "time_or_money": "smoke on first power-up; respin or DNP U6"
+  },
+  {
+   "rule": "other:cap_voltage_package",
+   "severity": "error",
+   "refs": [
+    "C24",
+    "C23"
+   ],
+   "nets": [
+    "/mornsun_Vin"
+   ],
+   "confidence": "high",
+   "evidence": "C24 '100uF' on an 0805 footprint and C23 10uF 0805 sit on the 18-36V input rail; 100uF 0805 MLCCs exist only at <=6.3V, and 10uF 0805 parts are typically <=25V",
+   "why_it_matters": "no orderable part meets the rating; an undersized MLCC on the input will fail short",
+   "time_or_money": "change to 50V-rated parts / electrolytic footprint"
+  },
+  {
+   "rule": "other:backup_domain_gpio_led",
+   "severity": "warning",
+   "refs": [
+    "U2",
+    "D8",
+    "D9",
+    "D10",
+    "R16",
+    "R17",
+    "R18"
+   ],
+   "nets": [
+    "/C13",
+    "/C14",
+    "/C15"
+   ],
+   "confidence": "high",
+   "evidence": "LEDs D8-D10 are sourced from PC13/PC14/PC15 through 1K; the STM32F407 datasheet states these backup-domain pins must not be used as current sources (e.g. to drive an LED), ~3 mA sink max, 2 MHz",
+   "why_it_matters": "out of datasheet spec; move the LEDs to normal GPIOs or wire them as sinks",
+   "time_or_money": "reroute 3 nets"
+  },
+  {
+   "rule": "value.missing",
+   "severity": "warning",
+   "refs": [
+    "R3"
+   ],
+   "nets": [
+    "/HSE_OUT",
+    "Net-(C8-Pad2)"
+   ],
+   "confidence": "high",
+   "evidence": "R3 (HSE OSC_OUT series resistor) value is still the symbol name 'R_Small_US'",
+   "why_it_matters": "assembler cannot place it; it is in the crystal path so 0R-few hundred ohms must be chosen",
+   "time_or_money": "BOM hold"
+  },
+  {
+   "rule": "other:max232_cap_value",
+   "severity": "warning",
+   "refs": [
+    "U3",
+    "C16",
+    "C19",
+    "C21",
+    "C22"
+   ],
+   "nets": [
+    "Net-(U3-C1+)",
+    "Net-(U3-C2+)",
+    "Net-(U3-VS+)",
+    "Net-(U3-VS-)"
+   ],
+   "confidence": "medium",
+   "evidence": "Charge-pump caps are 0.1uF; the plain MAX232 is specified with 1uF (0.1uF is for MAX232A/MAX3232)",
+   "why_it_matters": "weak V+/V- under load; RS-232 output levels may fall out of spec",
+   "time_or_money": "swap 4 caps or use MAX232A"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "info",
+   "refs": [
+    "J5"
+   ],
+   "nets": [
+    "/mornsun_Vin",
+    "/mornsun_minus"
+   ],
+   "confidence": "medium",
+   "evidence": "24V input terminal block J5 feeds U7/U6 and caps directly; no fuse, reverse-polarity diode or TVS",
+   "why_it_matters": "vehicle/industrial 24V input sees reversal and load-dump transients",
+   "time_or_money": "~$0.20/board"
+  },
+  {
+   "rule": "other:boot0_floating",
+   "severity": "warning",
+   "refs": [
+    "R1",
+    "J1",
+    "U2"
+   ],
+   "nets": [
+    "/BOOT0",
+    "Net-(J1-Pin_2)"
+   ],
+   "confidence": "medium",
+   "evidence": "BOOT0 only reaches the middle pin of jumper header J1 through R1 10K; with no jumper fitted BOOT0 floats. PB2/BOOT1 (pin 37) is also unconnected",
+   "why_it_matters": "random boot into system memory/SRAM if the jumper is missing; add a 10k pull-down on BOOT0 and tie PB2 low",
+   "time_or_money": "1-2 resistors"
+  },
+  {
+   "rule": "bom.value_normalise",
+   "severity": "saving",
+   "refs": [
+    "C3",
+    "C4",
+    "C5",
+    "C6",
+    "C9",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C16",
+    "C18",
+    "C19",
+    "C21",
+    "C22",
+    "C28"
+   ],
+   "nets": [],
+   "confidence": "high",
+   "evidence": "Same 0805 capacitor spelled '100nF' (C3-C6, C9, C11-C14) and '0.1uF' (C16, C18, C19, C21, C22, C28)",
+   "why_it_matters": "two BOM lines for one part",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "severity": "warning",
+   "refs": [
+    "U2",
+    "J15"
+   ],
+   "nets": [
+    "/I2C1_SCL",
+    "/I2C1_SDA"
+   ],
+   "confidence": "low",
+   "evidence": "I2C1 (PB8/PB9) goes to 2-pin header J15 with no pull-ups (I2C3 has 1K pull-ups on board); J15 carries no power or ground either",
+   "why_it_matters": "relies entirely on the external module for pull-ups and a ground return",
+   "time_or_money": "2 resistors"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J6",
+    "J7",
+    "J8",
+    "J11",
+    "J12"
+   ],
+   "nets": [
+    "+5V"
+   ],
+   "reason": "DB9 pin 9 supplies 5V out to the VCU nodes (CiA DB9 CAN pinout: 2 CAN_L, 7 CAN_H, 3 GND, 9 V+); outputs, not inputs"
+  },
+  {
+   "rule": "other:can_termination",
+   "refs": [
+    "R20"
+   ],
+   "nets": [
+    "/CAN_P",
+    "/CAN_N"
+   ],
+   "reason": "120R on-board termination is correct for a master/hub at one end of the bus"
+  },
+  {
+   "rule": "i2c.pullup.value",
+   "refs": [
+    "R7",
+    "R8"
+   ],
+   "nets": [
+    "/I2C_SDA",
+    "/I2C3_SCL"
+   ],
+   "reason": "1K pull-ups on an I2C bus cabled to five DB9 nodes are strong but justified by cable capacitance (at the 1k rule limit)"
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U3"
+   ],
+   "nets": [],
+   "reason": "unused MAX232 T2IN/R2IN carry no-connect flags; T2IN has an internal pull-up"
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U8",
+    "J9"
+   ],
+   "nets": [
+    "Net-(J9-Pin_2)",
+    "Net-(J9-Pin_4)",
+    "Net-(J9-Pin_6)"
+   ],
+   "reason": "LT/BI/RBI go to jumper header J9 (to GND); open LS-TTL inputs read high, which is the inactive state"
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U2",
+    "U1",
+    "U3",
+    "U5",
+    "U8",
+    "U9",
+    "U11"
+   ],
+   "nets": [
+    "+3.3V",
+    "+5V"
+   ],
+   "reason": "STM32 has 100n per VDD pin plus 10uF/1uF bulk; VCAP_1/2 have the required 2.2uF; other ICs share decoupled rails"
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U2"
+   ],
+   "nets": [],
+   "reason": "many unused STM32 GPIOs left open without flags - bidirectional, configured in firmware"
+  },
+  {
+   "rule": "other:vbat_to_vdd",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "+3.3V"
+   ],
+   "reason": "VBAT tied to VDD is the datasheet recommendation when no backup battery is used"
+  }
+ ],
+ "notes": "Several hard functional errors (ACS712 across the rail, reversed SD MISO buffer, LS-TTL on 3.3V, 74LS47 with a common-cathode display, AMS1117 on 24V). The MCP2551 TXD driven at 3.3V is within its TTL-compatible threshold; RXD/IMU_Rx 5V outputs land on 5V-tolerant pins. ACS712 FILTER cap 10uF gives ~9 Hz bandwidth (probably intended averaging, not listed). Sheet note computes Cload=2*(12p-5p)=14p but 12p fitted (minor). J4 'IMU' DB9 uses DCE-style pin 2/3 assignment - may need a null-modem depending on the IMU."
+}

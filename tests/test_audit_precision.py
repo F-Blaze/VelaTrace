@@ -7,7 +7,7 @@ import pytest
 from velatrace.audit_rules import parse_resistance
 from velatrace.findings import Severity
 
-from test_audit_rules import cap, design, ic, led, part, res, rules
+from test_audit_rules import cap, design, exp4_spare, ic, led, part, res, rules
 
 
 # --- parse_resistance -------------------------------------------------------------------
@@ -55,7 +55,7 @@ def test_led_on_current_sink_driver_pin_is_fine():
 
 def typed_ic(ref, *pins, value="CHIP"):
     """pins: (number, net, name, type); GND pin added."""
-    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins)
+    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins, *exp4_spare())
 
 
 def decoupling(*parts):
@@ -96,7 +96,7 @@ def test_cap_to_the_ics_own_power_or_ground_pin_net_decouples():
     stacked = typed_ic("U1", ("1", "/VDD1_0", "VDD1", "power_in"), ("2", "/VDD2_0", "VDD2", "power_in"))
     assert decoupling(stacked, cap("C1", "/VDD1_0", "/VDD2_0"), cap("C2", "/VDD2_0")) == []
     dw01 = part("U5", "DW01A", "Package_TO_SOT_SMD:SOT-23-6", ("6", "B-", "GND", "power_in"),
-                ("5", "Net-(U5-VCC)", "VCC", "power_in"))
+                ("5", "Net-(U5-VCC)", "VCC", "power_in"), *exp4_spare())
     assert decoupling(dw01, cap("C7", "Net-(U5-VCC)", "B-"), cap("C9", "+BATT")) == []
     assert decoupling(dw01, cap("C9", "+BATT")) == [(("U5",), ("Net-(U5-VCC)",))]
 
@@ -313,7 +313,7 @@ def test_txs_translator_has_internal_pullups_and_odd_named_rail_counts():
 # --- round 2: module rails, board interfaces, unused sideband/debug pins -----------------
 
 def test_dev_board_socket_is_a_module_not_an_ic_to_decouple():
-    kit = lambda footprint: part("U1", "ESP32-DevKitC", footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"))
+    kit = lambda footprint: part("U1", "ESP32-DevKitC", footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"), *exp4_spare())
     assert decoupling(kit("Package_QFP:LQFP-32")) == [(("U1",), ("+3V3",))]
     assert decoupling(kit("PCM_Espressif:ESP32-DevKitC")) == []
     assert decoupling(kit("Vendor:Radio_Module_Castellated")) == []
