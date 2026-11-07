@@ -1,0 +1,125 @@
+{
+ "slug": "regret",
+ "reviewer": "opus-blind-g1",
+ "parts_reviewed": 85,
+ "issues": [
+  {
+   "rule": "decoupling.missing",
+   "severity": "error",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "+3V3"
+   ],
+   "confidence": "high",
+   "evidence": "74HC595 VCC (pin 16) on +3V3; the board has zero capacitors (passives_count 0). Only decoupling is inside the XIAO module, several cm away.",
+   "why_it_matters": "Shift-register output switching (8 row drivers) without local bypass causes ground bounce / false key reads.",
+   "time_or_money": "$0.01/board"
+  },
+  {
+   "rule": "decoupling.missing",
+   "severity": "warning",
+   "refs": [
+    "D35",
+    "D36",
+    "D37",
+    "D38",
+    "D39",
+    "D40",
+    "D41",
+    "D42",
+    "D43",
+    "D44",
+    "D45"
+   ],
+   "nets": [
+    "+5V",
+    "Net-(D35-VDD)"
+   ],
+   "confidence": "medium",
+   "evidence": "11x SK6812 on +5V (from XIAO 5V pin) with no bulk or per-LED capacitor.",
+   "why_it_matters": "SK6812 PWM current pulses (up to ~660 mA total) on an undecoupled rail from the USB 5V pin cause flicker / data corruption.",
+   "time_or_money": "$0.05/board"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "info",
+   "refs": [
+    "BT1"
+   ],
+   "nets": [
+    "bat+"
+   ],
+   "confidence": "low",
+   "evidence": "Battery (JST-PH on PCB) goes directly to XIAO BAT+ pad; power switch SW35 is in the negative lead; no reverse-polarity protection.",
+   "why_it_matters": "Reversed LiPo destroys the XIAO charger.",
+   "time_or_money": "functional risk"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "D35",
+    "D36",
+    "D37",
+    "D38",
+    "D39",
+    "D40",
+    "D41",
+    "D42",
+    "D43",
+    "D44",
+    "D45"
+   ],
+   "nets": [
+    "led"
+   ],
+   "reason": "SK6812 are addressable LEDs with internal constant-current drivers; no series resistor needed."
+  },
+  {
+   "rule": "other:diode-on-led-supply",
+   "refs": [
+    "D46",
+    "D35"
+   ],
+   "nets": [
+    "Net-(D35-VDD)"
+   ],
+   "reason": "D46 (1N4148W) drops the first SK6812's VDD to ~4.3 V so the 3.3 V XIAO data line meets its 0.7*VDD VIH; deliberate 'sacrificial pixel' level shift."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "GND",
+    "+3V3"
+   ],
+   "reason": "74HC595 ~OE tied to GND and ~SRCLR tied to +3V3 deliberately (always enabled, never cleared)."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "rst"
+   ],
+   "reason": "rst goes to reset button SW36; XIAO has internal reset pull-up."
+  },
+  {
+   "rule": "other:led-power-only-on-usb",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "+5V"
+   ],
+   "reason": "LEDs powered from XIAO 5V pin which is only live on USB; intentional so RGB does not drain the battery."
+  }
+ ],
+ "notes": "Ergogen-generated: schematic footprint fields empty for switches/U2/BT1 but footprints exist on the PCB (SOIC-16 for U2, JST-PH for battery) - not an electrical issue. Matrix uses 74HC595 push-pull rows with diodes to MCU columns; diode orientation prevents row-to-row shorts."
+}

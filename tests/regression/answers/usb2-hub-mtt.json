@@ -1,0 +1,269 @@
+{
+ "slug": "usb2-hub-mtt",
+ "reviewer": "opus-blind-h5C",
+ "parts_reviewed": 70,
+ "issues": [
+  {
+   "rule": "other:usb.self_power_misreport",
+   "severity": "warning",
+   "refs": [
+    "U1",
+    "R10",
+    "J5",
+    "J6"
+   ],
+   "nets": [
+    "Net-(U1-BUSB)",
+    "5V"
+   ],
+   "confidence": "low",
+   "evidence": "FE1.1 BUS_B (pin 36) pulled to 5V by R10 100k. Per the FE1.1 datasheet, BUS_B is 'bus power indicator, active low'. Driving it high tells the host the hub is self-powered. In practice the only fitted supply is the upstream USB-C VBUS (J5 A4/A9/B4/B9), and the optional external header J6 is DNP. VBUSM (R11/R29) senses that same 5V net.",
+   "why_it_matters": "The host will not budget power: each downstream port is advertised as 500 mA while the hub actually runs off a single upstream port with 5k1 Rd only (default USB power). Heavy downstream loads can brown out the hub or trip the host port.",
+   "time_or_money": "compliance / functional risk under load"
+  },
+  {
+   "rule": "other:usb.vbus_backfeed",
+   "severity": "warning",
+   "refs": [
+    "J6",
+    "J5"
+   ],
+   "nets": [
+    "5V"
+   ],
+   "confidence": "low",
+   "evidence": "J6 (2-pin header, DNP) ties directly onto net 5V. That net is the upstream USB-C VBUS (J5 VBUS pins) and also feeds VBUSM. There is no diode, ideal-diode or switch in between.",
+   "why_it_matters": "If J6 is ever fitted and used as an external 5V input, it back-drives the host's VBUS (forbidden by the USB spec, and it can damage the host or the PSU). VBUSM also stays high with no host attached, so attach detection breaks.",
+   "time_or_money": "only matters if J6 is populated"
+  },
+  {
+   "rule": "other:power.budget_ilim",
+   "severity": "info",
+   "refs": [
+    "U2",
+    "U3",
+    "U4",
+    "U5",
+    "R13",
+    "R3",
+    "R17",
+    "R21"
+   ],
+   "nets": [
+    "Net-(U2-ILIM)",
+    "Net-(U3-ILIM)",
+    "Net-(U4-ILIM)",
+    "Net-(U5-ILIM)",
+    "5V"
+   ],
+   "confidence": "low",
+   "evidence": "The AP22652A ILIM resistors are 12k. The datasheet gives about 1.7 A at 15k, so 12k is roughly 2.1 A per port, about 8 A total across 4 ports. All of it comes from one upstream USB-C VBUS with no input fuse or upstream current limit.",
+   "why_it_matters": "The per-port limits do not protect the upstream source. A few charging loads can exceed what the host port can supply.",
+   "time_or_money": "design choice; consider lower ILIM or external supply"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "connector.usbc_cc_missing",
+   "refs": [
+    "J5",
+    "R5",
+    "R6"
+   ],
+   "nets": [
+    "Net-(J5-CC1)",
+    "Net-(J5-CC2)"
+   ],
+   "reason": "Each CC pin has its own 5k1 Rd to GND (R5, R6). This is the correct UFP sink termination."
+  },
+  {
+   "rule": "other:pin_type_conflict",
+   "refs": [
+    "U1",
+    "U2",
+    "U3",
+    "U4",
+    "U5"
+   ],
+   "nets": [
+    "OVERCURRENT1",
+    "OVERCURRENT2",
+    "OVERCURRENT3",
+    "OVERCURRENT4"
+   ],
+   "reason": "In the local symbol, FE1.1 OVCB pins are typed output. The datasheet defines them as inputs (active-low over-current indicators). They are driven by the open-drain AP22652 FAULT pins, so the output-to-output ERC conflict is only a symbol pin-type artefact."
+  },
+  {
+   "rule": "other:5v_pullup_on_3v3_ic",
+   "refs": [
+    "U1",
+    "R14",
+    "R4",
+    "R18",
+    "R22",
+    "R10"
+   ],
+   "nets": [
+    "OVERCURRENT1",
+    "OVERCURRENT2",
+    "OVERCURRENT3",
+    "OVERCURRENT4",
+    "Net-(U1-BUSB)"
+   ],
+   "reason": "These pull-ups go to 5V although FE1.1 runs on a 3.3V core. The FE1.1 datasheet gives VIH max 5.5V for its digital inputs, so the inputs are 5V tolerant."
+  },
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8",
+    "D9"
+   ],
+   "nets": [
+    "DRV",
+    "LED1",
+    "LED2",
+    "LED3",
+    "LED4"
+   ],
+   "reason": "These are port-indicator LED pairs between LEDn and DRV, wired as in FE1.1 Fig. 5. Every LED has a series resistor (510R or 12k), and D9 is the optional hub-active LED on DRV via R7."
+  },
+  {
+   "rule": "other:led_resistor_high_value",
+   "refs": [
+    "R24",
+    "R25",
+    "R26",
+    "R27",
+    "R28",
+    "R7"
+   ],
+   "nets": [
+    "VUSB1",
+    "VUSB2",
+    "VUSB3",
+    "VUSB4",
+    "5V",
+    "DRV"
+   ],
+   "reason": "The 12k LED resistors (about 0.25 mA) are a deliberate choice for dim indicators, not an error."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U6",
+    "U7",
+    "U8",
+    "U9",
+    "U10"
+   ],
+   "nets": [
+    "/d+",
+    "/d-",
+    "Net-(J5-D+-PadA6)",
+    "Net-(J1-D+)",
+    "D1+"
+   ],
+   "reason": "USBLC6-2SC6 is used in flow-through mode: pins 1/6 and 3/4 are the same I/O line internally. Each data line therefore gets two net names, one connector-side and one hub-side. This is ST's recommended layout, so it is not a broken pair."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "GND"
+   ],
+   "reason": "DIS_REG (pin 37) and TEST (pin 40) are tied to GND as the datasheet requires: internal 5V-to-3.3V regulator enabled, normal mode."
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J5",
+    "J1",
+    "J2",
+    "J3",
+    "J4"
+   ],
+   "nets": [
+    "5V",
+    "VUSB1",
+    "VUSB2",
+    "VUSB3",
+    "VUSB4"
+   ],
+   "reason": "Each downstream VBUS sits behind an AP22652A current-limited switch with a FAULT line back to the hub. The upstream side relies on the host port's own protection, which is normal for a bus-powered hub."
+  },
+  {
+   "rule": "hs.return.no_plane",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "/d+",
+    "/d-",
+    "D1+",
+    "D1-",
+    "D2+",
+    "D2-",
+    "D3+",
+    "D3-",
+    "D4+",
+    "D4-"
+   ],
+   "reason": "4-layer board: all USB pairs run on F.Cu, length-matched within 0.01 mm, with no vias, over a solid GND pour on In1.Cu/In2.Cu (100% coverage by point sampling)."
+  },
+  {
+   "rule": "other:crystal_load",
+   "refs": [
+    "Y1",
+    "C1",
+    "C2"
+   ],
+   "nets": [
+    "XIN",
+    "XOUT"
+   ],
+   "reason": "Y1 (LCSC C50430, X322512MMB4SI) has CL = 10 pF. With 12 pF per side plus a few pF of stray, the effective load is about 9-11 pF, which is correct."
+  },
+  {
+   "rule": "other:rext_value",
+   "refs": [
+    "R8"
+   ],
+   "nets": [
+    "Net-(U1-REXT)"
+   ],
+   "reason": "2K7 1% to ground matches the FE1.1 requirement."
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D1",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8",
+    "D9"
+   ],
+   "nets": [],
+   "reason": "[acceptable] All 14 LEDs carry LCSC codes (C965812, C965819, C2297) that fully identify each part; value 'LED' with an LCSC field is normal JLC practice. Only a BOM grouped on value+footprint alone would merge the colours.",
+   "source": "blind adjudication"
+  }
+ ],
+ "notes": "FE1.1 pin mapping in lib:FE1.1 verified against FE1.1 datasheet Rev 1.11 (all 48 pins match). VREG18 and VD33_OUT each have the required 10uF (C26, C25), and 3V3/1V8 decoupling sits 1-6 mm from the pins. USBLC6 orientation (pins 1/6, 3/4) checked. AP22652A pinout (IN1 GND2 EN3 FAULT4 ILIM5 OUT6) and active-low EN checked against search results only, not the full PDF. Not checked: exact AP22652A ILIM formula; USB-A footprint mirror orientation against the SHOU HAN drawing (pad pitch 2.5/2.0/2.5 is consistent); trace impedance (stackup not given). The design looks clean overall; no high-confidence defects found."
+}
