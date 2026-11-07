@@ -30,9 +30,14 @@ The second kind of find needs the optional JLCPCB parts list. I have tried it on
 - LEDs with no series resistor.
 - I2C pull-up problems.
 - Duplicated chips, 0 Ω shorts, unset values.
+- Power and polarity: missing regulator, VCAP and bootstrap capacitors, reversed LEDs and capacitors, MOSFET wiring, divider voltages, LDO dropout, rail-name mismatches, unprotected power connectors.
+- MCU and USB: strap/boot pins, crystal load capacitors, swapped D+/D−, missing USB-C CC resistors, two outputs driving one net.
+- Footprint fit: pad count, pitch, pin order and mounting type checked against the part number (optional lookup).
 - Messy part values (`100n` vs `0.1uF` vs `100nF`).
 - Wrong or out-of-stock JLCPCB part numbers (optional parts list).
-- Early high-speed checks (beta): timing differences between paired lines and missing return paths, shown as notes.
+- Early high-speed checks (beta): timing differences between paired lines and missing return paths, shown as notes. Full-speed USB (12 Mbit/s) is no longer held to high-speed rules.
+
+Some checks are marked **experimental**; they show as Info notes, and **Setup > Hide experimental checks** hides them.
 
 Full list: [docs/behavior-and-limits.md](docs/behavior-and-limits.md#built-in-audit-checks). You can also save a shareable offline report: [docs/report.md](docs/report.md).
 
@@ -40,7 +45,7 @@ Full list: [docs/behavior-and-limits.md](docs/behavior-and-limits.md#built-in-au
 
 You need KiCad 10 (tested on Windows only).
 
-1. In KiCad open the **Plugin and Content Manager**, search for **VelaTrace**, click **Install**, then **Apply Pending Changes**. Without the Plugin Manager (offline, or an older KiCad index), download `VelaTrace-v0.1.0-alpha.2-pcm.zip` from the [v0.1.0-alpha.2 release](https://github.com/F-Blaze/VelaTrace/releases/tag/v0.1.0-alpha.2) and use **Install from File...**. (If you installed earlier with `git clone`, delete that `plugins/VelaTrace` folder first.)
+1. In KiCad open the **Plugin and Content Manager**, search for **VelaTrace**, click **Install**, then **Apply Pending Changes**. Without the Plugin Manager (offline, or an older KiCad index), download `VelaTrace-v0.1.0-alpha.3-pcm.zip` from the [v0.1.0-alpha.3 release](https://github.com/F-Blaze/VelaTrace/releases/tag/v0.1.0-alpha.3) and use **Install from File...**. (If you installed earlier with `git clone`, delete that `plugins/VelaTrace` folder first.)
 2. When KiCad asks to enable the KiCad API, click **Yes**. (Missed it? **Preferences > Plugins**, tick **Enable KiCad API**.)
 3. Open the PCB Editor. The first start installs about 300 MB of Python packages (about 4 minutes for me), then a VelaTrace button appears. Click it, then **Check design**.
 
@@ -48,7 +53,7 @@ No button? **Preferences > Plugins**, right-click VelaTrace, **Recreate Plugin E
 
 ## Try it safely
 
-Open the demo board in [examples/velatrace-demo](examples/velatrace-demo) (also on the release page as `velatrace-demo-v0.1.0-alpha.2.zip`). It has mistakes planted on purpose. The check only reads your board, so nothing changes.
+Open the demo board in [examples/velatrace-demo](examples/velatrace-demo) (also on the release page as `velatrace-demo-v0.1.0-alpha.3.zip`). It has mistakes planted on purpose. The check only reads your board, so nothing changes.
 
 ## Routing (optional)
 
@@ -62,8 +67,8 @@ Before routing, see [Details](#details) for the few settings it needs. Try it on
 
 - It is an **alpha**. Expect rough edges.
 - **KiCad 10 only**, and **tested on Windows only**.
-- It is a first pass, not a design review. On the latest test, 12 fresh boards it had never seen, **14 of 22** findings were right (64%). It won't catch every problem a reviewer would. The judges were AI reviewers, not human engineers, and the sample is small.
-- It finds only about **4 in 10** of the problems the reviewers found. Treat every result as a hint.
+- It is a first pass, not a design review. On an earlier test of 12 boards it had never seen, **14 of 22** findings were right (64%); a later test on 10 more boards scored much lower (see [Details](#details)). **This version (alpha.3) has not yet been measured on boards it has never seen.** It won't catch every problem a reviewer would. The judges were AI reviewers, not human engineers, and the samples are small.
+- In those tests it found only about **3 to 4 in 10** of the problems the reviewers found. Treat every result as a hint.
 - I built it with AI help. That is exactly why I measured it. Numbers and method: [Details](#details).
 
 ## Feedback
@@ -98,7 +103,7 @@ The optional JLCPCB data files carry no licence statement, and the live lookup u
 
 **Optional AI explanations.** Bring your own key (Gemini or any OpenAI-compatible endpoint) in **Setup**. Token counts and a hard call budget are shown first; the key stays in memory. Setup values: [docs/install.md](docs/install.md).
 
-**How accuracy was measured.** The reviewers and the judge were AI agents (Claude Opus), not human experts. First test: on 12 open-source boards it had never seen, 44% of findings were judged correct (27% if unjudged findings count as wrong); I decided 5 borderline cases. I then fixed the rules that caused the wrong findings. Second test: 12 new public boards, answer key from 4 AI reviewers who did not see VelaTrace's output, written before scoring. 10 of the 13 findings they agreed on were correct (77%), 12 more were disputed and left out (as in the first test), and it found 38% of the problems they found. The fixes changed no finding on those new boards, so v0.1.0-alpha.2 scores the same there. Latest test: 12 more public boards, answer key from 4 AI reviewers locked before the run; this time every finding outside the answer key was ruled by a separate AI reviewer instead of being left out. 14 of 22 findings were correct (64%) and it found 4 of 14 problems (29%); the version before the latest fixes scored 11 of 19 (58%) on the same boards. Four rules that were wrong too often (`decoupling.missing`, `i2c.pullup.missing`, `net.single_pin`, `pin.input_floating`) show as Info notes only.
+**How accuracy was measured.** The reviewers and the judge were AI agents (Claude Opus), not human experts. First test: on 12 open-source boards it had never seen, 44% of findings were judged correct (27% if unjudged findings count as wrong); I decided 5 borderline cases. I then fixed the rules that caused the wrong findings. Second test: 12 new public boards, answer key from 4 AI reviewers who did not see VelaTrace's output, written before scoring. 10 of the 13 findings they agreed on were correct (77%), 12 more were disputed and left out (as in the first test), and it found 38% of the problems they found. The fixes changed no finding on those new boards, so v0.1.0-alpha.2 scores the same there. Third test: 12 more public boards, answer key from 4 AI reviewers locked before the run; this time every finding outside the answer key was ruled by a separate AI reviewer instead of being left out. 14 of 22 findings were correct (64%) and it found 4 of 14 problems (29%); the version before the latest fixes scored 11 of 19 (58%) on the same boards. Four rules that were wrong too often (`decoupling.missing`, `i2c.pullup.missing`, `net.single_pin`, `pin.input_floating`) show as Info notes only. Fourth test (on the code just after alpha.2): 10 more public boards, same method. Only 17 of 82 findings were correct (21%); most of the rest were Info notes about labelled but unused connector pins on one board. Without those notes, 17 of 26 (65%). Alpha.3 fixes the causes found there, but it has not been re-measured on new boards yet, so no accuracy figure is claimed for it.
 
 **JLCPCB parts list.** Opt-in download of about 181 MB (800 MB on disk), from the public data of the kicad-jlcpcb-tools project. It gives an offline table with tier, stock and price, flags mismatched LCSC numbers, writes the LCSC field to the board in one undoable step, and exports JLCPCB BOM, placement and Gerber files. It cannot edit the schematic (a KiCad 10 limit).
 
