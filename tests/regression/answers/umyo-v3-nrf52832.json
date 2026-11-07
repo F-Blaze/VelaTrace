@@ -1,0 +1,217 @@
+{
+ "slug": "umyo-v3-nrf52832",
+ "reviewer": "opus-blind-hB",
+ "parts_reviewed": 53,
+ "issues": [
+  {
+   "rule": "i2c.pullup.missing",
+   "severity": "warning",
+   "refs": [
+    "U6",
+    "U2"
+   ],
+   "nets": [
+    "SCL",
+    "SDA"
+   ],
+   "confidence": "high",
+   "evidence": "On-board I2C bus SCL/SDA (nRF P0.02/P0.03 to QMC5883L U6 pins 1/16) has no resistor to any supply; only the nRF52 internal ~13k pull-ups can be used",
+   "why_it_matters": "Weak internal pull-ups give slow edges; marginal at 400 kHz and noise-sensitive",
+   "time_or_money": "2 x 0402 resistors"
+  },
+  {
+   "rule": "net.single_pin",
+   "severity": "warning",
+   "refs": [
+    "U7"
+   ],
+   "nets": [
+    "IMU_INT"
+   ],
+   "confidence": "medium",
+   "evidence": "LSM6DS3 INT1 (pin 4) drives label IMU_INT, which reaches no other pin (no MCU GPIO)",
+   "why_it_matters": "IMU data-ready/wake interrupt unusable; firmware must poll over SPI (more power)",
+   "time_or_money": "functional limitation"
+  },
+  {
+   "rule": "other:gpio_tied_to_rail",
+   "severity": "info",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "GND"
+   ],
+   "confidence": "medium",
+   "evidence": "nRF52 P0.22 (pin 27) is connected directly to GND",
+   "why_it_matters": "If firmware ever configures P0.22 as output-high it shorts the pin to ground; unused GPIO should be left open or tied via resistor",
+   "time_or_money": "robustness"
+  },
+  {
+   "rule": "other:datasheet_value",
+   "severity": "info",
+   "refs": [
+    "U6",
+    "C15",
+    "C18"
+   ],
+   "nets": [
+    "Net-(U6-C1)",
+    "Net-(U6-SETC)",
+    "Net-(U6-SETP)"
+   ],
+   "confidence": "low",
+   "evidence": "QMC5883L reference circuit uses C1 = 4.7 uF and SETP-SETC = 0.22 uF; board uses 2.2 uF (C15) and 100 nF (C18)",
+   "why_it_matters": "Reduced set/reset pulse energy can degrade magnetometer offset/heading accuracy",
+   "time_or_money": "none (value change)"
+  },
+  {
+   "rule": "value.missing",
+   "severity": "info",
+   "refs": [
+    "D3",
+    "F1"
+   ],
+   "nets": [
+    "+3V8",
+    "+4V"
+   ],
+   "confidence": "low",
+   "evidence": "D3 value 'D' and F1 value 'Fuse' are symbol defaults; only JLC part numbers identify them",
+   "why_it_matters": "Rating of the battery protection fuse/clamp is not reviewable from the schematic",
+   "time_or_money": "documentation"
+  },
+  {
+   "rule": "other:symbol_part_mismatch",
+   "severity": "info",
+   "refs": [
+    "U2",
+    "U3"
+   ],
+   "nets": [],
+   "confidence": "low",
+   "evidence": "U2 value nRF52810-QFxx on nRF52832 symbol (project is named nRF52832); U3 XC6206P332 on MCP1703A symbol (pinout GND/VO/VI matches)",
+   "why_it_matters": "Ambiguous which MCU is fitted (flash/RAM differ)",
+   "time_or_money": "BOM clarity"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J6",
+    "J7",
+    "J4",
+    "F1",
+    "D3"
+   ],
+   "nets": [
+    "+4V",
+    "+3V8"
+   ],
+   "reason": "Battery connectors feed fuse F1 then shunt diode D3 to GND (fuse + clamp crowbar on reverse polarity), then MT9700 load switch U4"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "SC1"
+   ],
+   "nets": [
+    "+3V3",
+    "GND"
+   ],
+   "reason": "SWD pogo pads; 3V3 is target-reference for debugger"
+  },
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "D1",
+    "R2",
+    "R3",
+    "R5"
+   ],
+   "nets": [
+    "Net-(D1-RK)",
+    "Net-(D1-GK)",
+    "Net-(D1-BK)"
+   ],
+   "reason": "Common-anode RGB LED with 2k series resistor per cathode to GPIO"
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "unconnected-(U2-DEC2-Pad32)",
+    "unconnected-(U2-P0.21/~{RESET}-Pad24)",
+    "unconnected-(U2-P0.00/XL1-Pad2)"
+   ],
+   "reason": "DEC2 is unused on QFN48 nRF52; reset has internal pull-up; no 32 kHz crystal (LFRC used); unused GPIOs"
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U6",
+    "U7"
+   ],
+   "nets": [
+    "unconnected-(U6-DRDY-Pad15)",
+    "unconnected-(U7-INT2-Pad9)"
+   ],
+   "reason": "Unused outputs"
+  },
+  {
+   "rule": "other:input_grounded",
+   "refs": [
+    "U7"
+   ],
+   "nets": [
+    "GND"
+   ],
+   "reason": "LSM6DS3 SDx/SCx auxiliary I2C master pins grounded when unused, per datasheet"
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "Net-(U2-DEC1)",
+    "Net-(U2-DEC3)",
+    "Net-(U2-DEC4)"
+   ],
+   "reason": "nRF52 DEC1 100nF, DEC3 100pF, DEC4 2.2uF with DC/DC L1 10uH + L2 15nH per Nordic reference"
+  },
+  {
+   "rule": "other:shared_input_ref",
+   "refs": [
+    "U1",
+    "R1",
+    "R4",
+    "C9"
+   ],
+   "nets": [
+    "Net-(J1-Pin_1)"
+   ],
+   "reason": "AD8293 IN- and REF both on the J1 electrode biased at ~1.1 V by R1/R4 divider: intentional mid-supply reference for single-supply EMG"
+  },
+  {
+   "rule": "other:soft_power_latch",
+   "refs": [
+    "SW1",
+    "U5",
+    "U4",
+    "R6",
+    "R7"
+   ],
+   "nets": [
+    "BT_OUT",
+    "SYS_ON",
+    "Net-(U4-EN)"
+   ],
+   "reason": "Push-button OR MCU SYS_ON drives load-switch enable; BT_OUT pulled down via R6+R7 and sensed on P0.19 at safe ~3.4 V"
+  }
+ ],
+ "notes": "uMyo wireless EMG: AD8293G80 in-amp with dry electrodes, nRF52 (value says nRF52810), LSM6DS3 IMU on SPI, QMC5883L magnetometer on I2C, XC6206 LDO, MT9700 soft-power switch. RF and nRF52 DC/DC follow the Nordic reference. Main gaps: no I2C pull-ups and IMU interrupt not routed."
+}

@@ -1,0 +1,3292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<export version="E">
+  <design>
+    <source>shipometer.kicad_sch</source>
+    <date>2026-10-03T15:31:22</date>
+    <tool>Eeschema 10.0.6</tool>
+    <sheet number="1" name="/" tstamps="/">
+      <title_block>
+        <title>Shipometer</title>
+        <company>Kwan Systems</company>
+        <rev/>
+        <date>2023-03-24</date>
+        <source>shipometer.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+    <sheet number="2" name="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/">
+      <title_block>
+        <title>BME280 Stamp</title>
+        <company>Kwan Systems</company>
+        <rev/>
+        <date>2023-03-23</date>
+        <source>BME280 stamp.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+    <sheet number="3" name="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/">
+      <title_block>
+        <title/>
+        <company/>
+        <rev/>
+        <date/>
+        <source>ICM20948 stamp.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+    <sheet number="4" name="/3V3 Regulator/" tstamps="/eb4a6f4d-7e16-4c6c-a6b2-1e8ab1c12053/">
+      <title_block>
+        <title/>
+        <company/>
+        <rev/>
+        <date/>
+        <source>regulator_3v3.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+    <sheet number="5" name="/1V8 Regulator/" tstamps="/9cdef0f4-d69e-4ec7-af65-50b2b694ea2b/">
+      <title_block>
+        <title/>
+        <company/>
+        <rev/>
+        <date/>
+        <source>regulator_1v8.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+    <sheet number="6" name="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/">
+      <title_block>
+        <title>Rollercoasterometer</title>
+        <company>Kwan Systems</company>
+        <rev/>
+        <date>2022-10-07</date>
+        <source>timer.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+    <sheet number="7" name="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/">
+      <title_block>
+        <title/>
+        <company/>
+        <rev/>
+        <date/>
+        <source>Demo.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+    <sheet number="8" name="/Stamp Tester/1V8 Regulator1/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/f626bd87-a9c2-4f08-af29-d00a1c06cd07/">
+      <title_block>
+        <title/>
+        <company/>
+        <rev/>
+        <date/>
+        <source>regulator_1v8.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+  </design>
+  <components>
+    <comp ref="C116">
+      <value>1uF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C105K4PAC7411CT-ND</field>
+        <field name="Mouser">80-C0603C105K4PAC</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">24</field>
+        <field name="Part Number">C0603C105K4PAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C105K4PAC7411CT-ND"/>
+      <property name="Mouser" value="80-C0603C105K4PAC"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="24"/>
+      <property name="Part Number" value="C0603C105K4PAC"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>061f7865-bfdb-4b0c-a6ed-937e02c73b21</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D101">
+      <value>White</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.vishay.com/docs/82435/vlmw1300.pdf</datasheet>
+      <fields>
+        <field name="Digikey">VLMW1300-GS08CT-ND</field>
+        <field name="Purpose">Chip select indicator</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">6</field>
+        <field name="Mouser">VLMW1300-GS08</field>
+        <field name="Part Number">VLMW1300-GS08</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.vishay.com/docs/82435/vlmw1300.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="VLMW1300-GS08CT-ND"/>
+      <property name="Purpose" value="Chip select indicator"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="6"/>
+      <property name="Mouser" value="VLMW1300-GS08"/>
+      <property name="Part Number" value="VLMW1300-GS08"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e6045e42-9630-4b64-959d-4a90dc0ed079</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D103">
+      <value>White</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.vishay.com/docs/82435/vlmw1300.pdf</datasheet>
+      <fields>
+        <field name="Digikey">VLMW1300-GS08CT-ND</field>
+        <field name="Purpose">Chip select indicator</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">6</field>
+        <field name="Mouser">VLMW1300-GS08</field>
+        <field name="Part Number">VLMW1300-GS08</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.vishay.com/docs/82435/vlmw1300.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="VLMW1300-GS08CT-ND"/>
+      <property name="Purpose" value="Chip select indicator"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="6"/>
+      <property name="Mouser" value="VLMW1300-GS08"/>
+      <property name="Part Number" value="VLMW1300-GS08"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>13ff1f55-9788-4c2f-9a58-ced557482035</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D104">
+      <value>White</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.vishay.com/docs/82435/vlmw1300.pdf</datasheet>
+      <fields>
+        <field name="Digikey">VLMW1300-GS08CT-ND</field>
+        <field name="Purpose">Chip select indicator</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">6</field>
+        <field name="Mouser">VLMW1300-GS08</field>
+        <field name="Part Number">VLMW1300-GS08</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.vishay.com/docs/82435/vlmw1300.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="VLMW1300-GS08CT-ND"/>
+      <property name="Purpose" value="Chip select indicator"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="6"/>
+      <property name="Mouser" value="VLMW1300-GS08"/>
+      <property name="Part Number" value="VLMW1300-GS08"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>76f4318c-3be2-4e58-a58d-bb84cc04d988</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D106">
+      <value>Blue</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.kingbrightusa.com/images/catalog/SPEC/APT1608VBC-D.pdf</datasheet>
+      <fields>
+        <field name="Digikey">754-1789-1-ND</field>
+        <field name="Purpose">Timer reset indicator</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">9</field>
+        <field name="Mouser">604-APT1608VBC/D</field>
+        <field name="Part Number">APT1608VBC/D</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.kingbrightusa.com/images/catalog/SPEC/APT1608VBC-D.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="754-1789-1-ND"/>
+      <property name="Purpose" value="Timer reset indicator"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="9"/>
+      <property name="Mouser" value="604-APT1608VBC/D"/>
+      <property name="Part Number" value="APT1608VBC/D"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>036c1e1f-9dca-4df1-a8b5-efb95d13489b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D129">
+      <value>Red</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.kingbrightusa.com/images/catalog/SPEC/APT1608SURCK.pdf</datasheet>
+      <fields>
+        <field name="Digikey">754-1123-1-ND</field>
+        <field name="Purpose">Data ready 6DoF echo</field>
+        <field name="Number on hand">4</field>
+        <field name="Mouser">604-APT1608SURCK</field>
+        <field name="Part Number">APT1608SURCK</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.kingbrightusa.com/images/catalog/SPEC/APT1608SURCK.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="754-1123-1-ND"/>
+      <property name="Purpose" value="Data ready 6DoF echo"/>
+      <property name="Number on hand" value="4"/>
+      <property name="Mouser" value="604-APT1608SURCK"/>
+      <property name="Part Number" value="APT1608SURCK"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>59e9136b-509a-48c6-9861-d0344186c2d4</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D130">
+      <value>Green</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.kingbrightusa.com/images/catalog/SPEC/APT1608ZGCK.pdf</datasheet>
+      <fields>
+        <field name="Digikey">754-1790-1-ND</field>
+        <field name="Purpose">Data ready magnetometer echo</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">9</field>
+        <field name="Mouser">604-APT1608ZGCK</field>
+        <field name="Part Number">APT1608ZGCK</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.kingbrightusa.com/images/catalog/SPEC/APT1608ZGCK.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="754-1790-1-ND"/>
+      <property name="Purpose" value="Data ready magnetometer echo"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="9"/>
+      <property name="Mouser" value="604-APT1608ZGCK"/>
+      <property name="Part Number" value="APT1608ZGCK"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>db42fc76-6bc7-4d7c-a48e-23c5caf5301e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D141">
+      <value>Yellow</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.kingbrightusa.com/images/catalog/SPEC/APT1608SYCK.pdf</datasheet>
+      <fields>
+        <field name="Digikey">754-1124-1-ND</field>
+        <field name="Purpose">PPS Echo</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">8</field>
+        <field name="Mouser">604-APT1608SYCK</field>
+        <field name="Part Number">APT1608SYCK</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.kingbrightusa.com/images/catalog/SPEC/APT1608SYCK.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="754-1124-1-ND"/>
+      <property name="Purpose" value="PPS Echo"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="8"/>
+      <property name="Mouser" value="604-APT1608SYCK"/>
+      <property name="Part Number" value="APT1608SYCK"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>cf46f7d7-94f4-4b81-8555-de2e41acf43a</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D144">
+      <value>Yellow</value>
+      <footprint>LED_SMD:LED_0603_1608Metric</footprint>
+      <datasheet>https://www.kingbrightusa.com/images/catalog/SPEC/APT1608SYCK.pdf</datasheet>
+      <fields>
+        <field name="Digikey">754-1124-1-ND</field>
+        <field name="Purpose">Bootstrap Echo</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">8</field>
+        <field name="Mouser">604-APT1608SYCK</field>
+        <field name="Part Number">APT1608SYCK</field>
+        <field name="Footprint">LED_SMD:LED_0603_1608Metric</field>
+        <field name="Datasheet">https://www.kingbrightusa.com/images/catalog/SPEC/APT1608SYCK.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="LED_Small" description="Light emitting diode, small symbol"/>
+      <property name="Digikey" value="754-1124-1-ND"/>
+      <property name="Purpose" value="Bootstrap Echo"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="8"/>
+      <property name="Mouser" value="604-APT1608SYCK"/>
+      <property name="Part Number" value="APT1608SYCK"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="LED diode light-emitting-diode"/>
+      <property name="ki_fp_filters" value="LED* LED_SMD:* LED_THT:*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>140462dd-59a3-4dbe-8fa0-ddd7e11d4fae</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G101">
+      <value>Axis</value>
+      <footprint>KwanSystems:Axis</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Axis</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="Axis" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>15b4850b-23d6-4e44-a1ea-3db82aab6f7a</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G102">
+      <value>KwanSystems</value>
+      <footprint>KwanSystems:StKwansSoldermask</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:StKwansSoldermask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="KwanSystems" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e0065dad-c373-43b2-b916-33a4b6d547f0</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G103">
+      <value>Designed with</value>
+      <footprint>KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="DesignedWithKicad" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>0a22120b-7750-44dd-bfa7-31898fa7241c</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G104">
+      <value>OSHW</value>
+      <footprint>KwanSystems:OSHW-Symbol_6.7x6mm_SolderMask</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:OSHW-Symbol_6.7x6mm_SolderMask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="OSHW" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e7dd12c4-febf-4974-ad2e-e3dbd8892d01</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G105">
+      <value>KwanSystems</value>
+      <footprint>KwanSystems:StKwansSoldermask</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:StKwansSoldermask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="KwanSystems" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>45466b34-62ec-4d43-8488-c558b053e7fe</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G106">
+      <value>OSHW</value>
+      <footprint>KwanSystems:OSHW-Symbol_6.7x6mm_SolderMask</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:OSHW-Symbol_6.7x6mm_SolderMask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="OSHW" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>a8b182f0-c97b-4741-aa49-80e31ca7bbf9</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G107">
+      <value>Designed with</value>
+      <footprint>KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="DesignedWithKicad" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>879e5092-b49b-4b05-afcd-cc23a319c2de</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J101">
+      <value>Raspberry_Pi_40</value>
+      <footprint>KwanSystems:PiHAT</footprint>
+      <fields>
+        <field name="Digikey">SSW-120-01-G-D-LL-ND</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">1</field>
+        <field name="Mouser">200-SSW12001TD</field>
+        <field name="Part Number">SSW-120-01-G-D-LL</field>
+        <field name="Footprint">KwanSystems:PiHAT</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="Raspberry_Pi_40" description=""/>
+      <property name="Digikey" value="SSW-120-01-G-D-LL-ND"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="1"/>
+      <property name="Mouser" value="200-SSW12001TD"/>
+      <property name="Part Number" value="SSW-120-01-G-D-LL"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>974735db-d621-4ab1-8968-47df3d6c5159</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="3"/>
+            <pin num="5"/>
+            <pin num="7"/>
+            <pin num="9"/>
+            <pin num="11"/>
+            <pin num="13"/>
+            <pin num="15"/>
+            <pin num="17"/>
+            <pin num="19"/>
+            <pin num="21"/>
+            <pin num="23"/>
+            <pin num="25"/>
+            <pin num="27"/>
+            <pin num="29"/>
+            <pin num="31"/>
+            <pin num="33"/>
+            <pin num="35"/>
+            <pin num="37"/>
+            <pin num="39"/>
+            <pin num="2"/>
+            <pin num="4"/>
+            <pin num="6"/>
+            <pin num="8"/>
+            <pin num="10"/>
+            <pin num="12"/>
+            <pin num="14"/>
+            <pin num="16"/>
+            <pin num="18"/>
+            <pin num="20"/>
+            <pin num="22"/>
+            <pin num="24"/>
+            <pin num="26"/>
+            <pin num="28"/>
+            <pin num="30"/>
+            <pin num="32"/>
+            <pin num="34"/>
+            <pin num="36"/>
+            <pin num="38"/>
+            <pin num="40"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J102">
+      <value>Conn_01x03</value>
+      <footprint>Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal</footprint>
+      <fields>
+        <field name="Digikey">2057-PH1RB-03-UA-ND</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">1</field>
+        <field name="Part Number">PH1RB-03-UA</field>
+        <field name="Footprint">Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Horizontal</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Connector_Generic" part="Conn_01x03" description="Generic connector, single row, 01x03, script generated (kicad-library-utils/schlib/autogen/connector/)"/>
+      <property name="Digikey" value="2057-PH1RB-03-UA-ND"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="1"/>
+      <property name="Part Number" value="PH1RB-03-UA"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <property name="ki_keywords" value="connector"/>
+      <property name="ki_fp_filters" value="Connector*:*_1x??_*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>d102fbfc-111e-4538-9535-2ac63b16293b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J104">
+      <value>ICM20948</value>
+      <footprint>KwanSystems:StampPad</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:StampPad</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="" part="STAMP_1" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>47916704-467b-4194-87ea-bcfaa7438420</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="12"/>
+            <pin num="11"/>
+            <pin num="10"/>
+            <pin num="9"/>
+            <pin num="8"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J105">
+      <value>BME280</value>
+      <footprint>KwanSystems:StampPad</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:StampPad</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="STAMP" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>50732334-3e6c-4123-b334-fa02be2525dd</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="12"/>
+            <pin num="11"/>
+            <pin num="10"/>
+            <pin num="9"/>
+            <pin num="8"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J106">
+      <value>ZED-F9R</value>
+      <footprint>SparkfunBreakout:ZED-F9R</footprint>
+      <fields>
+        <field name="Number on hand">1</field>
+        <field name="Mouser">571-1-215297-1</field>
+        <field name="Number in cart"/>
+        <field name="Digikey">A106613-ND</field>
+        <field name="Part Number">1-215297-1</field>
+        <field name="Footprint">SparkfunBreakout:ZED-F9R</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Sparkfun_Breakout" part="ZED-F9R" description=""/>
+      <property name="Number on hand" value="1"/>
+      <property name="Mouser" value="571-1-215297-1"/>
+      <property name="Number in cart" value=""/>
+      <property name="Digikey" value="A106613-ND"/>
+      <property name="Part Number" value="1-215297-1"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>93d3a0ee-3128-40bc-a06f-0ff465c9edb8</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="14"/>
+            <pin num="15"/>
+            <pin num="16"/>
+            <pin num="17"/>
+            <pin num="18"/>
+            <pin num="19"/>
+            <pin num="20"/>
+            <pin num="1"/>
+            <pin num="12"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="13"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="7"/>
+            <pin num="8"/>
+            <pin num="9"/>
+            <pin num="10"/>
+            <pin num="11"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R101">
+      <value>330</value>
+      <footprint>KwanSystems:R_Array_Convex_4x0402</footprint>
+      <fields>
+        <field name="Mouser">667-EXB-28V680JX</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">10</field>
+        <field name="Digikey">Y7680CT-ND</field>
+        <field name="Part Number">EXB-28V680JX</field>
+        <field name="Footprint">KwanSystems:R_Array_Convex_4x0402</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="RP4" description=""/>
+      <property name="Mouser" value="667-EXB-28V680JX"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="10"/>
+      <property name="Digikey" value="Y7680CT-ND"/>
+      <property name="Part Number" value="EXB-28V680JX"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_fp_filters" value="*RES*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>8c007662-0cb3-4e70-b5cc-40b303c102be f1f8907c-2dd0-4064-b413-f0031566473a 6df3c79e-5caa-4cce-bee9-9547630fa427 1cc9b45c-52e8-420c-8a5c-445a55a90a72</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="8"/>
+          </pins>
+        </unit>
+        <unit name="B">
+          <pins>
+            <pin num="2"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+        <unit name="C">
+          <pins>
+            <pin num="3"/>
+            <pin num="6"/>
+          </pins>
+        </unit>
+        <unit name="D">
+          <pins>
+            <pin num="4"/>
+            <pin num="5"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R102">
+      <value>330</value>
+      <footprint>KwanSystems:R_Array_Convex_4x0402</footprint>
+      <fields>
+        <field name="Mouser">667-EXB-28V680JX</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">10</field>
+        <field name="Digikey">Y7680CT-ND</field>
+        <field name="Part Number">EXB-28V680JX</field>
+        <field name="Footprint">KwanSystems:R_Array_Convex_4x0402</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="RP4" description=""/>
+      <property name="Mouser" value="667-EXB-28V680JX"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="10"/>
+      <property name="Digikey" value="Y7680CT-ND"/>
+      <property name="Part Number" value="EXB-28V680JX"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_fp_filters" value="*RES*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e644a819-6247-4678-9cbd-26552c45114b c7932122-56e7-4fc9-af95-a38a87884abc e6230d66-e406-41cb-8ad6-fcf59a9ed948 9a6f8c00-07b2-4c8c-a1ba-61bac014eff0</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="8"/>
+          </pins>
+        </unit>
+        <unit name="B">
+          <pins>
+            <pin num="2"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+        <unit name="C">
+          <pins>
+            <pin num="3"/>
+            <pin num="6"/>
+          </pins>
+        </unit>
+        <unit name="D">
+          <pins>
+            <pin num="4"/>
+            <pin num="5"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="R103">
+      <value>10k</value>
+      <footprint>KwanSystems:R_Array_Convex_4x0402</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:R_Array_Convex_4x0402</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="RP4" description=""/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_fp_filters" value="*RES*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>b523d497-1935-4aeb-8fe6-e2d7c92e9d66 70cee0f1-69df-488d-8fb9-3b1943113b43 e41378bd-42f5-40d2-b950-3e10fcbac52d 6a1eac65-7248-4fe4-8b52-2dba18ff808c</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="8"/>
+          </pins>
+        </unit>
+        <unit name="B">
+          <pins>
+            <pin num="2"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+        <unit name="C">
+          <pins>
+            <pin num="3"/>
+            <pin num="6"/>
+          </pins>
+        </unit>
+        <unit name="D">
+          <pins>
+            <pin num="4"/>
+            <pin num="5"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U101">
+      <value>RaspberryPi 4B 2GB</value>
+      <footprint>KwanSystems:RaspberryPi_2+</footprint>
+      <fields>
+        <field name="Digikey">2648-RASPBERRYPI4B/2GB-ND</field>
+        <field name="Purpose">Raspberry Pi</field>
+        <field name="Number on hand">1</field>
+        <field name="Mouser">358-SC01939</field>
+        <field name="Footprint">KwanSystems:RaspberryPi_2+</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="RaspberyPi_2+_Backplane" description=""/>
+      <property name="Digikey" value="2648-RASPBERRYPI4B/2GB-ND"/>
+      <property name="Purpose" value="Raspberry Pi"/>
+      <property name="Number on hand" value="1"/>
+      <property name="Mouser" value="358-SC01939"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="exclude_from_board"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>b414fdaf-f513-4b9b-9a5f-6fa964d374af</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U102">
+      <value>74LS138</value>
+      <footprint>Package_SO:TSSOP-16_4.4x5mm_P0.65mm</footprint>
+      <datasheet>http://www.ti.com/lit/gpn/sn74LS138</datasheet>
+      <fields>
+        <field name="Mouser">771-74LVC138APW-T</field>
+        <field name="Purpose">SPI Chip Select Decoder</field>
+        <field name="Number on hand">3</field>
+        <field name="Digikey">1727-4026-1-ND</field>
+        <field name="Part Number">74LVC138APW,118</field>
+        <field name="Footprint">Package_SO:TSSOP-16_4.4x5mm_P0.65mm</field>
+        <field name="Datasheet">http://www.ti.com/lit/gpn/sn74LS138</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="74xx" part="74LS138" description="Decoder 3 to 8 active low outputs"/>
+      <property name="Mouser" value="771-74LVC138APW-T"/>
+      <property name="Purpose" value="SPI Chip Select Decoder"/>
+      <property name="Number on hand" value="3"/>
+      <property name="Digikey" value="1727-4026-1-ND"/>
+      <property name="Part Number" value="74LVC138APW,118"/>
+      <property name="Sheetname" value="shipometer"/>
+      <property name="Sheetfile" value="shipometer.kicad_sch"/>
+      <property name="ki_keywords" value="TTL DECOD DECOD8"/>
+      <property name="ki_fp_filters" value="DIP?16*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>7879dbaf-143e-4c67-9511-1205f91efef9</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="6"/>
+            <pin num="5"/>
+            <pin num="4"/>
+            <pin num="16"/>
+            <pin num="8"/>
+            <pin num="15"/>
+            <pin num="14"/>
+            <pin num="13"/>
+            <pin num="12"/>
+            <pin num="11"/>
+            <pin num="10"/>
+            <pin num="9"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C206">
+      <value>1uF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C105K4PAC7411CT-ND</field>
+        <field name="Mouser">80-C0603C105K4PAC</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">24</field>
+        <field name="Part Number">C0603C105K4PAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C105K4PAC7411CT-ND"/>
+      <property name="Mouser" value="80-C0603C105K4PAC"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="24"/>
+      <property name="Part Number" value="C0603C105K4PAC"/>
+      <property name="Sheetname" value="Pressure"/>
+      <property name="Sheetfile" value="BME280 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/"/>
+      <tstamps>965e1fe6-eb2d-4302-825a-63fd2a960836</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C208">
+      <value>1uF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C105K4PAC7411CT-ND</field>
+        <field name="Mouser">80-C0603C105K4PAC</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">24</field>
+        <field name="Part Number">C0603C105K4PAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C105K4PAC7411CT-ND"/>
+      <property name="Mouser" value="80-C0603C105K4PAC"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="24"/>
+      <property name="Part Number" value="C0603C105K4PAC"/>
+      <property name="Sheetname" value="Pressure"/>
+      <property name="Sheetfile" value="BME280 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/"/>
+      <tstamps>dbf44e90-efbf-4ffc-946e-09aa047f9aff</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G201">
+      <value>github.com/kwan3217</value>
+      <footprint>KwanSystems:KWAN_CIRCLE</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:KWAN_CIRCLE</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="KwanSystems" description=""/>
+      <property name="Sheetname" value="Pressure"/>
+      <property name="Sheetfile" value="BME280 stamp.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/"/>
+      <tstamps>bdef2f82-1c13-4487-83b7-87ee93ac574a</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G202">
+      <value>Designed with</value>
+      <footprint>KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="DesignedWithKicad" description=""/>
+      <property name="Sheetname" value="Pressure"/>
+      <property name="Sheetfile" value="BME280 stamp.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/"/>
+      <tstamps>a010139f-cff5-4a01-b6e0-40a851ba0193</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G203">
+      <value>OSHW</value>
+      <footprint>KwanSystems:OSHW-Symbol_4x3.6mm_SolderMask</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:OSHW-Symbol_4x3.6mm_SolderMask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="OSHW" description=""/>
+      <property name="Sheetname" value="Pressure"/>
+      <property name="Sheetfile" value="BME280 stamp.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/"/>
+      <tstamps>cc598f24-ddd6-4570-988c-dbff5fba922b</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J201">
+      <value>~</value>
+      <footprint>KwanSystems:Stamp</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Stamp</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="STAMP" description=""/>
+      <property name="Sheetname" value="Pressure"/>
+      <property name="Sheetfile" value="BME280 stamp.kicad_sch"/>
+      <sheetpath names="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/"/>
+      <tstamps>2cb1d2fc-8ca4-4e18-b3a0-505b1bde68eb</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="12"/>
+            <pin num="11"/>
+            <pin num="10"/>
+            <pin num="9"/>
+            <pin num="8"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U201">
+      <value>BME280</value>
+      <footprint>Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering</footprint>
+      <datasheet>https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf</datasheet>
+      <fields>
+        <field name="Digikey">828-1063-1-ND</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">1</field>
+        <field name="Mouser">262-BME280</field>
+        <field name="Part Number">BME280</field>
+        <field name="Footprint">Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering</field>
+        <field name="Datasheet">https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Sensor" part="BME280" description="3-in-1 sensor, humidity, pressure, temperature, I2C and SPI interface, 1.71-3.6V, LGA-8"/>
+      <property name="Digikey" value="828-1063-1-ND"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="1"/>
+      <property name="Mouser" value="262-BME280"/>
+      <property name="Part Number" value="BME280"/>
+      <property name="Sheetname" value="Pressure"/>
+      <property name="Sheetfile" value="BME280 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="Bosch pressure humidity temperature environment environmental measurement digital"/>
+      <property name="ki_fp_filters" value="*LGA*2.5x2.5mm*P0.65mm*Clockwise*"/>
+      <sheetpath names="/Pressure/" tstamps="/33931f81-2c9f-4d8e-9e68-7993fd5d2333/"/>
+      <tstamps>0b6a4cfd-6867-4b53-acc2-4bbbb106a70e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="6"/>
+            <pin num="1"/>
+            <pin num="8"/>
+            <pin num="7"/>
+            <pin num="5"/>
+            <pin num="4"/>
+            <pin num="3"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C302">
+      <value>100nF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C104M5RAC7867CT-ND</field>
+        <field name="Number on hand">10+10</field>
+        <field name="Mouser">80-C0603C104K4P</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C104M5RAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C104M5RAC7867CT-ND"/>
+      <property name="Number on hand" value="10+10"/>
+      <property name="Mouser" value="80-C0603C104K4P"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C104M5RAC"/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>ab50e006-315c-4fed-b8ab-380ad28242ce</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C308">
+      <value>100nF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C104M5RAC7867CT-ND</field>
+        <field name="Number on hand">10+10</field>
+        <field name="Mouser">80-C0603C104K4P</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C104M5RAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C104M5RAC7867CT-ND"/>
+      <property name="Number on hand" value="10+10"/>
+      <property name="Mouser" value="80-C0603C104K4P"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C104M5RAC"/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>25006873-2ea9-4420-af51-98cd15b5db20</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C310">
+      <value>100nF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Purpose">IMU Regulator Output</field>
+        <field name="Digikey">399-C0603C104M5RAC7867CT-ND</field>
+        <field name="Number on hand">10+10</field>
+        <field name="Mouser">80-C0603C104K4P</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C104M5RAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Purpose" value="IMU Regulator Output"/>
+      <property name="Digikey" value="399-C0603C104M5RAC7867CT-ND"/>
+      <property name="Number on hand" value="10+10"/>
+      <property name="Mouser" value="80-C0603C104K4P"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C104M5RAC"/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>4c6fc493-e805-4f05-ba02-b8a45af46336</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C313">
+      <value>100nF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C104M5RAC7867CT-ND</field>
+        <field name="Number on hand">10+10</field>
+        <field name="Mouser">80-C0603C104K4P</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C104M5RAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C104M5RAC7867CT-ND"/>
+      <property name="Number on hand" value="10+10"/>
+      <property name="Mouser" value="80-C0603C104K4P"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C104M5RAC"/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>d22168bc-a48f-434c-a27e-c8ff36ac3ecc</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C319">
+      <value>100nF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C104M5RAC7867CT-ND</field>
+        <field name="Number on hand">10+10</field>
+        <field name="Mouser">80-C0603C104K4P</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C104M5RAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C104M5RAC7867CT-ND"/>
+      <property name="Number on hand" value="10+10"/>
+      <property name="Mouser" value="80-C0603C104K4P"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C104M5RAC"/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>f99986e7-d888-42d6-a5bd-e58203ed434f</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G301">
+      <value>github.com/kwan3217</value>
+      <footprint>KwanSystems:KWAN_CIRCLE</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:KWAN_CIRCLE</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="KwanSystems" description=""/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>6f7c4648-4ed1-4098-bfb9-64d777895edc</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G302">
+      <value>Designed with</value>
+      <footprint>KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="DesignedWithKicad" description=""/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>3b16abe5-768e-471b-953a-12a4de18f1fa</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G303">
+      <value>OSHW</value>
+      <footprint>KwanSystems:OSHW-Symbol_4x3.6mm_SolderMask</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:OSHW-Symbol_4x3.6mm_SolderMask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="OSHW" description=""/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>23147246-371d-4328-8c34-5e222d765a49</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J301">
+      <value>~</value>
+      <footprint>KwanSystems:Stamp</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Stamp</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="STAMP" description=""/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>ecc75ecd-b435-4030-8f21-d45fd2296823</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="12"/>
+            <pin num="11"/>
+            <pin num="10"/>
+            <pin num="9"/>
+            <pin num="8"/>
+            <pin num="7"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U301">
+      <value>ICM-20948</value>
+      <footprint>Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm</footprint>
+      <datasheet>http://www.invensense.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf</datasheet>
+      <fields>
+        <field name="Mouser">410-ICM-20948</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">1</field>
+        <field name="Digikey">1428-1123-1-ND</field>
+        <field name="Part Number">ICM-20948</field>
+        <field name="Footprint">Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm</field>
+        <field name="Datasheet">http://www.invensense.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Sensor_Motion" part="ICM-20948" description="InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24"/>
+      <property name="Mouser" value="410-ICM-20948"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="1"/>
+      <property name="Digikey" value="1428-1123-1-ND"/>
+      <property name="Part Number" value="ICM-20948"/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="mems magnetometer"/>
+      <property name="ki_fp_filters" value="InvenSense?QFN*3x3mm*P0.4mm*"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>9360fae9-99a3-4e6e-9bfc-9cf884224f15</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="9"/>
+            <pin num="24"/>
+            <pin num="23"/>
+            <pin num="22"/>
+            <pin num="11"/>
+            <pin num="12"/>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="8"/>
+            <pin num="18"/>
+            <pin num="20"/>
+            <pin num="13"/>
+            <pin num="6"/>
+            <pin num="14"/>
+            <pin num="15"/>
+            <pin num="16"/>
+            <pin num="17"/>
+            <pin num="19"/>
+            <pin num="21"/>
+            <pin num="7"/>
+            <pin num="10"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U302">
+      <value>TXS0108EPW</value>
+      <footprint>Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm</footprint>
+      <datasheet>www.ti.com/lit/ds/symlink/txs0108e.pdf</datasheet>
+      <fields>
+        <field name="Number on hand">9</field>
+        <field name="Digikey">296-23011-1-ND</field>
+        <field name="Mouser">595-TXS0108EPWR</field>
+        <field name="Part Number">TXS0108EPWR</field>
+        <field name="Footprint">Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm</field>
+        <field name="Datasheet">www.ti.com/lit/ds/symlink/txs0108e.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Logic_LevelTranslator" part="TXS0108EPW" description="Bidirectional  level-shifting voltage translator, TSSOP-20"/>
+      <property name="Number on hand" value="9"/>
+      <property name="Digikey" value="296-23011-1-ND"/>
+      <property name="Mouser" value="595-TXS0108EPWR"/>
+      <property name="Part Number" value="TXS0108EPWR"/>
+      <property name="Sheetname" value="IMU"/>
+      <property name="Sheetfile" value="ICM20948 stamp.kicad_sch"/>
+      <property name="ki_keywords" value="8-bit"/>
+      <property name="ki_fp_filters" value="*SSOP*4.4x6.5mm*P0.65mm*"/>
+      <sheetpath names="/IMU/" tstamps="/3b93bc13-d200-400d-8f97-31f6089ee0fa/"/>
+      <tstamps>d03982e5-3749-48fc-90a5-b89efa90cc73</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="10"/>
+            <pin num="1"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="7"/>
+            <pin num="8"/>
+            <pin num="9"/>
+            <pin num="2"/>
+            <pin num="11"/>
+            <pin num="19"/>
+            <pin num="20"/>
+            <pin num="18"/>
+            <pin num="17"/>
+            <pin num="16"/>
+            <pin num="15"/>
+            <pin num="14"/>
+            <pin num="13"/>
+            <pin num="12"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C605">
+      <value>1uF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C105K4PAC7411CT-ND</field>
+        <field name="Number on hand">24</field>
+        <field name="Mouser">80-C0603C105K4PAC</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C105K4PAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C105K4PAC7411CT-ND"/>
+      <property name="Number on hand" value="24"/>
+      <property name="Mouser" value="80-C0603C105K4PAC"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C105K4PAC"/>
+      <property name="Sheetname" value="Timer"/>
+      <property name="Sheetfile" value="timer.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/"/>
+      <tstamps>14aba27d-86e9-41e6-ad7e-3e02fcedbc54</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C611">
+      <value>22pF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C220J5RAC7867</datasheet>
+      <fields>
+        <field name="Digikey">399-17583-1-ND</field>
+        <field name="Number on hand">10</field>
+        <field name="Number in cart"/>
+        <field name="Mouser">80-C0603C220F5G</field>
+        <field name="Part Number">C0603C220J5RAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C220J5RAC7867</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-17583-1-ND"/>
+      <property name="Number on hand" value="10"/>
+      <property name="Number in cart" value=""/>
+      <property name="Mouser" value="80-C0603C220F5G"/>
+      <property name="Part Number" value="C0603C220J5RAC"/>
+      <property name="Sheetname" value="Timer"/>
+      <property name="Sheetfile" value="timer.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/"/>
+      <tstamps>91704818-0feb-4405-8cda-f48ea9a2946a</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C612">
+      <value>22pF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C220J5RAC7867</datasheet>
+      <fields>
+        <field name="Digikey">399-17583-1-ND</field>
+        <field name="Number on hand">10</field>
+        <field name="Number in cart"/>
+        <field name="Mouser">80-C0603C220F5G</field>
+        <field name="Part Number">C0603C220J5RAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C220J5RAC7867</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-17583-1-ND"/>
+      <property name="Number on hand" value="10"/>
+      <property name="Number in cart" value=""/>
+      <property name="Mouser" value="80-C0603C220F5G"/>
+      <property name="Part Number" value="C0603C220J5RAC"/>
+      <property name="Sheetname" value="Timer"/>
+      <property name="Sheetfile" value="timer.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/"/>
+      <tstamps>87f738b6-fb50-4a81-a714-fc161edc9ea7</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C617">
+      <value>1uF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C105K4PAC7411CT-ND</field>
+        <field name="Number on hand">24</field>
+        <field name="Mouser">80-C0603C105K4PAC</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C105K4PAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C105K4PAC7411CT-ND"/>
+      <property name="Number on hand" value="24"/>
+      <property name="Mouser" value="80-C0603C105K4PAC"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C105K4PAC"/>
+      <property name="Sheetname" value="Timer"/>
+      <property name="Sheetfile" value="timer.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/"/>
+      <tstamps>46eb74ae-cd0b-46ad-a581-b8635df3d610</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="C640">
+      <value>1uF</value>
+      <footprint>Capacitor_SMD:C_0603_1608Metric</footprint>
+      <datasheet>https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</datasheet>
+      <fields>
+        <field name="Digikey">399-C0603C105K4PAC7411CT-ND</field>
+        <field name="Number on hand">24</field>
+        <field name="Mouser">80-C0603C105K4PAC</field>
+        <field name="Number in cart"/>
+        <field name="Part Number">C0603C105K4PAC</field>
+        <field name="Footprint">Capacitor_SMD:C_0603_1608Metric</field>
+        <field name="Datasheet">https://connect.kemet.com:7667/gateway/IntelliData-ComponentDocumentation/1.0/download/datasheet/C0603C105K4PACTU</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="C_Small" description="Unpolarized capacitor, small symbol"/>
+      <property name="Digikey" value="399-C0603C105K4PAC7411CT-ND"/>
+      <property name="Number on hand" value="24"/>
+      <property name="Mouser" value="80-C0603C105K4PAC"/>
+      <property name="Number in cart" value=""/>
+      <property name="Part Number" value="C0603C105K4PAC"/>
+      <property name="Sheetname" value="Timer"/>
+      <property name="Sheetfile" value="timer.kicad_sch"/>
+      <property name="ki_keywords" value="capacitor cap"/>
+      <property name="ki_fp_filters" value="C_*"/>
+      <sheetpath names="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/"/>
+      <tstamps>b6a01939-5305-421f-9b36-02b0102f52f4</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U601">
+      <value>LPC210x</value>
+      <footprint>Package_QFP:LQFP-48_7x7mm_P0.5mm</footprint>
+      <fields>
+        <field name="Digikey">LPC2102FBD48,118-ND</field>
+        <field name="Purpose">Timer</field>
+        <field name="Number on hand">3</field>
+        <field name="Mouser">771-LPC2102FBD48-S</field>
+        <field name="Part Number">LPC2102FBD48,151</field>
+        <field name="Footprint">Package_QFP:LQFP-48_7x7mm_P0.5mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="LPC2103" description=""/>
+      <property name="Digikey" value="LPC2102FBD48,118-ND"/>
+      <property name="Purpose" value="Timer"/>
+      <property name="Number on hand" value="3"/>
+      <property name="Mouser" value="771-LPC2102FBD48-S"/>
+      <property name="Part Number" value="LPC2102FBD48,151"/>
+      <property name="Sheetname" value="Timer"/>
+      <property name="Sheetfile" value="timer.kicad_sch"/>
+      <sheetpath names="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/"/>
+      <tstamps>afff1f8b-c009-4972-be4e-47f6faa5fd19</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="5"/>
+            <pin num="17"/>
+            <pin num="40"/>
+            <pin num="42"/>
+            <pin num="4"/>
+            <pin num="6"/>
+            <pin num="11"/>
+            <pin num="12"/>
+            <pin num="20"/>
+            <pin num="25"/>
+            <pin num="27"/>
+            <pin num="26"/>
+            <pin num="31"/>
+            <pin num="7"/>
+            <pin num="19"/>
+            <pin num="43"/>
+            <pin num="13"/>
+            <pin num="14"/>
+            <pin num="18"/>
+            <pin num="21"/>
+            <pin num="22"/>
+            <pin num="23"/>
+            <pin num="24"/>
+            <pin num="28"/>
+            <pin num="29"/>
+            <pin num="30"/>
+            <pin num="35"/>
+            <pin num="36"/>
+            <pin num="37"/>
+            <pin num="41"/>
+            <pin num="44"/>
+            <pin num="45"/>
+            <pin num="46"/>
+            <pin num="47"/>
+            <pin num="48"/>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="32"/>
+            <pin num="33"/>
+            <pin num="34"/>
+            <pin num="38"/>
+            <pin num="39"/>
+            <pin num="8"/>
+            <pin num="9"/>
+            <pin num="10"/>
+            <pin num="15"/>
+            <pin num="16"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="Y601">
+      <value>12MHz</value>
+      <footprint>Crystal:Crystal_SMD_Abracon_ABM8G-4Pin_3.2x2.5mm</footprint>
+      <datasheet>https://abracon.com/Resonators/ABM8G.pdf</datasheet>
+      <fields>
+        <field name="Digikey">535-14128-1-ND</field>
+        <field name="Part Number">ABM8G-12.000MHZ-17-D2Y</field>
+        <field name="Load Capacitance">18pF</field>
+        <field name="Temperature Range">D - -40C ~ +85C</field>
+        <field name="Freq Tolerance">2 - +/-20ppm</field>
+        <field name="Freq Stability">Y - +/-30ppm</field>
+        <field name="Number on hand">3</field>
+        <field name="Purpose">Timer crystal</field>
+        <field name="Mouser">815-ABM8G-12-18D2Y</field>
+        <field name="Footprint">Crystal:Crystal_SMD_Abracon_ABM8G-4Pin_3.2x2.5mm</field>
+        <field name="Datasheet">https://abracon.com/Resonators/ABM8G.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="Crystal_GND24" description="Four pin crystal, GND on pins 2 and 4"/>
+      <property name="Digikey" value="535-14128-1-ND"/>
+      <property name="Part Number" value="ABM8G-12.000MHZ-17-D2Y"/>
+      <property name="Load Capacitance" value="18pF"/>
+      <property name="Temperature Range" value="D - -40C ~ +85C"/>
+      <property name="Freq Tolerance" value="2 - +/-20ppm"/>
+      <property name="Freq Stability" value="Y - +/-30ppm"/>
+      <property name="Number on hand" value="3"/>
+      <property name="Purpose" value="Timer crystal"/>
+      <property name="Mouser" value="815-ABM8G-12-18D2Y"/>
+      <property name="Sheetname" value="Timer"/>
+      <property name="Sheetfile" value="timer.kicad_sch"/>
+      <property name="ki_keywords" value="quartz ceramic resonator oscillator"/>
+      <property name="ki_fp_filters" value="Crystal*"/>
+      <sheetpath names="/Timer/" tstamps="/210b172c-b965-4a60-99f4-39f3cf0b0a90/"/>
+      <tstamps>5460126a-c11d-4eac-a7c2-bd2380405ba7</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="4"/>
+            <pin num="3"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G701">
+      <value>github.com/kwan3217</value>
+      <footprint>KwanSystems:KWAN_CIRCLE</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:KWAN_CIRCLE</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="KwanSystems" description=""/>
+      <property name="Sheetname" value="Stamp Tester"/>
+      <property name="Sheetfile" value="Demo.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/"/>
+      <tstamps>fea82cab-a0ac-44f9-9bd0-76b03fcaafea</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G702">
+      <value>Designed with</value>
+      <footprint>KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="KwanSystems" part="DesignedWithKicad" description=""/>
+      <property name="Sheetname" value="Stamp Tester"/>
+      <property name="Sheetfile" value="Demo.kicad_sch"/>
+      <property name="exclude_from_bom"/>
+      <sheetpath names="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/"/>
+      <tstamps>5197e971-e548-421b-ac00-99f42d0ba779</tstamps>
+      <units>
+        <unit name="A">
+          <pins/>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="G703">
+      <value>OSHW</value>
+      <footprint>KwanSystems:OSHW-Symbol_4x3.6mm_SolderMask</footprint>
+      <fields>
+        <field name="Footprint">KwanSystems:OSHW-Symbol_4x3.6mm_SolderMask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="Q_PMOS_GSD" description="P-MOSFET transistor, gate/source/drain"/>
+      <property name="Sheetname" value="Stamp Tester"/>
+      <property name="Sheetfile" value="Demo.kicad_sch"/>
+      <property name="ki_keywords" value="transistor PMOS P-MOS P-MOSFET"/>
+      <sheetpath names="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/"/>
+      <tstamps>be185c06-ba37-4cd2-94d1-65d5eeeae88c</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="3"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J701">
+      <value>Conn_01x06_Pin</value>
+      <footprint>Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical</footprint>
+      <fields>
+        <field name="Mouser">538-90147-1106</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">2</field>
+        <field name="Part Number">90147-1106</field>
+        <field name="Digikey">WM4223-ND</field>
+        <field name="Footprint">Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Connector" part="Conn_01x06_Pin" description="Generic connector, single row, 01x06, script generated"/>
+      <property name="Mouser" value="538-90147-1106"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="2"/>
+      <property name="Part Number" value="90147-1106"/>
+      <property name="Digikey" value="WM4223-ND"/>
+      <property name="Sheetname" value="Stamp Tester"/>
+      <property name="Sheetfile" value="Demo.kicad_sch"/>
+      <property name="ki_keywords" value="connector"/>
+      <property name="ki_fp_filters" value="Connector*:*_1x??_*"/>
+      <sheetpath names="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/"/>
+      <tstamps>f765485f-ed43-40f0-932a-55097edb9f00</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J702">
+      <value>Conn_01x06_Pin</value>
+      <footprint>Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical</footprint>
+      <fields>
+        <field name="Mouser">855-M20-9990646</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">2</field>
+        <field name="Digikey">952-2270-ND</field>
+        <field name="Part Number">M20-9990646</field>
+        <field name="Footprint">Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Connector" part="Conn_01x06_Pin" description="Generic connector, single row, 01x06, script generated"/>
+      <property name="Mouser" value="855-M20-9990646"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="2"/>
+      <property name="Digikey" value="952-2270-ND"/>
+      <property name="Part Number" value="M20-9990646"/>
+      <property name="Sheetname" value="Stamp Tester"/>
+      <property name="Sheetfile" value="Demo.kicad_sch"/>
+      <property name="ki_keywords" value="connector"/>
+      <property name="ki_fp_filters" value="Connector*:*_1x??_*"/>
+      <sheetpath names="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/"/>
+      <tstamps>a15e4c51-29dd-4772-9536-65c8b9b098e6</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J703">
+      <value>Conn_01x06_Pin</value>
+      <footprint>Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical</footprint>
+      <fields>
+        <field name="Mouser">538-90147-1106</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">2</field>
+        <field name="Part Number">90147-1106</field>
+        <field name="Digikey">WM4223-ND</field>
+        <field name="Footprint">Connector_PinSocket_2.54mm:PinSocket_1x06_P2.54mm_Vertical</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Connector" part="Conn_01x06_Pin" description="Generic connector, single row, 01x06, script generated"/>
+      <property name="Mouser" value="538-90147-1106"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="2"/>
+      <property name="Part Number" value="90147-1106"/>
+      <property name="Digikey" value="WM4223-ND"/>
+      <property name="Sheetname" value="Stamp Tester"/>
+      <property name="Sheetfile" value="Demo.kicad_sch"/>
+      <property name="ki_keywords" value="connector"/>
+      <property name="ki_fp_filters" value="Connector*:*_1x??_*"/>
+      <sheetpath names="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/"/>
+      <tstamps>7354cbd7-1b89-4a23-9f0a-688c429ce3d7</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="J704">
+      <value>Conn_01x06_Pin</value>
+      <footprint>Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical</footprint>
+      <fields>
+        <field name="Mouser">855-M20-9990646</field>
+        <field name="Number in cart"/>
+        <field name="Number on hand">2</field>
+        <field name="Digikey">952-2270-ND</field>
+        <field name="Part Number">M20-9990646</field>
+        <field name="Footprint">Connector_PinHeader_2.54mm:PinHeader_1x06_P2.54mm_Vertical</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Connector" part="Conn_01x06_Pin" description="Generic connector, single row, 01x06, script generated"/>
+      <property name="Mouser" value="855-M20-9990646"/>
+      <property name="Number in cart" value=""/>
+      <property name="Number on hand" value="2"/>
+      <property name="Digikey" value="952-2270-ND"/>
+      <property name="Part Number" value="M20-9990646"/>
+      <property name="Sheetname" value="Stamp Tester"/>
+      <property name="Sheetfile" value="Demo.kicad_sch"/>
+      <property name="ki_keywords" value="connector"/>
+      <property name="ki_fp_filters" value="Connector*:*_1x??_*"/>
+      <sheetpath names="/Stamp Tester/" tstamps="/a0e68691-2daf-412f-ae99-bc89f5381007/"/>
+      <tstamps>5ba718c6-a8e9-4407-8549-d096d55e9d44</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+  </components>
+  <libparts>
+    <libpart lib="" part="STAMP_1">
+      <fields>
+        <field name="Reference">J104</field>
+        <field name="Value">ICM20948</field>
+        <field name="Footprint">KwanSystems:StampPad</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <pins>
+        <pin num="1" name="1V8" type="power_in"/>
+        <pin num="2" name="MISO" type="tri_state"/>
+        <pin num="3" name="MOSI" type="input"/>
+        <pin num="4" name="SCK" type="input"/>
+        <pin num="5" name="~{CS}" type="input"/>
+        <pin num="6" name="GND" type="power_in"/>
+        <pin num="7" name="GND" type="power_in"/>
+        <pin num="8" name="DRDY" type="output"/>
+        <pin num="9" name="AD0" type="input"/>
+        <pin num="10" name="SDA" type="open_collector"/>
+        <pin num="11" name="SCL" type="input"/>
+        <pin num="12" name="3V3" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="74xx" part="74LS138">
+      <description>Decoder 3 to 8 active low outputs</description>
+      <docs>http://www.ti.com/lit/gpn/sn74LS138</docs>
+      <footprints>
+        <fp>DIP?16*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">74LS138</field>
+        <field name="Footprint"/>
+        <field name="Datasheet">http://www.ti.com/lit/gpn/sn74LS138</field>
+        <field name="Description">Decoder 3 to 8 active low outputs</field>
+      </fields>
+      <pins>
+        <pin num="1" name="A0" type="input"/>
+        <pin num="2" name="A1" type="input"/>
+        <pin num="3" name="A2" type="input"/>
+        <pin num="4" name="E1" type="input"/>
+        <pin num="5" name="E2" type="input"/>
+        <pin num="6" name="E3" type="input"/>
+        <pin num="7" name="O7" type="output"/>
+        <pin num="8" name="GND" type="power_in"/>
+        <pin num="9" name="O6" type="output"/>
+        <pin num="10" name="O5" type="output"/>
+        <pin num="11" name="O4" type="output"/>
+        <pin num="12" name="O3" type="output"/>
+        <pin num="13" name="O2" type="output"/>
+        <pin num="14" name="O1" type="output"/>
+        <pin num="15" name="O0" type="output"/>
+        <pin num="16" name="VCC" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="Connector" part="Conn_01x06_Pin">
+      <description>Generic connector, single row, 01x06, script generated</description>
+      <footprints>
+        <fp>Connector*:*_1x??_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">J</field>
+        <field name="Value">Conn_01x06_Pin</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Generic connector, single row, 01x06, script generated</field>
+      </fields>
+      <pins>
+        <pin num="1" name="Pin_1" type="passive"/>
+        <pin num="2" name="Pin_2" type="passive"/>
+        <pin num="3" name="Pin_3" type="passive"/>
+        <pin num="4" name="Pin_4" type="passive"/>
+        <pin num="5" name="Pin_5" type="passive"/>
+        <pin num="6" name="Pin_6" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Connector_Generic" part="Conn_01x03">
+      <description>Generic connector, single row, 01x03, script generated (kicad-library-utils/schlib/autogen/connector/)</description>
+      <footprints>
+        <fp>Connector*:*_1x??_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">J</field>
+        <field name="Value">Conn_01x03</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Generic connector, single row, 01x03, script generated (kicad-library-utils/schlib/autogen/connector/)</field>
+      </fields>
+      <pins>
+        <pin num="1" name="Pin_1" type="passive"/>
+        <pin num="2" name="Pin_2" type="passive"/>
+        <pin num="3" name="Pin_3" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Device" part="C_Small">
+      <description>Unpolarized capacitor, small symbol</description>
+      <footprints>
+        <fp>C_*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">C</field>
+        <field name="Value">C_Small</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Unpolarized capacitor, small symbol</field>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="passive"/>
+        <pin num="2" name="" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Device" part="Crystal_GND24">
+      <description>Four pin crystal, GND on pins 2 and 4</description>
+      <footprints>
+        <fp>Crystal*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">Y</field>
+        <field name="Value">Crystal_GND24</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Four pin crystal, GND on pins 2 and 4</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="passive"/>
+        <pin num="2" name="2" type="passive"/>
+        <pin num="3" name="3" type="passive"/>
+        <pin num="4" name="4" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Device" part="LED_Small">
+      <description>Light emitting diode, small symbol</description>
+      <footprints>
+        <fp>LED*</fp>
+        <fp>LED_SMD:*</fp>
+        <fp>LED_THT:*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">D</field>
+        <field name="Value">LED_Small</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Light emitting diode, small symbol</field>
+      </fields>
+      <pins>
+        <pin num="1" name="K" type="passive"/>
+        <pin num="2" name="A" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Device" part="Q_PMOS_GSD">
+      <description>P-MOSFET transistor, gate/source/drain</description>
+      <fields>
+        <field name="Reference">Q</field>
+        <field name="Value">Q_PMOS_GSD</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">P-MOSFET transistor, gate/source/drain</field>
+      </fields>
+      <pins>
+        <pin num="1" name="G" type="input"/>
+        <pin num="2" name="S" type="passive"/>
+        <pin num="3" name="D" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="KwanSystems" part="Axis">
+      <fields>
+        <field name="Reference">G</field>
+        <field name="Value">Axis</field>
+        <field name="Footprint">KwanSystems:Axis</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+    </libpart>
+    <libpart lib="KwanSystems" part="DesignedWithKicad">
+      <fields>
+        <field name="Reference">G</field>
+        <field name="Value">DesignedWithKicad</field>
+        <field name="Footprint">KwanSystems:Symbol_KiCAD-Logo_CopperAndSilkScreenTop_small</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+    </libpart>
+    <libpart lib="KwanSystems" part="KwanSystems">
+      <fields>
+        <field name="Reference">G</field>
+        <field name="Value">KwanSystems</field>
+        <field name="Footprint">KwanSystems:StKwansSoldermask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+    </libpart>
+    <libpart lib="KwanSystems" part="LPC2103">
+      <fields>
+        <field name="Reference">U1201</field>
+        <field name="Value">LPC2103</field>
+        <field name="Footprint">Package_QFP:LQFP-48_7x7mm_P0.5mm</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+        <field name="Digikey">568-LPC2103FBD48EL-ND</field>
+        <field name="Purpose">Timer</field>
+        <field name="Number on hand">4</field>
+      </fields>
+      <pins>
+        <pin num="1" name="(MAT1.2/MISO1)P0.19" type="bidirectional"/>
+        <pin num="2" name="(MAT1.3/MOSI1)P0.20" type="bidirectional"/>
+        <pin num="3" name="(SSEL1/MAT3.0)P0.21" type="bidirectional"/>
+        <pin num="4" name="VBAT" type="power_in"/>
+        <pin num="5" name="VDD(1V8)" type="power_in"/>
+        <pin num="6" name="~{RST}" type="bidirectional"/>
+        <pin num="7" name="VSS" type="power_in"/>
+        <pin num="8" name="(~{TRST}/CAP2.0)P0.27" type="bidirectional"/>
+        <pin num="9" name="(TMS/CAP2.1)P0.28" type="bidirectional"/>
+        <pin num="10" name="(TCK/CAP2.2)P0.29" type="bidirectional"/>
+        <pin num="11" name="XTAL1" type="input"/>
+        <pin num="12" name="XTAL2" type="output"/>
+        <pin num="13" name="(TXD0/MAT3.1)P0.0" type="bidirectional"/>
+        <pin num="14" name="(RXD0/MAT3.2)P0.1" type="bidirectional"/>
+        <pin num="15" name="(TDI/MAT3.3)P0.30" type="bidirectional"/>
+        <pin num="16" name="(TDO)P0.31" type="bidirectional"/>
+        <pin num="17" name="VDD(3V3)" type="power_in"/>
+        <pin num="18" name="(SCL0/CAP0.0)P0.2" type="bidirectional"/>
+        <pin num="19" name="VSS" type="power_in"/>
+        <pin num="20" name="RTCX1" type="input"/>
+        <pin num="21" name="(SDA0/MAT0.0)P0.3" type="bidirectional"/>
+        <pin num="22" name="(SCK0/CAP0.1)P0.4" type="bidirectional"/>
+        <pin num="23" name="(MISO0/MAT0.1)P0.5" type="bidirectional"/>
+        <pin num="24" name="(MOSI0/CAP0.2)P0.6" type="bidirectional"/>
+        <pin num="25" name="RTCX2" type="output"/>
+        <pin num="26" name="RTCK" type="bidirectional"/>
+        <pin num="27" name="DBGSEL" type="input"/>
+        <pin num="28" name="(SSEL0/MAT2.0)P0.7" type="bidirectional"/>
+        <pin num="29" name="(TXD1/MAT2.1)P0.8" type="bidirectional"/>
+        <pin num="30" name="(RXD1/MAT2.2)P0.9" type="bidirectional"/>
+        <pin num="31" name="VSSA" type="power_in"/>
+        <pin num="32" name="(AD0.0)P0.22" type="bidirectional"/>
+        <pin num="33" name="(AD0.1)P0.23" type="bidirectional"/>
+        <pin num="34" name="(AD0.2)P0.24" type="bidirectional"/>
+        <pin num="35" name="(RTS1/CAP1.0/AD0.3)P0.10" type="bidirectional"/>
+        <pin num="36" name="(CTS1/CAP1.1/AD0.4)P0.11" type="bidirectional"/>
+        <pin num="37" name="(DSR1/MAT1.0/AD0.5)P0.12" type="bidirectional"/>
+        <pin num="38" name="(AD0.6)P0.25" type="bidirectional"/>
+        <pin num="39" name="(AD0.7)P0.26" type="bidirectional"/>
+        <pin num="40" name="VDD(3V3)" type="power_in"/>
+        <pin num="41" name="(DTR1/MAT1.1)P0.13" type="bidirectional"/>
+        <pin num="42" name="VDDA" type="power_in"/>
+        <pin num="43" name="VSS" type="power_in"/>
+        <pin num="44" name="(DCD1/SCK1/EINT1)P0.14" type="bidirectional"/>
+        <pin num="45" name="(RI1/EINT2)P0.15" type="bidirectional"/>
+        <pin num="46" name="(EINT0/MAT0.2)P0.16" type="bidirectional"/>
+        <pin num="47" name="(CAP1.2/SCL1)P0.17" type="bidirectional"/>
+        <pin num="48" name="(CAP1.3/SDA1)P0.18" type="bidirectional"/>
+      </pins>
+    </libpart>
+    <libpart lib="KwanSystems" part="OSHW">
+      <fields>
+        <field name="Reference">G</field>
+        <field name="Value">OSHW</field>
+        <field name="Footprint">KwanSystems:OSHW-Symbol_6.7x6mm_SolderMask</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+    </libpart>
+    <libpart lib="KwanSystems" part="RP4">
+      <footprints>
+        <fp>*RES*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">R</field>
+        <field name="Value">RP4</field>
+        <field name="Footprint">KwanSystems:R_Array_Convex_4x0402</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <pins>
+        <pin num="1" name="4" type="passive"/>
+        <pin num="2" name="4" type="passive"/>
+        <pin num="3" name="4" type="passive"/>
+        <pin num="4" name="4" type="passive"/>
+        <pin num="5" name="5" type="passive"/>
+        <pin num="6" name="5" type="passive"/>
+        <pin num="7" name="5" type="passive"/>
+        <pin num="8" name="5" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="KwanSystems" part="Raspberry_Pi_40">
+      <fields>
+        <field name="Reference">J</field>
+        <field name="Value">Raspberry_Pi_40</field>
+        <field name="Footprint">KwanSystems:PiHAT</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <pins>
+        <pin num="1" name="3V3" type="power_out"/>
+        <pin num="2" name="5V" type="passive"/>
+        <pin num="3" name="(SDA1)_GPIO2" type="bidirectional"/>
+        <pin num="4" name="5V" type="passive"/>
+        <pin num="5" name="(SCL1)_GPIO3" type="bidirectional"/>
+        <pin num="6" name="GND" type="passive"/>
+        <pin num="7" name="(TX3)_GPIO4" type="bidirectional"/>
+        <pin num="8" name="(TX0)_GPIO14" type="bidirectional"/>
+        <pin num="9" name="GND" type="passive"/>
+        <pin num="10" name="(RX0)_GPIO15" type="bidirectional"/>
+        <pin num="11" name="GPIO17_(GEN0)" type="bidirectional"/>
+        <pin num="12" name="GPIO18_(GEN1)" type="bidirectional"/>
+        <pin num="13" name="GPIO27_(GEN2)" type="bidirectional"/>
+        <pin num="14" name="GND" type="passive"/>
+        <pin num="15" name="GPIO22_(GEN3)" type="bidirectional"/>
+        <pin num="16" name="GPIO23_(GEN4)" type="bidirectional"/>
+        <pin num="17" name="3V3" type="power_out"/>
+        <pin num="18" name="GPIO24_(GEN5)" type="bidirectional"/>
+        <pin num="19" name="(SPI_MOSI)_GPIO10" type="bidirectional"/>
+        <pin num="20" name="GND" type="passive"/>
+        <pin num="21" name="(SPI_MISO)_GPIO9" type="bidirectional"/>
+        <pin num="22" name="GPIO25_(GEN6)" type="bidirectional"/>
+        <pin num="23" name="(SPI_SCLK)_GPIO11" type="bidirectional"/>
+        <pin num="24" name="(~{SPI_CE0})_GPIO8" type="bidirectional"/>
+        <pin num="25" name="GND" type="passive"/>
+        <pin num="26" name="(~{SPI_CE1})_GPIO7" type="bidirectional"/>
+        <pin num="27" name="(ID_SD)_GPIO0" type="bidirectional"/>
+        <pin num="28" name="(ID_SC)_GPIO1" type="bidirectional"/>
+        <pin num="29" name="(RX3)_GPIO5" type="bidirectional"/>
+        <pin num="30" name="GND" type="passive"/>
+        <pin num="31" name="GPIO6" type="bidirectional"/>
+        <pin num="32" name="(PWM0)_GPIO12" type="bidirectional"/>
+        <pin num="33" name="(PWM1)_GPIO13" type="bidirectional"/>
+        <pin num="34" name="GND" type="passive"/>
+        <pin num="35" name="(MISO)_GPIO19" type="bidirectional"/>
+        <pin num="36" name="GPIO16" type="bidirectional"/>
+        <pin num="37" name="GPIO26" type="bidirectional"/>
+        <pin num="38" name="GPIO20" type="bidirectional"/>
+        <pin num="39" name="GND" type="passive"/>
+        <pin num="40" name="GPIO21" type="bidirectional"/>
+      </pins>
+    </libpart>
+    <libpart lib="KwanSystems" part="RaspberyPi_2+_Backplane">
+      <fields>
+        <field name="Reference">J</field>
+        <field name="Value">RaspberyPi_2+_Backplane</field>
+        <field name="Footprint">KwanSystems:RaspberryPi_2+</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+    </libpart>
+    <libpart lib="KwanSystems" part="STAMP">
+      <fields>
+        <field name="Reference">J105</field>
+        <field name="Value">BME280</field>
+        <field name="Footprint">KwanSystems:StampPad</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <pins>
+        <pin num="1" name="" type="no_connect"/>
+        <pin num="2" name="MISO" type="tri_state"/>
+        <pin num="3" name="MOSI" type="input"/>
+        <pin num="4" name="SCK" type="input"/>
+        <pin num="5" name="~{CS}" type="input"/>
+        <pin num="6" name="GND" type="power_in"/>
+        <pin num="7" name="GND" type="power_in"/>
+        <pin num="8" name="" type="no_connect"/>
+        <pin num="9" name="AD0" type="input"/>
+        <pin num="10" name="SDA" type="open_collector"/>
+        <pin num="11" name="SCL" type="input"/>
+        <pin num="12" name="3V3" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="Logic_LevelTranslator" part="TXS0108EPW">
+      <description>Bidirectional  level-shifting voltage translator, TSSOP-20</description>
+      <docs>www.ti.com/lit/ds/symlink/txs0108e.pdf</docs>
+      <footprints>
+        <fp>*SSOP*4.4x6.5mm*P0.65mm*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">TXS0108EPW</field>
+        <field name="Footprint">Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm</field>
+        <field name="Datasheet">www.ti.com/lit/ds/symlink/txs0108e.pdf</field>
+        <field name="Description">Bidirectional  level-shifting voltage translator, TSSOP-20</field>
+      </fields>
+      <pins>
+        <pin num="1" name="A1" type="bidirectional"/>
+        <pin num="2" name="VCCA" type="power_in"/>
+        <pin num="3" name="A2" type="bidirectional"/>
+        <pin num="4" name="A3" type="bidirectional"/>
+        <pin num="5" name="A4" type="bidirectional"/>
+        <pin num="6" name="A5" type="bidirectional"/>
+        <pin num="7" name="A6" type="bidirectional"/>
+        <pin num="8" name="A7" type="bidirectional"/>
+        <pin num="9" name="A8" type="bidirectional"/>
+        <pin num="10" name="OE" type="input"/>
+        <pin num="11" name="GND" type="power_in"/>
+        <pin num="12" name="B8" type="bidirectional"/>
+        <pin num="13" name="B7" type="bidirectional"/>
+        <pin num="14" name="B6" type="bidirectional"/>
+        <pin num="15" name="B5" type="bidirectional"/>
+        <pin num="16" name="B4" type="bidirectional"/>
+        <pin num="17" name="B3" type="bidirectional"/>
+        <pin num="18" name="B2" type="bidirectional"/>
+        <pin num="19" name="VCCB" type="power_in"/>
+        <pin num="20" name="B1" type="bidirectional"/>
+      </pins>
+    </libpart>
+    <libpart lib="Sensor" part="BME280">
+      <description>3-in-1 sensor, humidity, pressure, temperature, I2C and SPI interface, 1.71-3.6V, LGA-8</description>
+      <docs>https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf</docs>
+      <footprints>
+        <fp>*LGA*2.5x2.5mm*P0.65mm*Clockwise*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">BME280</field>
+        <field name="Footprint">Package_LGA:Bosch_LGA-8_2.5x2.5mm_P0.65mm_ClockwisePinNumbering</field>
+        <field name="Datasheet">https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf</field>
+        <field name="Description">3-in-1 sensor, humidity, pressure, temperature, I2C and SPI interface, 1.71-3.6V, LGA-8</field>
+      </fields>
+      <pins>
+        <pin num="1" name="GND" type="power_in"/>
+        <pin num="2" name="CSB" type="input"/>
+        <pin num="3" name="SDI" type="bidirectional"/>
+        <pin num="4" name="SCK" type="input"/>
+        <pin num="5" name="SDO" type="bidirectional"/>
+        <pin num="6" name="VDDIO" type="power_in"/>
+        <pin num="7" name="GND" type="power_in"/>
+        <pin num="8" name="VDD" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="Sensor_Motion" part="ICM-20948">
+      <description>InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24</description>
+      <docs>http://www.invensense.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf</docs>
+      <footprints>
+        <fp>InvenSense?QFN*3x3mm*P0.4mm*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">ICM-20948</field>
+        <field name="Footprint">Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm</field>
+        <field name="Datasheet">http://www.invensense.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf</field>
+        <field name="Description">InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24</field>
+      </fields>
+      <pins>
+        <pin num="1" name="NC" type="no_connect"/>
+        <pin num="2" name="NC" type="no_connect"/>
+        <pin num="3" name="NC" type="no_connect"/>
+        <pin num="4" name="NC" type="no_connect"/>
+        <pin num="5" name="NC" type="no_connect"/>
+        <pin num="6" name="NC" type="no_connect"/>
+        <pin num="7" name="AUX_CL" type="output"/>
+        <pin num="8" name="VDDIO" type="power_in"/>
+        <pin num="9" name="SDO/AD0" type="bidirectional"/>
+        <pin num="10" name="REGOUT" type="passive"/>
+        <pin num="11" name="FSYNC" type="input"/>
+        <pin num="12" name="INT1" type="output"/>
+        <pin num="13" name="VDD" type="power_in"/>
+        <pin num="14" name="NC" type="no_connect"/>
+        <pin num="15" name="NC" type="no_connect"/>
+        <pin num="16" name="NC" type="no_connect"/>
+        <pin num="17" name="NC" type="no_connect"/>
+        <pin num="18" name="GND" type="power_in"/>
+        <pin num="19" name="RESV" type="no_connect"/>
+        <pin num="20" name="GND" type="passive"/>
+        <pin num="21" name="AUX_DA" type="bidirectional"/>
+        <pin num="22" name="~{CS}" type="input"/>
+        <pin num="23" name="SCL/SCLK" type="input"/>
+        <pin num="24" name="SDA/SDI" type="bidirectional"/>
+      </pins>
+    </libpart>
+    <libpart lib="Sparkfun_Breakout" part="ZED-F9R">
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value"/>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <pins>
+        <pin num="1" name="GND" type="power_in"/>
+        <pin num="2" name="5V" type="power_in"/>
+        <pin num="3" name="3V3" type="power_in"/>
+        <pin num="4" name="~{CS}" type="input"/>
+        <pin num="5" name="RX/MOSI" type="input"/>
+        <pin num="6" name="TX/MISO" type="output"/>
+        <pin num="7" name="SCL/CLK" type="input"/>
+        <pin num="8" name="D-" type="input"/>
+        <pin num="9" name="D+" type="input"/>
+        <pin num="10" name="W-" type="input"/>
+        <pin num="11" name="W+" type="input"/>
+        <pin num="12" name="GND" type="power_in"/>
+        <pin num="13" name="3V3" type="power_in"/>
+        <pin num="14" name="SDA" type="bidirectional"/>
+        <pin num="15" name="SCL" type="input"/>
+        <pin num="16" name="TXR" type="output"/>
+        <pin num="17" name="~{RESET}" type="input"/>
+        <pin num="18" name="~{SAFEBOOT}" type="input"/>
+        <pin num="19" name="INT" type="input"/>
+        <pin num="20" name="PPS" type="output"/>
+      </pins>
+    </libpart>
+  </libparts>
+  <libraries>
+    <library logical="KwanSystems">
+      <uri>${KWAN_KICAD_LIB}/KwanSystems.kicad_sym</uri>
+    </library>
+  </libraries>
+  <nets>
+    <net code="1" name="+1V8" class="Default">
+      <node ref="C605" pin="1" pintype="passive"/>
+      <node ref="J104" pin="1" pinfunction="1V8_1" pintype="power_in"/>
+      <node ref="U601" pin="5" pinfunction="VDD(1V8)_5" pintype="power_in"/>
+    </net>
+    <net code="2" name="+3.3VP" class="Default">
+      <node ref="J101" pin="1" pinfunction="3V3_1" pintype="power_out"/>
+      <node ref="J102" pin="2" pinfunction="Pin_2_2" pintype="passive"/>
+    </net>
+    <net code="3" name="+3V3" class="Power">
+      <node ref="C116" pin="1" pintype="passive"/>
+      <node ref="C617" pin="1" pintype="passive"/>
+      <node ref="C640" pin="1" pintype="passive"/>
+      <node ref="D101" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D103" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D104" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D106" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D129" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D130" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D141" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="D144" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="J104" pin="12" pinfunction="3V3_12" pintype="power_in"/>
+      <node ref="J105" pin="12" pinfunction="3V3_12" pintype="power_in"/>
+      <node ref="R103" pin="1" pinfunction="4_1" pintype="passive"/>
+      <node ref="R103" pin="2" pinfunction="4_2" pintype="passive"/>
+      <node ref="U102" pin="16" pinfunction="VCC_16" pintype="power_in"/>
+      <node ref="U102" pin="6" pinfunction="E3_6" pintype="input"/>
+      <node ref="U601" pin="17" pinfunction="VDD(3V3)_17" pintype="power_in"/>
+      <node ref="U601" pin="4" pinfunction="VBAT_4" pintype="power_in"/>
+      <node ref="U601" pin="40" pinfunction="VDD(3V3)_40" pintype="power_in"/>
+      <node ref="U601" pin="42" pinfunction="VDDA_42" pintype="power_in"/>
+    </net>
+    <net code="4" name="+5V" class="Power">
+      <node ref="J101" pin="2" pinfunction="5V_2" pintype="passive"/>
+      <node ref="J101" pin="4" pinfunction="5V_4" pintype="passive"/>
+      <node ref="J102" pin="3" pinfunction="Pin_3_3" pintype="passive"/>
+      <node ref="J106" pin="2" pinfunction="5V_2" pintype="power_in"/>
+    </net>
+    <net code="5" name="/BOOTSTRAP-" class="Default">
+      <node ref="D144" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R102" pin="7" pinfunction="5_7" pintype="passive"/>
+    </net>
+    <net code="6" name="/CS_A0" class="Default">
+      <node ref="J101" pin="15" pinfunction="GPIO22_(GEN3)_15" pintype="bidirectional"/>
+      <node ref="U102" pin="1" pinfunction="A0_1" pintype="input"/>
+    </net>
+    <net code="7" name="/CS_A1" class="Default">
+      <node ref="J101" pin="13" pinfunction="GPIO27_(GEN2)_13" pintype="bidirectional"/>
+      <node ref="U102" pin="2" pinfunction="A1_2" pintype="input"/>
+    </net>
+    <net code="8" name="/DRDY-" class="Default">
+      <node ref="D129" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R102" pin="5" pinfunction="5_5" pintype="passive"/>
+    </net>
+    <net code="9" name="/DRDY_6D" class="Default">
+      <node ref="J101" pin="31" pinfunction="GPIO6_31" pintype="bidirectional"/>
+      <node ref="J104" pin="8" pinfunction="DRDY_8" pintype="output"/>
+      <node ref="U601" pin="36" pinfunction="(CTS1/CAP1.1/AD0.4)P0.11_36" pintype="bidirectional"/>
+    </net>
+    <net code="10" name="/DRDY_MAG" class="Default">
+      <node ref="J101" pin="22" pinfunction="GPIO25_(GEN6)_22" pintype="bidirectional"/>
+      <node ref="U601" pin="47" pinfunction="(CAP1.2/SCL1)P0.17_47" pintype="bidirectional"/>
+    </net>
+    <net code="11" name="/DRDY_MAG-" class="Default">
+      <node ref="D130" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R102" pin="6" pinfunction="5_6" pintype="passive"/>
+    </net>
+    <net code="12" name="/GPS_RX" class="Default">
+      <node ref="J101" pin="7" pinfunction="(TX3)_GPIO4_7" pintype="bidirectional"/>
+      <node ref="J106" pin="5" pinfunction="RX/MOSI_5" pintype="input"/>
+    </net>
+    <net code="13" name="/GPS_TX" class="Default">
+      <node ref="J101" pin="29" pinfunction="(RX3)_GPIO5_29" pintype="bidirectional"/>
+      <node ref="J106" pin="6" pinfunction="TX/MISO_6" pintype="output"/>
+    </net>
+    <net code="14" name="/GPS_~{RESET}" class="Default">
+      <node ref="J101" pin="11" pinfunction="GPIO17_(GEN0)_11" pintype="bidirectional"/>
+      <node ref="J106" pin="17" pinfunction="~{RESET}_17" pintype="input"/>
+      <node ref="R103" pin="8" pinfunction="5_8" pintype="passive"/>
+    </net>
+    <net code="15" name="/IMU/INT1_1V8" class="Default">
+      <node ref="U301" pin="12" pinfunction="INT1_12" pintype="output"/>
+      <node ref="U302" pin="7" pinfunction="A6_7" pintype="bidirectional"/>
+    </net>
+    <net code="16" name="/IMU/INT1_3V3" class="Default">
+      <node ref="J301" pin="8" pinfunction="INT1_8" pintype="output"/>
+      <node ref="U302" pin="14" pinfunction="B6_14" pintype="bidirectional"/>
+    </net>
+    <net code="17" name="/IMU/MISO_1V8" class="Default">
+      <node ref="U301" pin="9" pinfunction="SDO/AD0_9" pintype="bidirectional"/>
+      <node ref="U302" pin="1" pinfunction="A1_1" pintype="bidirectional"/>
+    </net>
+    <net code="18" name="/IMU/MISO_3V3" class="Default">
+      <node ref="J301" pin="2" pinfunction="MISO_2" pintype="output"/>
+      <node ref="J301" pin="9" pinfunction="AD0_9" pintype="input"/>
+      <node ref="U302" pin="20" pinfunction="B1_20" pintype="bidirectional"/>
+    </net>
+    <net code="19" name="/IMU/MOSI_1V8" class="Default">
+      <node ref="U301" pin="24" pinfunction="SDA/SDI_24" pintype="bidirectional"/>
+      <node ref="U302" pin="3" pinfunction="A2_3" pintype="bidirectional"/>
+    </net>
+    <net code="20" name="/IMU/MOSI_3V3" class="Default">
+      <node ref="J301" pin="10" pinfunction="SDA_10" pintype="open_collector"/>
+      <node ref="J301" pin="3" pinfunction="MOSI_3" pintype="input"/>
+      <node ref="U302" pin="18" pinfunction="B2_18" pintype="bidirectional"/>
+    </net>
+    <net code="21" name="/IMU/Q_1V8" class="Default">
+      <node ref="C302" pin="1" pintype="passive"/>
+      <node ref="C308" pin="1" pintype="passive"/>
+      <node ref="C313" pin="1" pintype="passive"/>
+      <node ref="J301" pin="1" pinfunction="1V8_1" pintype="power_in"/>
+      <node ref="U301" pin="13" pinfunction="VDD_13" pintype="power_in"/>
+      <node ref="U301" pin="8" pinfunction="VDDIO_8" pintype="power_in"/>
+      <node ref="U302" pin="10" pinfunction="OE_10" pintype="input"/>
+      <node ref="U302" pin="2" pinfunction="VCCA_2" pintype="power_in"/>
+    </net>
+    <net code="22" name="/IMU/Q_3V3" class="Default">
+      <node ref="C319" pin="1" pintype="passive"/>
+      <node ref="J301" pin="12" pinfunction="3V3_12" pintype="power_in"/>
+      <node ref="U302" pin="19" pinfunction="VCCB_19" pintype="power_in"/>
+    </net>
+    <net code="23" name="/IMU/Q_GND" class="Default">
+      <node ref="C302" pin="2" pintype="passive"/>
+      <node ref="C308" pin="2" pintype="passive"/>
+      <node ref="C310" pin="2" pintype="passive"/>
+      <node ref="C313" pin="2" pintype="passive"/>
+      <node ref="C319" pin="2" pintype="passive"/>
+      <node ref="J301" pin="6" pinfunction="GND_6" pintype="power_in"/>
+      <node ref="J301" pin="7" pinfunction="GND_7" pintype="power_in"/>
+      <node ref="U301" pin="18" pinfunction="GND_18" pintype="power_in"/>
+      <node ref="U301" pin="20" pinfunction="GND_20" pintype="passive"/>
+      <node ref="U302" pin="11" pinfunction="GND_11" pintype="power_in"/>
+      <node ref="U302" pin="6" pinfunction="A5_6" pintype="bidirectional"/>
+      <node ref="U302" pin="8" pinfunction="A7_8" pintype="bidirectional"/>
+      <node ref="U302" pin="9" pinfunction="A8_9" pintype="bidirectional"/>
+    </net>
+    <net code="24" name="/IMU/SCK_1V8" class="Default">
+      <node ref="U301" pin="23" pinfunction="SCL/SCLK_23" pintype="input"/>
+      <node ref="U302" pin="4" pinfunction="A3_4" pintype="bidirectional"/>
+    </net>
+    <net code="25" name="/IMU/SCK_3V3" class="Default">
+      <node ref="J301" pin="11" pinfunction="SCL_11" pintype="input"/>
+      <node ref="J301" pin="4" pinfunction="SCK_4" pintype="input"/>
+      <node ref="U302" pin="17" pinfunction="B3_17" pintype="bidirectional"/>
+    </net>
+    <net code="26" name="/IMU/~{CS}_1V8" class="Default">
+      <node ref="U301" pin="22" pinfunction="~{CS}_22" pintype="input"/>
+      <node ref="U302" pin="5" pinfunction="A4_5" pintype="bidirectional"/>
+    </net>
+    <net code="27" name="/IMU/~{CS}_3V3" class="Default">
+      <node ref="J301" pin="5" pinfunction="~{CS}_5" pintype="input"/>
+      <node ref="U302" pin="16" pinfunction="B4_16" pintype="bidirectional"/>
+    </net>
+    <net code="28" name="/LPC_RESET-" class="Default">
+      <node ref="D106" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R102" pin="8" pinfunction="5_8" pintype="passive"/>
+    </net>
+    <net code="29" name="/LPC_RX" class="Default">
+      <node ref="J101" pin="8" pinfunction="(TX0)_GPIO14_8" pintype="bidirectional"/>
+      <node ref="U601" pin="14" pinfunction="(RXD0/MAT3.2)P0.1_14" pintype="bidirectional"/>
+    </net>
+    <net code="30" name="/LPC_TX" class="Default">
+      <node ref="J101" pin="10" pinfunction="(RX0)_GPIO15_10" pintype="bidirectional"/>
+      <node ref="U601" pin="13" pinfunction="(TXD0/MAT3.1)P0.0_13" pintype="bidirectional"/>
+    </net>
+    <net code="31" name="/LPC_~{BOOTSTRAP}" class="Default">
+      <node ref="J101" pin="18" pinfunction="GPIO24_(GEN5)_18" pintype="bidirectional"/>
+      <node ref="R102" pin="2" pinfunction="4_2" pintype="passive"/>
+      <node ref="R103" pin="6" pinfunction="5_6" pintype="passive"/>
+      <node ref="U601" pin="44" pinfunction="(DCD1/SCK1/EINT1)P0.14_44" pintype="bidirectional"/>
+    </net>
+    <net code="32" name="/LPC_~{RESET}" class="Default">
+      <node ref="J101" pin="16" pinfunction="GPIO23_(GEN4)_16" pintype="bidirectional"/>
+      <node ref="R102" pin="1" pinfunction="4_1" pintype="passive"/>
+      <node ref="R103" pin="7" pinfunction="5_7" pintype="passive"/>
+      <node ref="U601" pin="6" pinfunction="~{RST}_6" pintype="bidirectional"/>
+    </net>
+    <net code="33" name="/MISO_3V3" class="Default">
+      <node ref="J101" pin="21" pinfunction="(SPI_MISO)_GPIO9_21" pintype="bidirectional"/>
+      <node ref="J104" pin="2" pinfunction="MISO_2" pintype="tri_state"/>
+      <node ref="J105" pin="2" pinfunction="MISO_2" pintype="tri_state"/>
+      <node ref="U601" pin="23" pinfunction="(MISO0/MAT0.1)P0.5_23" pintype="bidirectional"/>
+    </net>
+    <net code="34" name="/MOSI_3V3" class="Default">
+      <node ref="J101" pin="19" pinfunction="(SPI_MOSI)_GPIO10_19" pintype="bidirectional"/>
+      <node ref="J104" pin="3" pinfunction="MOSI_3" pintype="input"/>
+      <node ref="J105" pin="3" pinfunction="MOSI_3" pintype="input"/>
+      <node ref="U601" pin="24" pinfunction="(MOSI0/CAP0.2)P0.6_24" pintype="bidirectional"/>
+    </net>
+    <net code="35" name="/PPS" class="Default">
+      <node ref="J101" pin="12" pinfunction="GPIO18_(GEN1)_12" pintype="bidirectional"/>
+      <node ref="J106" pin="20" pinfunction="PPS_20" pintype="output"/>
+      <node ref="U601" pin="35" pinfunction="(RTS1/CAP1.0/AD0.3)P0.10_35" pintype="bidirectional"/>
+    </net>
+    <net code="36" name="/PPS-" class="Default">
+      <node ref="D141" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R101" pin="5" pinfunction="5_5" pintype="passive"/>
+    </net>
+    <net code="37" name="/Pressure/MISO" class="Default">
+      <node ref="J201" pin="2" pinfunction="MISO_2" pintype="output"/>
+      <node ref="J201" pin="9" pinfunction="AD0_9" pintype="bidirectional"/>
+      <node ref="U201" pin="5" pinfunction="SDO_5" pintype="bidirectional"/>
+    </net>
+    <net code="38" name="/Pressure/MOSI" class="Default">
+      <node ref="J201" pin="10" pinfunction="SDA_10" pintype="open_collector"/>
+      <node ref="J201" pin="3" pinfunction="MOSI_3" pintype="input"/>
+      <node ref="U201" pin="3" pinfunction="SDI_3" pintype="bidirectional"/>
+    </net>
+    <net code="39" name="/Pressure/Q_3V3" class="Default">
+      <node ref="C206" pin="1" pintype="passive"/>
+      <node ref="C208" pin="1" pintype="passive"/>
+      <node ref="J201" pin="12" pinfunction="3V3_12" pintype="power_in"/>
+      <node ref="U201" pin="6" pinfunction="VDDIO_6" pintype="power_in"/>
+      <node ref="U201" pin="8" pinfunction="VDD_8" pintype="power_in"/>
+    </net>
+    <net code="40" name="/Pressure/Q_GND" class="Default">
+      <node ref="C206" pin="2" pintype="passive"/>
+      <node ref="C208" pin="2" pintype="passive"/>
+      <node ref="J201" pin="6" pinfunction="GND_6" pintype="power_in"/>
+      <node ref="J201" pin="7" pinfunction="GND_7" pintype="power_in"/>
+      <node ref="U201" pin="1" pinfunction="GND_1" pintype="power_in"/>
+      <node ref="U201" pin="7" pinfunction="GND_7" pintype="power_in"/>
+    </net>
+    <net code="41" name="/Pressure/SCK" class="Default">
+      <node ref="J201" pin="11" pinfunction="SCL_11" pintype="input"/>
+      <node ref="J201" pin="4" pinfunction="SCK_4" pintype="input"/>
+      <node ref="U201" pin="4" pinfunction="SCK_4" pintype="input"/>
+    </net>
+    <net code="42" name="/Pressure/~{CS}" class="Default">
+      <node ref="J201" pin="5" pinfunction="~{CS}_5" pintype="input"/>
+      <node ref="U201" pin="2" pinfunction="CSB_2" pintype="input"/>
+    </net>
+    <net code="43" name="/SCK_3V3" class="Default">
+      <node ref="J101" pin="23" pinfunction="(SPI_SCLK)_GPIO11_23" pintype="bidirectional"/>
+      <node ref="J104" pin="4" pinfunction="SCK_4" pintype="input"/>
+      <node ref="J105" pin="4" pinfunction="SCK_4" pintype="input"/>
+      <node ref="U601" pin="22" pinfunction="(SCK0/CAP0.1)P0.4_22" pintype="bidirectional"/>
+    </net>
+    <net code="44" name="/Stamp Tester/Q_1V8" class="Default">
+      <node ref="J701" pin="1" pinfunction="Pin_1_1" pintype="passive"/>
+      <node ref="J702" pin="1" pinfunction="Pin_1_1" pintype="passive"/>
+    </net>
+    <net code="45" name="/Stamp Tester/Q_3V3" class="Default">
+      <node ref="J703" pin="6" pinfunction="Pin_6_6" pintype="passive"/>
+      <node ref="J704" pin="6" pinfunction="Pin_6_6" pintype="passive"/>
+    </net>
+    <net code="46" name="/Stamp Tester/Q_AD0" class="Default">
+      <node ref="J703" pin="3" pinfunction="Pin_3_3" pintype="passive"/>
+      <node ref="J704" pin="3" pinfunction="Pin_3_3" pintype="passive"/>
+    </net>
+    <net code="47" name="/Stamp Tester/Q_DRDY" class="Default">
+      <node ref="J703" pin="2" pinfunction="Pin_2_2" pintype="passive"/>
+      <node ref="J704" pin="2" pinfunction="Pin_2_2" pintype="passive"/>
+    </net>
+    <net code="48" name="/Stamp Tester/Q_GND" class="Default">
+      <node ref="J701" pin="6" pinfunction="Pin_6_6" pintype="passive"/>
+      <node ref="J702" pin="6" pinfunction="Pin_6_6" pintype="passive"/>
+      <node ref="J703" pin="1" pinfunction="Pin_1_1" pintype="passive"/>
+      <node ref="J704" pin="1" pinfunction="Pin_1_1" pintype="passive"/>
+    </net>
+    <net code="49" name="/Stamp Tester/Q_MISO" class="Default">
+      <node ref="J701" pin="2" pinfunction="Pin_2_2" pintype="passive"/>
+      <node ref="J702" pin="2" pinfunction="Pin_2_2" pintype="passive"/>
+    </net>
+    <net code="50" name="/Stamp Tester/Q_MOSI" class="Default">
+      <node ref="J701" pin="3" pinfunction="Pin_3_3" pintype="passive"/>
+      <node ref="J702" pin="3" pinfunction="Pin_3_3" pintype="passive"/>
+    </net>
+    <net code="51" name="/Stamp Tester/Q_SCK" class="Default">
+      <node ref="J701" pin="4" pinfunction="Pin_4_4" pintype="passive"/>
+      <node ref="J702" pin="4" pinfunction="Pin_4_4" pintype="passive"/>
+    </net>
+    <net code="52" name="/Stamp Tester/Q_SCL" class="Default">
+      <node ref="J703" pin="5" pinfunction="Pin_5_5" pintype="passive"/>
+      <node ref="J704" pin="5" pinfunction="Pin_5_5" pintype="passive"/>
+    </net>
+    <net code="53" name="/Stamp Tester/Q_SDA" class="Default">
+      <node ref="J703" pin="4" pinfunction="Pin_4_4" pintype="passive"/>
+      <node ref="J704" pin="4" pinfunction="Pin_4_4" pintype="passive"/>
+    </net>
+    <net code="54" name="/Stamp Tester/Q_~{CS}" class="Default">
+      <node ref="J701" pin="5" pinfunction="Pin_5_5" pintype="passive"/>
+      <node ref="J702" pin="5" pinfunction="Pin_5_5" pintype="passive"/>
+    </net>
+    <net code="55" name="/Timer/CAP1.3" class="Default">
+      <node ref="U601" pin="48" pinfunction="(CAP1.3/SDA1)P0.18_48" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="56" name="/Timer/SCL0" class="Default">
+      <node ref="U601" pin="18" pinfunction="(SCL0/CAP0.0)P0.2_18" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="57" name="/Timer/SDA0" class="Default">
+      <node ref="U601" pin="21" pinfunction="(SDA0/MAT0.0)P0.3_21" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="58" name="/Timer/XTAL1" class="Default">
+      <node ref="C611" pin="2" pintype="passive"/>
+      <node ref="U601" pin="11" pinfunction="XTAL1_11" pintype="input"/>
+      <node ref="Y601" pin="3" pinfunction="3_3" pintype="passive"/>
+    </net>
+    <net code="59" name="/Timer/XTAL2" class="Default">
+      <node ref="C612" pin="2" pintype="passive"/>
+      <node ref="U601" pin="12" pinfunction="XTAL2_12" pintype="output"/>
+      <node ref="Y601" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="60" name="/~{CE0}" class="Default">
+      <node ref="J101" pin="24" pinfunction="(~{SPI_CE0})_GPIO8_24" pintype="bidirectional"/>
+      <node ref="U102" pin="4" pinfunction="E1_4" pintype="input"/>
+      <node ref="U102" pin="5" pinfunction="E2_5" pintype="input"/>
+    </net>
+    <net code="61" name="/~{CS}_6D" class="Default">
+      <node ref="J104" pin="5" pinfunction="~{CS}_5" pintype="input"/>
+      <node ref="R101" pin="1" pinfunction="4_1" pintype="passive"/>
+      <node ref="U102" pin="15" pinfunction="O0_15" pintype="output"/>
+    </net>
+    <net code="62" name="/~{CS}_6D+" class="Default">
+      <node ref="D101" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R101" pin="8" pinfunction="5_8" pintype="passive"/>
+    </net>
+    <net code="63" name="/~{CS}_LPC" class="Default">
+      <node ref="R101" pin="3" pinfunction="4_3" pintype="passive"/>
+      <node ref="U102" pin="13" pinfunction="O2_13" pintype="output"/>
+      <node ref="U601" pin="28" pinfunction="(SSEL0/MAT2.0)P0.7_28" pintype="bidirectional"/>
+    </net>
+    <net code="64" name="/~{CS}_LPC+" class="Default">
+      <node ref="D104" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R101" pin="6" pinfunction="5_6" pintype="passive"/>
+    </net>
+    <net code="65" name="/~{CS}_PRES" class="Default">
+      <node ref="J105" pin="5" pinfunction="~{CS}_5" pintype="input"/>
+      <node ref="R101" pin="2" pinfunction="4_2" pintype="passive"/>
+      <node ref="U102" pin="14" pinfunction="O1_14" pintype="output"/>
+    </net>
+    <net code="66" name="/~{CS}_PRES+" class="Default">
+      <node ref="D103" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="R101" pin="7" pinfunction="5_7" pintype="passive"/>
+    </net>
+    <net code="67" name="/~{DRDY}_6D_ECHO" class="Default">
+      <node ref="R102" pin="4" pinfunction="4_4" pintype="passive"/>
+      <node ref="U601" pin="29" pinfunction="(TXD1/MAT2.1)P0.8_29" pintype="bidirectional"/>
+    </net>
+    <net code="68" name="/~{DRDY}_MAG_ECHO" class="Default">
+      <node ref="R102" pin="3" pinfunction="4_3" pintype="passive"/>
+      <node ref="U601" pin="30" pinfunction="(RXD1/MAT2.2)P0.9_30" pintype="bidirectional"/>
+    </net>
+    <net code="69" name="/~{PPS}_ECHO" class="Default">
+      <node ref="R101" pin="4" pinfunction="4_4" pintype="passive"/>
+      <node ref="U601" pin="41" pinfunction="(DTR1/MAT1.1)P0.13_41" pintype="bidirectional"/>
+    </net>
+    <net code="70" name="3V3" class="Default">
+      <node ref="J106" pin="13" pinfunction="3V3_13" pintype="power_in+no_connect"/>
+      <node ref="J106" pin="3" pinfunction="3V3_3" pintype="power_in+no_connect"/>
+    </net>
+    <net code="71" name="GND" class="Power">
+      <node ref="C116" pin="2" pintype="passive"/>
+      <node ref="C605" pin="2" pintype="passive"/>
+      <node ref="C611" pin="1" pintype="passive"/>
+      <node ref="C612" pin="1" pintype="passive"/>
+      <node ref="C617" pin="2" pintype="passive"/>
+      <node ref="C640" pin="2" pintype="passive"/>
+      <node ref="J101" pin="14" pinfunction="GND_14" pintype="passive"/>
+      <node ref="J101" pin="20" pinfunction="GND_20" pintype="passive"/>
+      <node ref="J101" pin="25" pinfunction="GND_25" pintype="passive"/>
+      <node ref="J101" pin="30" pinfunction="GND_30" pintype="passive"/>
+      <node ref="J101" pin="34" pinfunction="GND_34" pintype="passive"/>
+      <node ref="J101" pin="39" pinfunction="GND_39" pintype="passive"/>
+      <node ref="J101" pin="6" pinfunction="GND_6" pintype="passive"/>
+      <node ref="J101" pin="9" pinfunction="GND_9" pintype="passive"/>
+      <node ref="J102" pin="1" pinfunction="Pin_1_1" pintype="passive"/>
+      <node ref="J104" pin="6" pinfunction="GND_6" pintype="power_in"/>
+      <node ref="J104" pin="7" pinfunction="GND_7" pintype="power_in"/>
+      <node ref="J105" pin="6" pinfunction="GND_6" pintype="power_in"/>
+      <node ref="J105" pin="7" pinfunction="GND_7" pintype="power_in"/>
+      <node ref="J106" pin="1" pinfunction="GND_1" pintype="power_in"/>
+      <node ref="J106" pin="12" pinfunction="GND_12" pintype="power_in"/>
+      <node ref="R103" pin="3" pinfunction="4_3" pintype="passive"/>
+      <node ref="U102" pin="3" pinfunction="A2_3" pintype="input"/>
+      <node ref="U102" pin="8" pinfunction="GND_8" pintype="power_in"/>
+      <node ref="U601" pin="19" pinfunction="VSS_19" pintype="power_in"/>
+      <node ref="U601" pin="31" pinfunction="VSSA_31" pintype="power_in"/>
+      <node ref="U601" pin="43" pinfunction="VSS_43" pintype="power_in"/>
+      <node ref="U601" pin="7" pinfunction="VSS_7" pintype="power_in"/>
+      <node ref="Y601" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="Y601" pin="4" pinfunction="4_4" pintype="passive"/>
+    </net>
+    <net code="72" name="Net-(U301-REGOUT)" class="Default">
+      <node ref="C310" pin="1" pintype="passive"/>
+      <node ref="U301" pin="10" pinfunction="REGOUT_10" pintype="passive"/>
+    </net>
+    <net code="73" name="unconnected-(G703-D-Pad3)" class="Default">
+      <node ref="G703" pin="3" pinfunction="D_3" pintype="passive"/>
+    </net>
+    <net code="74" name="unconnected-(G703-G-Pad1)" class="Default">
+      <node ref="G703" pin="1" pinfunction="G_1" pintype="input"/>
+    </net>
+    <net code="75" name="unconnected-(G703-S-Pad2)" class="Default">
+      <node ref="G703" pin="2" pinfunction="S_2" pintype="passive"/>
+    </net>
+    <net code="76" name="unconnected-(J101-(ID_SC)_GPIO1-Pad28)" class="Default">
+      <node ref="J101" pin="28" pinfunction="(ID_SC)_GPIO1_28" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="77" name="unconnected-(J101-(ID_SD)_GPIO0-Pad27)" class="Default">
+      <node ref="J101" pin="27" pinfunction="(ID_SD)_GPIO0_27" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="78" name="unconnected-(J101-(MISO)_GPIO19-Pad35)" class="Default">
+      <node ref="J101" pin="35" pinfunction="(MISO)_GPIO19_35" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="79" name="unconnected-(J101-(PWM0)_GPIO12-Pad32)" class="Default">
+      <node ref="J101" pin="32" pinfunction="(PWM0)_GPIO12_32" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="80" name="unconnected-(J101-(PWM1)_GPIO13-Pad33)" class="Default">
+      <node ref="J101" pin="33" pinfunction="(PWM1)_GPIO13_33" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="81" name="unconnected-(J101-(SCL1)_GPIO3-Pad5)" class="Default">
+      <node ref="J101" pin="5" pinfunction="(SCL1)_GPIO3_5" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="82" name="unconnected-(J101-(SDA1)_GPIO2-Pad3)" class="Default">
+      <node ref="J101" pin="3" pinfunction="(SDA1)_GPIO2_3" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="83" name="unconnected-(J101-(~{SPI_CE1})_GPIO7-Pad26)" class="Default">
+      <node ref="J101" pin="26" pinfunction="(~{SPI_CE1})_GPIO7_26" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="84" name="unconnected-(J101-3V3-Pad17)" class="Default">
+      <node ref="J101" pin="17" pinfunction="3V3_17" pintype="power_out+no_connect"/>
+    </net>
+    <net code="85" name="unconnected-(J101-GPIO16-Pad36)" class="Default">
+      <node ref="J101" pin="36" pinfunction="GPIO16_36" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="86" name="unconnected-(J101-GPIO20-Pad38)" class="Default">
+      <node ref="J101" pin="38" pinfunction="GPIO20_38" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="87" name="unconnected-(J101-GPIO21-Pad40)" class="Default">
+      <node ref="J101" pin="40" pinfunction="GPIO21_40" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="88" name="unconnected-(J101-GPIO26-Pad37)" class="Default">
+      <node ref="J101" pin="37" pinfunction="GPIO26_37" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="89" name="unconnected-(J104-AD0-Pad9)" class="Default">
+      <node ref="J104" pin="9" pinfunction="AD0_9" pintype="input+no_connect"/>
+    </net>
+    <net code="90" name="unconnected-(J104-SCL-Pad11)" class="Default">
+      <node ref="J104" pin="11" pinfunction="SCL_11" pintype="input+no_connect"/>
+    </net>
+    <net code="91" name="unconnected-(J104-SDA-Pad10)" class="Default">
+      <node ref="J104" pin="10" pinfunction="SDA_10" pintype="open_collector+no_connect"/>
+    </net>
+    <net code="92" name="unconnected-(J105-AD0-Pad9)" class="Default">
+      <node ref="J105" pin="9" pinfunction="AD0_9" pintype="input+no_connect"/>
+    </net>
+    <net code="93" name="unconnected-(J105-Pad1)" class="Default">
+      <node ref="J105" pin="1" pintype="no_connect"/>
+    </net>
+    <net code="94" name="unconnected-(J105-Pad8)" class="Default">
+      <node ref="J105" pin="8" pintype="no_connect"/>
+    </net>
+    <net code="95" name="unconnected-(J105-SCL-Pad11)" class="Default">
+      <node ref="J105" pin="11" pinfunction="SCL_11" pintype="input+no_connect"/>
+    </net>
+    <net code="96" name="unconnected-(J105-SDA-Pad10)" class="Default">
+      <node ref="J105" pin="10" pinfunction="SDA_10" pintype="open_collector+no_connect"/>
+    </net>
+    <net code="97" name="unconnected-(J106-D+-Pad9)" class="Default">
+      <node ref="J106" pin="9" pinfunction="D+_9" pintype="input+no_connect"/>
+    </net>
+    <net code="98" name="unconnected-(J106-D--Pad8)" class="Default">
+      <node ref="J106" pin="8" pinfunction="D-_8" pintype="input+no_connect"/>
+    </net>
+    <net code="99" name="unconnected-(J106-INT-Pad19)" class="Default">
+      <node ref="J106" pin="19" pinfunction="INT_19" pintype="input+no_connect"/>
+    </net>
+    <net code="100" name="unconnected-(J106-SCL-Pad15)" class="Default">
+      <node ref="J106" pin="15" pinfunction="SCL_15" pintype="input+no_connect"/>
+    </net>
+    <net code="101" name="unconnected-(J106-SCL/CLK-Pad7)" class="Default">
+      <node ref="J106" pin="7" pinfunction="SCL/CLK_7" pintype="input+no_connect"/>
+    </net>
+    <net code="102" name="unconnected-(J106-SDA-Pad14)" class="Default">
+      <node ref="J106" pin="14" pinfunction="SDA_14" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="103" name="unconnected-(J106-TXR-Pad16)" class="Default">
+      <node ref="J106" pin="16" pinfunction="TXR_16" pintype="output+no_connect"/>
+    </net>
+    <net code="104" name="unconnected-(J106-W+-Pad11)" class="Default">
+      <node ref="J106" pin="11" pinfunction="W+_11" pintype="input+no_connect"/>
+    </net>
+    <net code="105" name="unconnected-(J106-W--Pad10)" class="Default">
+      <node ref="J106" pin="10" pinfunction="W-_10" pintype="input+no_connect"/>
+    </net>
+    <net code="106" name="unconnected-(J106-~{CS}-Pad4)" class="Default">
+      <node ref="J106" pin="4" pinfunction="~{CS}_4" pintype="input+no_connect"/>
+    </net>
+    <net code="107" name="unconnected-(J106-~{SAFEBOOT}-Pad18)" class="Default">
+      <node ref="J106" pin="18" pinfunction="~{SAFEBOOT}_18" pintype="input+no_connect"/>
+    </net>
+    <net code="108" name="unconnected-(J201-1V8-Pad1)" class="Default">
+      <node ref="J201" pin="1" pinfunction="1V8_1" pintype="no_connect"/>
+    </net>
+    <net code="109" name="unconnected-(J201-Pad8)" class="Default">
+      <node ref="J201" pin="8" pintype="no_connect"/>
+    </net>
+    <net code="110" name="unconnected-(R103-Pad4)" class="Default">
+      <node ref="R103" pin="4" pinfunction="4_4" pintype="passive+no_connect"/>
+    </net>
+    <net code="111" name="unconnected-(R103-Pad5)" class="Default">
+      <node ref="R103" pin="5" pinfunction="5_5" pintype="passive+no_connect"/>
+    </net>
+    <net code="112" name="unconnected-(U102-O3-Pad12)" class="Default">
+      <node ref="U102" pin="12" pinfunction="O3_12" pintype="output+no_connect"/>
+    </net>
+    <net code="113" name="unconnected-(U102-O4-Pad11)" class="Default">
+      <node ref="U102" pin="11" pinfunction="O4_11" pintype="output+no_connect"/>
+    </net>
+    <net code="114" name="unconnected-(U102-O5-Pad10)" class="Default">
+      <node ref="U102" pin="10" pinfunction="O5_10" pintype="output+no_connect"/>
+    </net>
+    <net code="115" name="unconnected-(U102-O6-Pad9)" class="Default">
+      <node ref="U102" pin="9" pinfunction="O6_9" pintype="output+no_connect"/>
+    </net>
+    <net code="116" name="unconnected-(U102-O7-Pad7)" class="Default">
+      <node ref="U102" pin="7" pinfunction="O7_7" pintype="output+no_connect"/>
+    </net>
+    <net code="117" name="unconnected-(U301-AUX_CL-Pad7)" class="Default">
+      <node ref="U301" pin="7" pinfunction="AUX_CL_7" pintype="output+no_connect"/>
+    </net>
+    <net code="118" name="unconnected-(U301-AUX_DA-Pad21)" class="Default">
+      <node ref="U301" pin="21" pinfunction="AUX_DA_21" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="119" name="unconnected-(U301-FSYNC-Pad11)" class="Default">
+      <node ref="U301" pin="11" pinfunction="FSYNC_11" pintype="input+no_connect"/>
+    </net>
+    <net code="120" name="unconnected-(U301-NC-Pad1)" class="Default">
+      <node ref="U301" pin="1" pinfunction="NC_1" pintype="no_connect"/>
+    </net>
+    <net code="121" name="unconnected-(U301-NC-Pad2)" class="Default">
+      <node ref="U301" pin="2" pinfunction="NC_2" pintype="no_connect"/>
+    </net>
+    <net code="122" name="unconnected-(U301-NC-Pad3)" class="Default">
+      <node ref="U301" pin="3" pinfunction="NC_3" pintype="no_connect"/>
+    </net>
+    <net code="123" name="unconnected-(U301-NC-Pad4)" class="Default">
+      <node ref="U301" pin="4" pinfunction="NC_4" pintype="no_connect"/>
+    </net>
+    <net code="124" name="unconnected-(U301-NC-Pad5)" class="Default">
+      <node ref="U301" pin="5" pinfunction="NC_5" pintype="no_connect"/>
+    </net>
+    <net code="125" name="unconnected-(U301-NC-Pad6)" class="Default">
+      <node ref="U301" pin="6" pinfunction="NC_6" pintype="no_connect"/>
+    </net>
+    <net code="126" name="unconnected-(U301-NC-Pad14)" class="Default">
+      <node ref="U301" pin="14" pinfunction="NC_14" pintype="no_connect"/>
+    </net>
+    <net code="127" name="unconnected-(U301-NC-Pad15)" class="Default">
+      <node ref="U301" pin="15" pinfunction="NC_15" pintype="no_connect"/>
+    </net>
+    <net code="128" name="unconnected-(U301-NC-Pad16)" class="Default">
+      <node ref="U301" pin="16" pinfunction="NC_16" pintype="no_connect"/>
+    </net>
+    <net code="129" name="unconnected-(U301-NC-Pad17)" class="Default">
+      <node ref="U301" pin="17" pinfunction="NC_17" pintype="no_connect"/>
+    </net>
+    <net code="130" name="unconnected-(U301-RESV-Pad19)" class="Default">
+      <node ref="U301" pin="19" pinfunction="RESV_19" pintype="no_connect"/>
+    </net>
+    <net code="131" name="unconnected-(U302-B5-Pad15)" class="Default">
+      <node ref="U302" pin="15" pinfunction="B5_15" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="132" name="unconnected-(U302-B7-Pad13)" class="Default">
+      <node ref="U302" pin="13" pinfunction="B7_13" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="133" name="unconnected-(U302-B8-Pad12)" class="Default">
+      <node ref="U302" pin="12" pinfunction="B8_12" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="134" name="unconnected-(U601-(AD0.0)P0.22-Pad32)" class="Default">
+      <node ref="U601" pin="32" pinfunction="(AD0.0)P0.22_32" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="135" name="unconnected-(U601-(AD0.1)P0.23-Pad33)" class="Default">
+      <node ref="U601" pin="33" pinfunction="(AD0.1)P0.23_33" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="136" name="unconnected-(U601-(AD0.2)P0.24-Pad34)" class="Default">
+      <node ref="U601" pin="34" pinfunction="(AD0.2)P0.24_34" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="137" name="unconnected-(U601-(AD0.6)P0.25-Pad38)" class="Default">
+      <node ref="U601" pin="38" pinfunction="(AD0.6)P0.25_38" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="138" name="unconnected-(U601-(AD0.7)P0.26-Pad39)" class="Default">
+      <node ref="U601" pin="39" pinfunction="(AD0.7)P0.26_39" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="139" name="unconnected-(U601-(DSR1/MAT1.0/AD0.5)P0.12-Pad37)" class="Default">
+      <node ref="U601" pin="37" pinfunction="(DSR1/MAT1.0/AD0.5)P0.12_37" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="140" name="unconnected-(U601-(EINT0/MAT0.2)P0.16-Pad46)" class="Default">
+      <node ref="U601" pin="46" pinfunction="(EINT0/MAT0.2)P0.16_46" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="141" name="unconnected-(U601-(MAT1.2/MISO1)P0.19-Pad1)" class="Default">
+      <node ref="U601" pin="1" pinfunction="(MAT1.2/MISO1)P0.19_1" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="142" name="unconnected-(U601-(MAT1.3/MOSI1)P0.20-Pad2)" class="Default">
+      <node ref="U601" pin="2" pinfunction="(MAT1.3/MOSI1)P0.20_2" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="143" name="unconnected-(U601-(RI1/EINT2)P0.15-Pad45)" class="Default">
+      <node ref="U601" pin="45" pinfunction="(RI1/EINT2)P0.15_45" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="144" name="unconnected-(U601-(SSEL1/MAT3.0)P0.21-Pad3)" class="Default">
+      <node ref="U601" pin="3" pinfunction="(SSEL1/MAT3.0)P0.21_3" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="145" name="unconnected-(U601-(TCK/CAP2.2)P0.29-Pad10)" class="Default">
+      <node ref="U601" pin="10" pinfunction="(TCK/CAP2.2)P0.29_10" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="146" name="unconnected-(U601-(TDI/MAT3.3)P0.30-Pad15)" class="Default">
+      <node ref="U601" pin="15" pinfunction="(TDI/MAT3.3)P0.30_15" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="147" name="unconnected-(U601-(TDO)P0.31-Pad16)" class="Default">
+      <node ref="U601" pin="16" pinfunction="(TDO)P0.31_16" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="148" name="unconnected-(U601-(TMS/CAP2.1)P0.28-Pad9)" class="Default">
+      <node ref="U601" pin="9" pinfunction="(TMS/CAP2.1)P0.28_9" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="149" name="unconnected-(U601-(~{TRST}/CAP2.0)P0.27-Pad8)" class="Default">
+      <node ref="U601" pin="8" pinfunction="(~{TRST}/CAP2.0)P0.27_8" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="150" name="unconnected-(U601-DBGSEL-Pad27)" class="Default">
+      <node ref="U601" pin="27" pinfunction="DBGSEL_27" pintype="input+no_connect"/>
+    </net>
+    <net code="151" name="unconnected-(U601-RTCK-Pad26)" class="Default">
+      <node ref="U601" pin="26" pinfunction="RTCK_26" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="152" name="unconnected-(U601-RTCX1-Pad20)" class="Default">
+      <node ref="U601" pin="20" pinfunction="RTCX1_20" pintype="input+no_connect"/>
+    </net>
+    <net code="153" name="unconnected-(U601-RTCX2-Pad25)" class="Default">
+      <node ref="U601" pin="25" pinfunction="RTCX2_25" pintype="output+no_connect"/>
+    </net>
+  </nets>
+</export>

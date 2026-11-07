@@ -84,8 +84,8 @@ _LCSC_FIELDS = frozenset({
     "jlc part no", "jlcpcb part no", "jlc pn", "jlcpcb pn", "spn", "spn1", "spn2",
     "supplier part", "supplier part number", "supplier part no", "supplier pn",
     "supplier 1 part number", "supplier part number 1"})
-_MPN_FIELDS = frozenset({
-    "mpn", "mpn1", "manufacturer part", "manufacturer part number", "manufacturer part no",
+_MPN_FIELDS = frozenset({  # "mp": the field SnapEDA symbols use
+    "mpn", "mpn1", "mp", "manufacturer part", "manufacturer part number", "manufacturer part no",
     "manufacturer partno", "manufacturer pn", "mfr part", "mfr part number", "mfr part no",
     "mfr pn", "mfg part number", "mfg pn", "part number", "partno", "part no", "pn", "p n"})
 _IGNORED_VALUE_WORDS = frozenset({"RES", "RESISTOR", "CAP", "CAPACITOR", "SMD", "MLCC", "CHIP",
@@ -798,7 +798,8 @@ def _variant_merge_findings(ctx: _Context) -> list[Finding]:
     findings = []
     for (kind, value, package), members in ctx.by_line.items():
         names = Counter(m.component.footprint for m in members)
-        if (len(names) < 2 or len({_PAD_VARIANT.sub("", fp.rsplit(":", 1)[-1]) for fp in names}) > 1
+        # Footprints that differ only in library name ("Resistor_SMD:" vs a project copy) are the same land pattern.
+        if (len({fp.rsplit(":", 1)[-1] for fp in names}) < 2 or len({_PAD_VARIANT.sub("", fp.rsplit(":", 1)[-1]) for fp in names}) > 1
                 or len({lcsc_code(m.component) for m in members} - {None}) > 1
                 or len({mpn_of(m.component) for m in members} - {None}) > 1
                 or any(not a.parsed.compatible(b.parsed) for a in members for b in members)):
