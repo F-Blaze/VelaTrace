@@ -14,12 +14,13 @@ from types import SimpleNamespace
 
 try:
     from PySide6.QtWidgets import QApplication
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QEvent, Qt
     from velatrace.ui import MainWindow, ComponentCard, FindingCard, RouteCanvas
 except ImportError:
     QApplication = None
 
 from velatrace.audit import AuditStage
+from velatrace.audit_rules import EXPERIMENTAL_RULES
 from velatrace.flags import Function, Flag
 from velatrace.models import Component
 from velatrace.provider import ProviderError
@@ -592,6 +593,38 @@ class UiTests(unittest.TestCase):
         self.assertFalse(card.details.isHidden())
         self.assertIn("Fix:", card.details.text())
 
+    def test_gate_experimental_note_and_setting(self):
+        from PySide6.QtWidgets import QLabel
+        from velatrace.ui import Settings, SettingsDialog
+        texts = lambda: [item.text() for item in self.window.card_container.findChildren(QLabel)]
+        note = "experimental notes hidden (Setup → Hide experimental checks is on)"
+        self.assertEqual(self.window.hidden_experimental, 0)  # shown by default
+        self.assertFalse([text for text in texts() if "experimental notes hidden" in text])
+        self.assertEqual(sum(card.finding.rule in EXPERIMENTAL_RULES for card in self.window.finding_cards), 2)
+        self.window.settings.hide_experimental = True  # a re-check with the box ticked hides them
+        self.window.findings = self.window.check_design(self.window.audit_snapshot)
+        self.window.render_cards()
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        self.assertEqual(self.window.hidden_experimental, 2)
+        self.assertIn(f"2 {note}", texts())
+        self.assertEqual(sum(card.finding.rule in EXPERIMENTAL_RULES for card in self.window.finding_cards), 0)
+        # Default off, saved, restored, and offered as a checkbox in Setup.
+        self.assertFalse(Settings().hide_experimental)
+        saved = Path(self.temp.name) / "gate.json"
+        Settings(hide_experimental=True).save(saved)
+        loaded = Settings()
+        loaded.load(saved)
+        self.assertTrue(loaded.hide_experimental)
+        saved.write_text('{"experimental": true}', encoding="utf-8")  # old key: ignored, checks stay shown
+        loaded = Settings()
+        loaded.load(saved)
+        self.assertFalse(loaded.hide_experimental)
+        dialog = SettingsDialog(Settings(), self.window)
+        self.assertFalse(dialog.experimental.isChecked())
+        self.assertEqual(dialog.experimental.text(), "Hide experimental checks")
+        dialog.experimental.setChecked(True)
+        self.assertTrue(dialog.value().hide_experimental)
+
     def test_finding_text_is_plain_and_locate_hook_is_reserved(self):
         from decimal import Decimal
         from PySide6.QtWidgets import QLabel, QPushButton
@@ -944,7 +977,7 @@ class SetupUsabilityTests(unittest.TestCase):
     def test_logos_with_duplicate_refs_do_not_block_the_checks(self):
         from velatrace.models import DesignSnapshot, Pin
         parts = (Component("REF**", "LOGO", "Symbol:Logo", ()), Component("REF**", "LOGO", "Symbol:Logo", ()),
-                 Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"))))
+                 Component("U1", "MCU", "Package_QFP:LQFP-32", (Pin("1", "+3V3"), Pin("2", "GND"), Pin("3", ""), Pin("4", ""))))
         with patch("velatrace.ui.read_xml_netlist", return_value=DesignSnapshot(parts, "fixture")):
             window = self.launch()
             self.read_fixture(window)
@@ -978,8 +1011,16 @@ class SetupUsabilityTests(unittest.TestCase):
 
     def test_disabled_inputs_look_disabled_and_window_is_on_screen(self):
         window = self.launch(accept=False)
-        for selector in ("QCheckBox:disabled", "QLineEdit:disabled", "QTextEdit:disabled", "QPushButton#primary:disabled"):
-            self.assertIn(selector, window.styleSheet())
+        # Controls are painted by VelaStyle from the palette: disabled text is the see-through disabled colour.
+        from PySide6.QtGui import QPalette
+        from velatrace.ui import theme_tokens
+        from velatrace.ui_style import qcolor
+        tokens = theme_tokens(window._dark)
+        disabled = qcolor(tokens["disabled"])
+        self.assertLess(disabled.alpha(), 255)
+        for role in (QPalette.ColorRole.Text, QPalette.ColorRole.WindowText, QPalette.ColorRole.ButtonText):
+            self.assertEqual(QApplication.palette().color(QPalette.ColorGroup.Disabled, role), disabled)
+            self.assertNotEqual(QApplication.palette().color(role), disabled)
         screen = QApplication.primaryScreen().availableGeometry()
         if window.frameGeometry().width() <= screen.width():
             self.assertLessEqual(window.frameGeometry().right(), screen.right())

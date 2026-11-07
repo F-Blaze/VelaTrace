@@ -1,0 +1,282 @@
+{
+ "slug": "shipometer-i2c-imu",
+ "reviewer": "opus-blind-hB",
+ "parts_reviewed": 58,
+ "issues": [
+  {
+   "rule": "other:rail_unsourced",
+   "severity": "error",
+   "refs": [
+    "J101",
+    "U102",
+    "U601",
+    "J104",
+    "J105",
+    "R103",
+    "C116",
+    "C617",
+    "C640"
+   ],
+   "nets": [
+    "+3V3",
+    "+3.3VP"
+   ],
+   "confidence": "high",
+   "evidence": "The Pi header 3V3 pin (J101 pin 1) is on net +3.3VP, which only reaches fan header J102. Every on-board 3.3 V load (74LVC138 U102, LPC2102 U601 VDD/VDDA/VBAT, IMU and pressure stamps J104/J105, pull-ups R103, LED anodes) is on the separate power net +3V3, which has no regulator or connection to any source.",
+   "why_it_matters": "As netlisted, the PCB leaves the whole 3.3 V logic rail unconnected (different power-symbol names = different nets)",
+   "time_or_money": "board does not power up; respin or bodge wire"
+  },
+  {
+   "rule": "other:rail_unsourced",
+   "severity": "error",
+   "refs": [
+    "U601",
+    "J104",
+    "C605"
+   ],
+   "nets": [
+    "+1V8"
+   ],
+   "confidence": "high",
+   "evidence": "+1V8 feeds LPC2102 VDD(1V8) core pin 5 and the ICM-20948 stamp 1V8 pin (J104 pin 1 -> ICM-20948 VDD/VDDIO and TXS0108E VCCA on the stamp), but no regulator or supply drives +1V8 anywhere in the design. LPC2101/2/3 require an external 1.8 V core supply.",
+   "why_it_matters": "Timer MCU core and IMU are unpowered",
+   "time_or_money": "add 1.8 V LDO; respin"
+  },
+  {
+   "rule": "other:mpn_value_mismatch",
+   "severity": "warning",
+   "refs": [
+    "R101",
+    "R102"
+   ],
+   "nets": [
+    "/~{CS}_6D+",
+    "/PPS-",
+    "/DRDY-",
+    "/BOOTSTRAP-"
+   ],
+   "confidence": "high",
+   "evidence": "Resistor arrays valued '330' but Part Number EXB-28V680JX / Digikey Y7680CT-ND are 68 ohm arrays; sheet note says 'Red, yellow, green, and white diodes get 68R'",
+   "why_it_matters": "Schematic value and purchased part disagree; LED currents differ 5x depending on which is fitted",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "other:gpio_overcurrent",
+   "severity": "warning",
+   "refs": [
+    "D129",
+    "D130",
+    "D141",
+    "D144",
+    "R101",
+    "R102",
+    "U601",
+    "J101"
+   ],
+   "nets": [
+    "/DRDY-",
+    "/DRDY_MAG-",
+    "/PPS-",
+    "/BOOTSTRAP-",
+    "/~{DRDY}_6D_ECHO",
+    "/~{DRDY}_MAG_ECHO",
+    "/~{PPS}_ECHO",
+    "/LPC_~{BOOTSTRAP}"
+   ],
+   "confidence": "medium",
+   "evidence": "With the specified 68 ohm arrays, red/yellow/green LEDs from +3V3 sink ~16-19 mA into LPC2102 P0.8/P0.9/P0.13 (spec IOL 4 mA) and Raspberry Pi GPIO24 (16 mA max)",
+   "why_it_matters": "Exceeds GPIO sink ratings; VOL rises and pins/Pi GPIO stressed",
+   "time_or_money": "use 330R as the value field says"
+  },
+  {
+   "rule": "other:strap_undefined_level",
+   "severity": "warning",
+   "refs": [
+    "R103",
+    "D144",
+    "R102",
+    "U601"
+   ],
+   "nets": [
+    "/LPC_~{BOOTSTRAP}",
+    "/BOOTSTRAP-",
+    "GND",
+    "+3V3"
+   ],
+   "confidence": "medium",
+   "evidence": "LPC2102 P0.14 (ISP-entry strap, sampled at reset) is pulled DOWN by R103 (pins 3-6, 10k to GND) while indicator LED D144 + R102 pulls it up from +3V3; with Pi GPIO24 high-Z the node settles ~1.5 V (between VIL 0.8 V and VIH 2.0 V)",
+   "why_it_matters": "Boot mode is undefined / LPC enters the ISP bootloader on every reset unless the Pi actively drives GPIO24",
+   "time_or_money": "functional risk"
+  },
+  {
+   "rule": "other:wrong_symbol",
+   "severity": "info",
+   "refs": [
+    "G703"
+   ],
+   "nets": [
+    "unconnected-(G703-G-Pad1)",
+    "unconnected-(G703-D-Pad3)",
+    "unconnected-(G703-S-Pad2)"
+   ],
+   "confidence": "medium",
+   "evidence": "OSHW logo G703 (Stamp Tester sheet) uses Device:Q_PMOS_GSD symbol with in_bom yes; BOM lists a 3-pin PMOS 'OSHW'",
+   "why_it_matters": "Spurious BOM line / unconnected-pin ERC noise",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "other:mpn_value_mismatch",
+   "severity": "info",
+   "refs": [
+    "U102"
+   ],
+   "nets": [
+    "+3V3"
+   ],
+   "confidence": "medium",
+   "evidence": "U102 value '74LS138' (5 V TTL, not 3.3 V capable) while Part Number is 74LVC138APW,118",
+   "why_it_matters": "Value field would mislead a substitute/assembler into a part that does not work at 3.3 V",
+   "time_or_money": "documentation"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "J301",
+    "J201",
+    "J104",
+    "J105"
+   ],
+   "nets": [
+    "/IMU/MOSI_3V3",
+    "/IMU/SCK_3V3",
+    "/Pressure/MOSI",
+    "/Pressure/SCK"
+   ],
+   "reason": "Stamp SDA/SCL pads are tied to the SPI MOSI/SCK nets; sensors run in SPI mode, no I2C bus is used (sheet note: 'Leave I2C free')"
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U601"
+   ],
+   "nets": [
+    "/Timer/SCL0",
+    "/Timer/SDA0",
+    "/Timer/CAP1.3"
+   ],
+   "reason": "Labels on no-connect-flagged LPC pins reserved for later use"
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U601"
+   ],
+   "nets": [
+    "unconnected-(U601-DBGSEL-Pad27)",
+    "unconnected-(U601-RTCX1-Pad20)"
+   ],
+   "reason": "DBGSEL has internal pull-down and RTC oscillator pins left open, both documented in sheet notes"
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "J106"
+   ],
+   "nets": [
+    "3V3",
+    "unconnected-(J106-~{SAFEBOOT}-Pad18)"
+   ],
+   "reason": "ZED-F9R breakout 3V3 pins are outputs of the breakout's own regulator; unused breakout I/O left open"
+  },
+  {
+   "rule": "other:unused_inputs_grounded",
+   "refs": [
+    "U302"
+   ],
+   "nets": [
+    "/IMU/Q_GND"
+   ],
+   "reason": "Unused TXS0108E A5/A7/A8 tied to GND with B side open is acceptable"
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U301"
+   ],
+   "nets": [
+    "Net-(U301-REGOUT)",
+    "/IMU/Q_1V8"
+   ],
+   "reason": "ICM-20948 REGOUT has C310 100 nF and VDD/VDDIO have C302/C308/C313"
+  },
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "D101",
+    "D103",
+    "D104",
+    "D106",
+    "D129",
+    "D130",
+    "D141",
+    "D144"
+   ],
+   "nets": [
+    "/~{CS}_6D+",
+    "/LPC_RESET-"
+   ],
+   "reason": "Every indicator LED has a series element in resistor arrays R101/R102"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J102",
+    "J101"
+   ],
+   "nets": [
+    "+5V",
+    "+3.3VP"
+   ],
+   "reason": "HAT header and fan header only pass the Raspberry Pi's own supplies"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J701",
+    "J702",
+    "J703",
+    "J704"
+   ],
+   "nets": [
+    "/Stamp Tester/Q_1V8",
+    "/Stamp Tester/Q_3V3"
+   ],
+   "reason": "Stamp-tester pass-through headers, powered by the host"
+  },
+  {
+   "rule": "other:hat_id_eeprom",
+   "refs": [
+    "J101"
+   ],
+   "nets": [
+    "unconnected-(J101-(ID_SD)_GPIO0-Pad27)",
+    "unconnected-(J101-(ID_SC)_GPIO1-Pad28)"
+   ],
+   "reason": "No HAT ID EEPROM; not required for a custom add-on board"
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D101",
+    "D129",
+    "D130",
+    "D141"
+   ],
+   "nets": [],
+   "reason": "LEDs valued by colour with full MPNs"
+  }
+ ],
+ "notes": "Raspberry Pi HAT with LPC2102 timestamp co-processor, 74LVC138 SPI CS decoder, ICM-20948 and BME280 SPI 'stamp' sub-boards (with TXS0108E 1.8V<->3.3V on the IMU stamp), ZED-F9R GNSS breakout. Despite the slug, no I2C bus is used. Biggest problems are power: +3V3 is a different net from the Pi's +3.3VP and +1V8 has no source."
+}

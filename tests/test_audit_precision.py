@@ -7,7 +7,7 @@ import pytest
 from velatrace.audit_rules import parse_resistance
 from velatrace.findings import Severity
 
-from test_audit_rules import cap, design, ic, led, part, res, rules
+from test_audit_rules import cap, design, exp4_spare, ic, led, part, res, rules
 
 
 # --- parse_resistance -------------------------------------------------------------------
@@ -55,7 +55,7 @@ def test_led_on_current_sink_driver_pin_is_fine():
 
 def typed_ic(ref, *pins, value="CHIP"):
     """pins: (number, net, name, type); GND pin added."""
-    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins)
+    return part(ref, value, "Package_SO:SOIC-8", ("99", "GND", "GND", "power_in"), *pins, *exp4_spare())
 
 
 def decoupling(*parts):
@@ -96,7 +96,7 @@ def test_cap_to_the_ics_own_power_or_ground_pin_net_decouples():
     stacked = typed_ic("U1", ("1", "/VDD1_0", "VDD1", "power_in"), ("2", "/VDD2_0", "VDD2", "power_in"))
     assert decoupling(stacked, cap("C1", "/VDD1_0", "/VDD2_0"), cap("C2", "/VDD2_0")) == []
     dw01 = part("U5", "DW01A", "Package_TO_SOT_SMD:SOT-23-6", ("6", "B-", "GND", "power_in"),
-                ("5", "Net-(U5-VCC)", "VCC", "power_in"))
+                ("5", "Net-(U5-VCC)", "VCC", "power_in"), *exp4_spare())
     assert decoupling(dw01, cap("C7", "Net-(U5-VCC)", "B-"), cap("C9", "+BATT")) == []
     assert decoupling(dw01, cap("C9", "+BATT")) == [(("U5",), ("Net-(U5-VCC)",))]
 
@@ -126,7 +126,7 @@ def test_addressable_leds_are_checked_like_ics():
 
 def test_single_pin_skips_no_connect_and_dangling_outputs():
     def one(kind):
-        return rules(design(ic("U1", ("3", "/GPIO23", "GPIO23", kind)), cap()), "net")
+        return rules(design(ic("U1", ("3", "/STATUS", "GPIO23", kind)), cap()), "net")
     assert [f.severity for f in one("bidirectional")] == [Severity.INFO]
     assert one("bidirectional+no_connect") == []
     assert one("output") == [] and one("power_out") == []
@@ -222,10 +222,13 @@ def test_isolated_converter_minus_counts_as_return():
     assert connector(conv, ldo, block) == [(("J5",), ("/mornsun_Vin",))]
 
 
-def test_battery_socket_fires_even_when_the_charger_drives_the_battery_net():
+def test_battery_socket_on_a_charger_battery_pin_is_managed_by_the_charger():
     pmic = typed_ic("U1", ("1", "+BATT", "VBAT", "power_out"), ("2", "VBUS", "VBUS", "power_in"))
     socket = header("J4", "+BATT", "GND", value="JST_PH_2")
-    assert connector(pmic, socket) == [(("J4",), ("+BATT",))]
+    assert connector(pmic, socket) == []
+    # The same net reaching a regulator input instead of a battery pin is still a power entry.
+    reg = typed_ic("U2", ("1", "+BATT", "VIN", "power_in"), ("2", "+3V3", "VOUT", "power_out"))
+    assert connector(reg, socket) == [(("J4",), ("+BATT",))]
 
 
 # --- I2C pull-ups -----------------------------------------------------------------------
@@ -237,7 +240,7 @@ def i2c_found(*parts):
 def test_missing_pullup_on_plug_in_board_is_info_but_on_board_controller_still_warns():
     eeprom = ic("U1", ("3", "/SDA", "SDA"), value="24C02")
     host = header("J1", "/SDA", "GND", "+3V3")
-    assert i2c_found(eeprom, host) == [("i2c.pullup.missing", Severity.INFO)]
+    assert i2c_found(eeprom, host) == []  # no master on this board: the host supplies the pull-ups
     mcu = ic("U2", ("5", "/SDA", "GPIO21"), value="ESP32-S3")
     # Beta rule: run_rules shows it as a note until a benchmark round proves it.
     assert i2c_found(eeprom, mcu, host) == [("i2c.pullup.missing", Severity.INFO)]
@@ -310,7 +313,7 @@ def test_txs_translator_has_internal_pullups_and_odd_named_rail_counts():
 # --- round 2: module rails, board interfaces, unused sideband/debug pins -----------------
 
 def test_dev_board_socket_is_a_module_not_an_ic_to_decouple():
-    kit = lambda footprint: part("U1", "ESP32-DevKitC", footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"))
+    kit = lambda footprint: part("U1", "ESP32-DevKitC", footprint, ("1", "+3V3", "VDD"), ("2", "GND", "GND"), *exp4_spare())
     assert decoupling(kit("Package_QFP:LQFP-32")) == [(("U1",), ("+3V3",))]
     assert decoupling(kit("PCM_Espressif:ESP32-DevKitC")) == []
     assert decoupling(kit("Vendor:Radio_Module_Castellated")) == []

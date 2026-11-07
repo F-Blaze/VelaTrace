@@ -26,7 +26,20 @@ from .candidate import read_board
 from .errors import ValidationError
 from .sexpr import children, parse
 from .stackup import homogeneous_delay_ps
-from .vela_board import _GRAPHICS, _first, _net_name, _outline
+from .vela_board import _GRAPHICS, _first, _outline
+from .vela_board import _net_name as _raw_net_name
+
+# KiCad escapes these characters in board-file net names; netlists and the IPC API use the plain text.
+_KICAD_ESCAPES = {"{slash}": "/", "{backslash}": "\\", "{colon}": ":", "{lt}": "<", "{gt}": ">",
+                  "{dblquote}": '"', "{quote}": "'", "{brace}": "{"}
+
+
+def _net_name(node, codes) -> str:
+    name = _raw_net_name(node, codes)
+    if "{" in name:
+        for escaped, plain in _KICAD_ESCAPES.items():
+            name = name.replace(escaped, plain)
+    return name
 from .vela_electrical import FR4_EPSILON_R, LayerModel, differential_pairs, layer_models
 
 PLANE_COVERAGE = 0.5   # share of the board outline's convex hull a layer's ground/supply fill must cover
@@ -267,6 +280,9 @@ _CLASS_HINTS = (("usb", "USB"), ("ethernet", "ETH"), ("hdmi", "HDMI"), ("lvds/mi
 # A net class that says "impedance controlled / differential" without naming the interface.
 _FAST_CLASS = re.compile(r"DIFF|PAIR|IMPED|HIGH.?SPEED|\bHS\b|Z\d{2,3}\b|\d{2,3}\s*(?:R|OHM|Ω)\b", re.IGNORECASE)
 _SLOW = re.compile(r"(?:^|_)(?:SPI\d?|I2C\d?|I2S\d?|UART\d?|SWD|JTAG|SCL|SDA)(?:_|$)")
+# Sideband control around a clock (PCIe CLKREQ#, CLK_nREQ, CLK_EN, CLK_OE): slow open-drain or logic-level
+# handshakes, never the clock itself. Not "CLK_N", which is the negative half of a clock pair.
+_SIDEBAND = re.compile(r"(?:^|[_\W])N?(?:REQ|EN|ENA|ENABLE|OE|STOP|STBY|SEL)\d?(?:#|_?N)?$")
 
 
 def interface_guess(net: str, net_class: str = "") -> str | None:
@@ -275,7 +291,8 @@ def interface_guess(net: str, net_class: str = "") -> str | None:
     A name guess: it never looks at parts or data rates, and returns None when unsure."""
     label = net_label(net)
     for interface, pattern in _INTERFACES:
-        if label and pattern.fullmatch(label) and not (interface == "clock" and _SLOW.search(label)):
+        if label and pattern.fullmatch(label) and not (
+                interface == "clock" and (_SLOW.search(label) or _SIDEBAND.search(label))):
             return interface
     upper = net_class.upper()
     for interface, word in _CLASS_HINTS:

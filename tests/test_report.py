@@ -81,3 +81,10 @@ def test_light_and_heavy_sections():
     assert html.index("Light checks") < html.index("Errors (1)") < html.index("Heavy checks") < html.index("Pair skew")
     assert "Light checks" not in render(sample()) and "Heavy checks" not in render(sample())
     assert "No issues found." in render(sample(), heavy=[])
+
+
+def test_gate_report_notes_hidden_experimental_findings():
+    note = "2 experimental notes hidden (Setup \u2192 Hide experimental checks is on)"
+    assert note in render(sample(), hidden_experimental=2)
+    assert note in render(sample(), hidden_experimental=2, heavy=[])
+    assert "experimental" not in render(sample())

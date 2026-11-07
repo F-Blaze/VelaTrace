@@ -84,8 +84,8 @@ _LCSC_FIELDS = frozenset({
     "jlc part no", "jlcpcb part no", "jlc pn", "jlcpcb pn", "spn", "spn1", "spn2",
     "supplier part", "supplier part number", "supplier part no", "supplier pn",
     "supplier 1 part number", "supplier part number 1"})
-_MPN_FIELDS = frozenset({
-    "mpn", "mpn1", "manufacturer part", "manufacturer part number", "manufacturer part no",
+_MPN_FIELDS = frozenset({  # "mp": the field SnapEDA symbols use
+    "mpn", "mpn1", "mp", "manufacturer part", "manufacturer part number", "manufacturer part no",
     "manufacturer partno", "manufacturer pn", "mfr part", "mfr part number", "mfr part no",
     "mfr pn", "mfg part number", "mfg pn", "part number", "partno", "part no", "pn", "p n"})
 _IGNORED_VALUE_WORDS = frozenset({"RES", "RESISTOR", "CAP", "CAPACITOR", "SMD", "MLCC", "CHIP",
@@ -95,6 +95,7 @@ _E24 = frozenset(Decimal(x) for x in (
     "3.9", "4.3", "4.7", "5.1", "5.6", "6.2", "6.8", "7.5", "8.2", "9.1"))
 _E12 = frozenset(Decimal(x) for x in ("1", "1.2", "1.5", "1.8", "2.2", "2.7", "3.3", "3.9",
                                       "4.7", "5.6", "6.8", "8.2"))
+_UNIT_LETTER = {"capacitor": "f", "inductor": "h"}
 _PULL_ROLES = frozenset({"pullup", "pulldown"})
 _ECONOMIC = ("basic", "preferred")  # no JLCPCB loading fee; anything else is Extended
 _MOVABLE_ROLES = _PULL_ROLES | {"decoupling"}
@@ -109,12 +110,17 @@ class ParsedValue:
     power: str | None = None
     other: frozenset[str] = frozenset()
 
-    def compatible(self, other: "ParsedValue", *, ignore_voltage: bool = False) -> bool:
+    def compatible(self, other: "ParsedValue", *, ignore_voltage: bool = False,
+                   ignore_ratings: bool = False) -> bool:
         """Same nominal part: no conflicting rating or unexplained extra text.
 
         A tolerance stated on only one side is a conflict ('10k 0.1%' is not a generic 10k).
         ignore_voltage is for members that share one MPN: the MPN fixes the real rating.
+        ignore_ratings goes further for one shared MPN/LCSC code: the order code fixes every
+        rating, so rating text that disagrees is only a spelling difference.
         """
+        if ignore_ratings:
+            return self.other == other.other
         if (self.tolerance is None) != (other.tolerance is None):
             return False
         pairs = [(self.tolerance, other.tolerance), (self.dielectric, other.dielectric),
@@ -250,14 +256,18 @@ def package_of(footprint: str) -> str | None:
     return match.group(1) if match else None
 
 
-def passive_kind(comp: Component) -> str | None:
+def passive_kind(comp: Component, *, trust_unit: bool = False) -> str | None:
+    """trust_unit: a value that spells its own unit ('4,7uF', '22uH') settles a reference that
+    disagrees with the footprint library (a CP symbol on a resistor footprint)."""
     declared = comp.kind.strip().casefold()
     reference = comp.reference.strip()
     for kind, pattern in _REF_KIND:
         if declared == kind or pattern.fullmatch(reference):
             library = comp.footprint.split(":", 1)[0].casefold()
             for other, _ in _REF_KIND:
-                if other != kind and library.startswith(other):
+                if other != kind and library.startswith(other) and not (
+                        trust_unit and kind in _UNIT_LETTER and re.search(
+                            rf"(?i)\d\s*[pnuµμm]?{_UNIT_LETTER[kind]}(?![a-z])", comp.value)):
                     return None  # reference and footprint library disagree
             return kind
     return None
@@ -274,8 +284,10 @@ def _fields(comp: Component, names: frozenset[str]) -> list[str]:
 
 
 def lcsc_code(comp: Component) -> str | None:
-    return next((value.upper() for value in _fields(comp, _LCSC_FIELDS)
-                 if re.fullmatch(r"C\d{1,9}", value.upper())), None)
+    """The LCSC/JLC order code, ignoring case and stray whitespace (' c25804 ', 'C 25804')."""
+    return next((code for code in (re.sub(r"\s+", "", value).upper()
+                                   for value in _fields(comp, _LCSC_FIELDS))
+                 if re.fullmatch(r"C\d{1,9}", code)), None)
 
 
 def mpn_of(comp: Component) -> str | None:
@@ -286,7 +298,7 @@ def mpn_of(comp: Component) -> str | None:
 def passives(snapshot: DesignSnapshot) -> list[Passive]:
     found = []
     for comp in snapshot.components:
-        kind = passive_kind(comp)
+        kind = passive_kind(comp, trust_unit=True)
         package = package_of(comp.footprint) if kind else None
         parsed = parse_value(comp.value, kind) if kind and package else None
         if parsed is not None:
@@ -462,22 +474,30 @@ def _normalise_findings(ctx: _Context) -> list[Finding]:
         ids = {lcsc_code(m.component) or mpn_of(m.component) for m in members}
         same_part = len(ids) == 1 and None not in ids
         if len(texts) < 2 or len(ids) > 1 or any(
-                not a.parsed.compatible(b.parsed, ignore_voltage=same_part)
+                not a.parsed.compatible(b.parsed, ignore_ratings=same_part)
                 for a in members for b in members):
             continue
         kind, value, package = line
         volts = {m.parsed.voltage for m in members} - {None}
-        # Never suggest a spelling that drops or lowers a stated voltage rating.
+        ratings = {(m.parsed.tolerance, m.parsed.voltage, m.parsed.dielectric, m.parsed.power)
+                   for m in members}
+        # A rating written on some members only, where the rated and unrated parts sit on rails of
+        # different voltage ('100n 50V' on +24V, '100n' on +3.3V), is a deliberate distinction.
+        rails = [{rail_voltage(ctx.role(m).rail) for m in members if (m.parsed.voltage is not None) == rated}
+                 - {None} for rated in (True, False)]
+        if not same_part and all(rails) and rails[0] != rails[1]:
+            continue
         canonical = max(texts, key=lambda text: (
+            # Never suggest a spelling that drops or lowers a stated voltage rating.
             same_part or not volts or parse_value(text, kind).voltage == max(volts),
             texts[text], text == format_value(value, kind)))
         spelled = "; ".join(f"{_ref_list(_refs(m for m in members if m.component.value.strip() == t))}"
                             f" = '{t}'" for t in sorted(texts))
         same = "Same value, package and ratings"
         write = f"Write the value as '{canonical}'"
-        if same_part and len(volts) > 1:
-            same = (f"All carry part number {next(iter(ids))}, yet the text states "
-                    f"{len(volts)} different voltage ratings; the part's datasheet rating is the real one")
+        if same_part and len(ratings) > 1:
+            same = (f"All carry part number {next(iter(ids))}, yet the text gives "
+                    f"{len(ratings)} different rating combinations; the part's datasheet rating is the real one")
             write = f"Write the value as '{format_value(value, kind)}' plus the part's real rating"
         findings.append(Finding(
             "bom.value_normalise", Severity.SAVING,
@@ -507,13 +527,14 @@ def _is_e12(value: Decimal) -> bool:
     return value > 0 and _mantissa(value) in _E12
 
 
-def _merge_cost(ctx: _Context, removed: list[tuple]) -> tuple[Decimal | None, str]:
+def _merge_cost(ctx: _Context, removed: list, extended: int | None = None) -> tuple[Decimal | None, str]:
     lines = len(removed)
     saved = f"{lines} fewer BOM line{'s' if lines != 1 else ''}/reel{'s' if lines != 1 else ''}"
     if ctx.db is None:
         return None, (f"{saved}. At JLCPCB each removed Extended line saves "
                       f"${JLC_EXTENDED_FEE_USD} per order; download the parts list to check.")
-    extended = sum(1 for line in removed if ctx.line_extended(line, ctx.by_line[line]))
+    if extended is None:
+        extended = sum(1 for line in removed if ctx.line_extended(line, ctx.by_line[line]))
     if not extended:
         return None, f"{saved}; the removed line(s) are Basic/Preferred, so no JLCPCB fee changes."
     return -_fee(extended, ctx.boards), f"{saved}; saves {_fee_text(extended, ctx.boards)}."
@@ -579,6 +600,146 @@ def _value_merge_findings(ctx: _Context) -> list[Finding]:
                 cost_delta=cost))
     return findings
 
+# Diode families where a higher grade is a drop-in for a lower one in the same package: same
+# pinout and current rating, only the reverse-voltage rating goes up (listed lowest first).
+# Schottky grades also trade a slightly higher forward drop and leakage for the voltage.
+_DIODE_FAMILIES = tuple(tuple(names.split()) for names in (
+    "1N4001 1N4002 1N4003 1N4004 1N4005 1N4006 1N4007",
+    "1N5400 1N5401 1N5402 1N5403 1N5404 1N5405 1N5406 1N5407 1N5408",
+    "1N5817 1N5818 1N5819",
+    "1N5820 1N5821 1N5822",
+    "UF4001 UF4002 UF4003 UF4004 UF4005 UF4006 UF4007",
+    "SS12 SS13 SS14 SS15 SS16",
+    "SS22 SS23 SS24 SS25 SS26",
+    "SS32 SS33 SS34 SS35 SS36",
+    "M1 M2 M3 M4 M5 M6 M7",
+    "S1A S1B S1D S1G S1J S1K S1M"))
+_DIODE_GRADE = {name: (family, rank) for family in _DIODE_FAMILIES for rank, name in enumerate(family)}
+_DIODE_SUFFIX = re.compile(r"(?:G|[-/(].*)?")  # 1N4004G, SS14-13-F, M7(SMA)
+
+
+def _diode_grade(comp: Component):
+    """(family, rank, grade) for a diode whose value names a listed grade, else None."""
+    if not re.fullmatch(r"D\d+[A-Za-z]?", comp.reference.strip()):
+        return None
+    text = re.sub(r"\s+", "", comp.value).upper()
+    for name in sorted(_DIODE_GRADE, key=len, reverse=True):
+        if text.startswith(name) and _DIODE_SUFFIX.fullmatch(text[len(name):]):
+            return (*_DIODE_GRADE[name], name)
+    return None
+
+
+def _diode_merge_findings(ctx: _Context) -> list[Finding]:
+    groups: dict[tuple, list[tuple]] = defaultdict(list)
+    for comp in ctx.snapshot.components:
+        if grade := _diode_grade(comp):
+            groups[(grade[0], comp.footprint.strip())].append((comp, *grade[1:]))
+    findings = []
+    for (family, footprint), members in groups.items():
+        grades = sorted({(rank, name) for _, rank, name in members})
+        if len(grades) < 2:
+            continue
+        top = grades[-1][1]  # the highest grade present: no rating ever goes down
+        moved = [comp for comp, _, name in members if name != top]
+        low = ", ".join(f"{name} ({', '.join(c.reference for c, _, n in members if n == name)})"
+                        for _, name in grades[:-1])
+        refs = tuple(sorted({c.reference for c, _, _ in members}, key=_ref_key))
+        findings.append(Finding(
+            "bom.value_merge", Severity.SAVING,
+            f"Diodes {', '.join(name for _, name in grades)} ({footprint.rsplit(':', 1)[-1]}) can "
+            f"share one grade: {top}",
+            refs=refs,
+            evidence=(f"{low} are lower grades of the {family[0]}-{family[-1]} family; {top} has the "
+                      f"same package, pinout and current rating with a higher reverse voltage. "
+                      f"{len(grades) - 1} fewer BOM line{'s' if len(grades) > 2 else ''}."),
+            fix=(f"Change {_ref_list(sorted((c.reference for c in moved), key=_ref_key))} to {top}. "
+                 "Check forward drop and leakage if the diode sits in a precision or low-voltage path.")))
+    return findings
+
+
+def _lcsc_hygiene_findings(ctx: _Context) -> list[Finding]:
+    padded = []
+    for comp in ctx.snapshot.components:
+        for name, value in comp.fields.items():
+            if (isinstance(name, str) and _field_key(name) in _LCSC_FIELDS and isinstance(value, str)
+                    and re.fullmatch(r"C\d{1,9}", re.sub(r"\s+", "", value).upper())
+                    and not re.fullmatch(r"C\d{1,9}", value)):
+                padded.append((comp.reference, value))
+    if not padded:
+        return []
+    padded.sort(key=lambda item: _ref_key(item[0]))
+    return [Finding(
+        "bom.value_normalise", Severity.INFO,
+        f"{len(padded)} part(s) have stray spaces or lower case in the LCSC field",
+        refs=tuple(ref for ref, _ in padded),
+        evidence="; ".join(f"{ref} = {text!r}" for ref, text in padded[:8])
+                 + (f"; +{len(padded) - 8} more" if len(padded) > 8 else "")
+                 + ". The same code written two ways can split one part into two BOM lines or fail "
+                   "the LCSC match when the BOM is uploaded.",
+        fix="Retype these fields as the bare code (for example 'C25804').")]
+
+
+def _lcsc_split_findings(ctx: _Context) -> list[Finding]:
+    """One kind/value/package/rating split over several order codes, no MPN to say why."""
+    findings = []
+    for line, members in ctx.by_line.items():
+        coded = [m for m in members if lcsc_code(m.component)]
+        by_code: dict[str, list[Passive]] = defaultdict(list)
+        for member in coded:
+            by_code[lcsc_code(member.component)].append(member)
+        ratings = {(m.parsed.tolerance, m.parsed.voltage, m.parsed.dielectric, m.parsed.power,
+                    m.parsed.other) for m in coded}
+        rails = {rail_voltage(ctx.role(m).rail) for m in coded} - {None}
+        if len(by_code) < 2 or len(ratings) > 1 or _voltages_apart(rails) or any(
+                mpn_of(m.component) for m in coded):
+            continue  # different ratings, rails or explicit MPNs are different parts on purpose
+        if ctx.db is not None:
+            known = [ctx.db.part(code) for code in by_code]
+            if all(known) and len({(p.voltage, p.dielectric, p.tolerance) for p in known}) > 1:
+                continue
+        economic = {code: ctx.db is not None and ctx.db.tier(code) in _ECONOMIC for code in by_code}
+        target = max(by_code, key=lambda code: (len(by_code[code]), economic[code], -int(code[1:])))
+        removed = [code for code in by_code if code != target]
+        cost, cost_note = _merge_cost(ctx, removed, extended=(
+            None if ctx.db is None else sum(1 for code in removed if not economic[code])))
+        kind, value, package = line
+        spelled = "; ".join(f"{_ref_list(_refs(by_code[code]), 5)} = {code}" for code in sorted(by_code))
+        findings.append(Finding(
+            "bom.value_merge", Severity.SAVING,
+            f"{_line_text(kind, value, package)} {kind}s use {len(by_code)} different LCSC codes",
+            refs=_refs(coded),
+            evidence=(f"{spelled}. Same value, package and stated ratings, no manufacturer part "
+                      f"number to explain the difference, so this is {len(by_code)} BOM lines for "
+                      f"one part. {cost_note}"),
+            fix=(f"Use {target} for all of them, after checking that its voltage, dielectric and "
+                 "tolerance suit every position."),
+            cost_delta=cost))
+    return findings
+
+
+def _voltages_apart(volts: Iterable[Decimal | None]) -> bool:
+    """Rail/rating voltages at least 2x apart with the top above the logic rails: a part chosen for
+    the higher one is deliberate (a 50 V cap on 24 V), whereas 1.1/3.3/5 V all share one part."""
+    known = [v for v in volts if v]
+    return bool(known) and max(known) > 6 and max(known) >= 2 * min(known)
+
+
+def _deliberate_package(ctx: _Context, members: list[Passive], target: list[Passive]) -> bool:
+    """A different package is on purpose when the parts sit on clearly different voltage (a stated
+    rating or rail 2x apart, see _voltages_apart) or a resistor may dissipate real power."""
+    mine, theirs = ctx.min_voltage(members), ctx.min_voltage(target)
+    if mine and theirs and _voltages_apart((mine, theirs)):
+        return True
+    return any(_power_resistor(ctx, m) for m in members)
+
+
+def _power_resistor(ctx: _Context, member: Passive) -> bool:
+    # ponytail: 0.1 W is a 0603 rating; a rail with no readable voltage counts as 10 V.
+    if member.kind != "resistor" or member.package not in {"1206", "1210", "1812", "2010", "2512"}:
+        return False
+    volts = rail_voltage(ctx.role(member).rail) or Decimal(10)
+    return volts * volts / member.parsed.value > Decimal("0.1") if member.parsed.value else True
+
 
 def _package_merge_findings(ctx: _Context) -> list[Finding]:
     findings = []
@@ -598,7 +759,8 @@ def _package_merge_findings(ctx: _Context) -> list[Finding]:
             ctx.db and ctx.equivalents(*line, members)), ctx.package_use[line[2]], line[2]))
         removed = sorted(line for line in lines if line != target and all(
             ctx.role(m).role in _MOVABLE_ROLES and m.parsed.power is None
-            for m in ctx.by_line[line]))
+            for m in ctx.by_line[line]) and not _deliberate_package(
+                ctx, ctx.by_line[line], ctx.by_line[target]))
         if not removed:
             continue
         moved = [m for line in removed for m in ctx.by_line[line]]
@@ -620,6 +782,39 @@ def _package_merge_findings(ctx: _Context) -> list[Finding]:
                              if volts else "; confirm the voltage rating in the new package")
                  + "."),
             cost_delta=cost))
+    return findings
+
+
+# KiCad's stock footprint variants differ only in pad geometry (..._Pad1.2x1.4mm_HandSolder): the same chip.
+_PAD_VARIANT = re.compile(r"(?:_Pad[\d.]+x[\d.]+mm)?(?:_?HandSolder)?$", re.IGNORECASE)
+
+
+def _variant_merge_findings(ctx: _Context) -> list[Finding]:
+    """One chip size, value and order code fitted with footprint variants (R_0805_2012Metric next to
+    ..._Pad1.20x1.40mm_HandSolder): footprint-keyed BOM grouping gives one line per variant.
+
+    Skipped when order codes or explicit MPNs differ (the LCSC-split / value-merge checks own that)
+    or the ratings disagree."""
+    findings = []
+    for (kind, value, package), members in ctx.by_line.items():
+        names = Counter(m.component.footprint for m in members)
+        # Footprints that differ only in library name ("Resistor_SMD:" vs a project copy) are the same land pattern.
+        if (len({fp.rsplit(":", 1)[-1] for fp in names}) < 2 or len({_PAD_VARIANT.sub("", fp.rsplit(":", 1)[-1]) for fp in names}) > 1
+                or len({lcsc_code(m.component) for m in members} - {None}) > 1
+                or len({mpn_of(m.component) for m in members} - {None}) > 1
+                or any(not a.parsed.compatible(b.parsed) for a in members for b in members)):
+            continue
+        target = max(names, key=lambda fp: (names[fp], not _PAD_VARIANT.search(fp.rsplit(":", 1)[-1]).group(0), fp))
+        moved = [m for m in members if m.component.footprint != target]
+        short = target.rsplit(":", 1)[-1]
+        findings.append(Finding(
+            "bom.package_merge", Severity.SAVING,
+            f"{format_value(value, kind)} {kind}s use {len(names)} {package} footprints: use {short}",
+            refs=_refs(members), nets=(),
+            evidence=(f"{_ref_list(_refs(moved))} use {', '.join(sorted(n.rsplit(':', 1)[-1] for n in names if n != target))}; "
+                      f"the rest use {short}. Same value, size and order code, so only the pad variant differs "
+                      "and footprint-keyed BOM grouping gives an extra BOM line."),
+            fix=f"Set the footprint of {_ref_list(_refs(moved))} to {short} (or use one variant for all)."))
     return findings
 
 
@@ -806,5 +1001,7 @@ def bom_findings(snapshot: DesignSnapshot, parts_db: "PartsDB | None" = None, *,
     if type(boards_per_order) is not int or not 1 <= boards_per_order <= 100_000:
         raise ValueError("boards_per_order must be an integer between 1 and 100000.")
     ctx = _Context(snapshot, parts_db, boards_per_order)
-    return (_normalise_findings(ctx) + _value_merge_findings(ctx) + _package_merge_findings(ctx)
+    return (_normalise_findings(ctx) + _lcsc_hygiene_findings(ctx) + _value_merge_findings(ctx)
+            + _diode_merge_findings(ctx) + _lcsc_split_findings(ctx) + _package_merge_findings(ctx)
+            + _variant_merge_findings(ctx)
             + _jlc_findings(ctx))

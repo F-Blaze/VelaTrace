@@ -1,0 +1,205 @@
+{
+ "slug": "avr-power-meter-v3",
+ "reviewer": "opus-blind-h3D",
+ "parts_reviewed": 50,
+ "issues": [
+  {
+   "rule": "value.missing",
+   "severity": "warning",
+   "refs": [
+    "R4"
+   ],
+   "nets": [
+    "Net-(U1-PV)",
+    "VCC"
+   ],
+   "confidence": "high",
+   "evidence": "R4 value is '?' in schematic and PCB. R4 is the only connection from VCC to U1 (ADM2486) pin 7 PV. Net-(U1-PV) has just R4.2 and U1.7.",
+   "why_it_matters": "On the ADM2486, PV (power valid) is an input that has to be driven high for the part to work. If R4 is unpopulated, or the assembler cannot pick a part for '?', PV floats and RS-485 may never work. The part needs a real value (for example 10k or 0R).",
+   "time_or_money": "functional risk / assembly query"
+  },
+  {
+   "rule": "value.missing",
+   "severity": "warning",
+   "refs": [
+    "R27",
+    "R28",
+    "R29"
+   ],
+   "nets": [
+    "/VBUS",
+    "Net-(U1-A)",
+    "Net-(U1-B)",
+    "GND1"
+   ],
+   "confidence": "medium",
+   "evidence": "R27 (VBUS to A, failsafe pull-up), R28 (A to B, termination) and R29 (B to GND1, failsafe pull-down) all have value '?' and no DNP flag.",
+   "why_it_matters": "The RS-485 bias and termination resistors probably depend on where the board sits on the bus. Even so, the BOM cannot be ordered or assembled without values or DNP marking. Fitting a 120R terminator on every node would load the bus.",
+   "time_or_money": "BOM ambiguity, 3 lines"
+  },
+  {
+   "rule": "other:bom.mpn_mismatch",
+   "severity": "warning",
+   "refs": [
+    "PS1"
+   ],
+   "nets": [
+    "Net-(J1-Pin_1)",
+    "Net-(PS1-+VOUT)"
+   ],
+   "confidence": "medium",
+   "evidence": "PS1 has schematic value 'B1209', MP field 'RO-0505S' (RECOM, 5V in / 5V out), symbol and footprint 'RO-0505S', and PCB value 'B1212S'. The input comes from J1 pin 1, which also feeds U7 (L78L05). That supply must therefore be at least 7V, nominally 12V.",
+   "why_it_matters": "The 12V bus supply would destroy an RO-0505S (5V input) ordered from the MP field. Three different part names for one isolated converter is a likely ordering mistake.",
+   "time_or_money": "wrong part / dead converter (~$3 + rework)"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "warning",
+   "refs": [
+    "J1",
+    "U7",
+    "PS1"
+   ],
+   "nets": [
+    "Net-(J1-Pin_1)",
+    "GND1"
+   ],
+   "confidence": "medium",
+   "evidence": "J1 is a field-wired screw terminal (V+, A, B, GND). Pin 1 V+ goes straight to U7 VI and PS1 +VIN with only 100n caps (C1, C6). There is no series diode or fuse, and no TVS on the supply. A and B have only the 50mA polyfuses F9 and F10, with no TVS.",
+   "why_it_matters": "A swapped V+/GND on a bus cable reverse-biases the 78L05 and the isolated DC-DC and can kill both. Long RS-485/power cables also pick up surges.",
+   "time_or_money": "~$0.10 diode/TVS vs dead board"
+  },
+  {
+   "rule": "bom.package_merge",
+   "severity": "saving",
+   "refs": [
+    "R1",
+    "R2",
+    "R7"
+   ],
+   "nets": [
+    "/SDA",
+    "/SCL",
+    "/ALERT"
+   ],
+   "confidence": "medium",
+   "evidence": "R1 is 4k7 in a 1206 footprint. R2 and R7 are 4k7 in 0805 (all other resistors are 0805). There is no electrical reason for a 1206 I2C pull-up.",
+   "why_it_matters": "One extra BOM line or reel for the same value.",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "other:pcb_sch_value_out_of_sync",
+   "severity": "info",
+   "refs": [
+    "PS1",
+    "R5",
+    "R6",
+    "C7"
+   ],
+   "nets": [
+    "/IN+",
+    "/IN-"
+   ],
+   "confidence": "low",
+   "evidence": "Values in the PCB differ from the schematic: PS1 B1212S vs B1209, R5 and R6 '?' vs '10', C7 '?' vs '100n'.",
+   "why_it_matters": "A BOM or position file generated from the PCB would carry stale or missing values. The copper is not affected.",
+   "time_or_money": "BOM confusion"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "unconnected-(U2-A0-Pad1)",
+    "unconnected-(U2-A1-Pad2)",
+    "unconnected-(U2-A2-Pad3)",
+    "unconnected-(U2-WP-Pad7)"
+   ],
+   "reason": "The FM24C64B F-RAM has internal pull-downs on A0-A2 and WP. Leaving them open gives address 0x50 with writes enabled, and 0x50 does not clash with the INA228 at 0x40."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "unconnected-(U1-DE-Pad10)",
+    "unconnected-(U1-Pad11)",
+    "unconnected-(U1-Pad14)"
+   ],
+   "reason": "ADM2486 pin 10 DE is a driver-enable status output, not an input, so leaving it open is fine. Pins 11 and 14 are NC."
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "VCC",
+    "/VBUS"
+   ],
+   "reason": "Both sides of the isolator are bypassed: VDD1 by C10 (about 2.8mm away) and VDD2 by C9 and C2 (about 2.6 and 3.6mm). Every other IC also has its own 100n within 5mm (U2-C4, U3-C5, U4-C3/C16)."
+  },
+  {
+   "rule": "other:split_ground",
+   "refs": [
+    "U1",
+    "PS1"
+   ],
+   "nets": [
+    "GND",
+    "GND1"
+   ],
+   "reason": "GND (meter/shunt side) and GND1 (RS-485 bus side) are deliberately separate. The only links are the ADM2486 isolation barrier and the isolated DC-DC PS1, with separate copper zones."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "J2"
+   ],
+   "nets": [
+    "Net-(J2-Pin_1)"
+   ],
+   "reason": "Both J2 terminals are on the same net on purpose: it is a sense or loop-through terminal routed to the JP5 voltage-sense selector."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U3",
+    "JP3",
+    "JP5"
+   ],
+   "nets": [
+    "Net-(JP3-B)"
+   ],
+   "reason": "INA228 VBUS is chosen by solder-jumper options JP3/JP5 (shunt high side or external J2) to suit how the meter is installed. It is open only before configuration."
+  },
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "D2",
+    "R56"
+   ],
+   "nets": [
+    "/LED1"
+   ],
+   "reason": "D2 is driven low-side by PA7 with R56 (220R) on the anode side, so current limiting is present."
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "R1",
+    "R2"
+   ],
+   "nets": [
+    "/SDA",
+    "/SCL"
+   ],
+   "reason": "4k7 pull-ups to VCC are present (R1, R2), and /ALERT has R7."
+  }
+ ],
+ "notes": "Pinouts checked against my datasheet knowledge: ATtiny1624 SOIC-14 (TWI on PB0/PB1, USART1 on PA1/PA2 for RS-485, USART0 TX on PB2 for debug), INA228 VSSOP-10, ADM2486 SOIC-16W, L78L05 TO-92 (1=OUT, 2=GND, 3=IN), RECOM/Mornsun SIP4 converter (1=-Vin, 2=+Vin, 3=-Vout, 4=+Vout). All match. RE and RTS tied together to PA4 is normal half-duplex. In the PCB, the zones are not filled in the file. Isolation spacing between bus-side and meter-side copper is at least ~2.4mm, limited by the converter's own SIP pin pitch, which is fine for functional isolation. I did not check creepage against any safety standard. I did not open the ADM2486 datasheet online; PV/DE pin semantics are from memory."
+}

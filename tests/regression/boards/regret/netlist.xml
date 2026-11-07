@@ -1,0 +1,2757 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<export version="E">
+  <design>
+    <source>regret.kicad_sch</source>
+    <date>2026-10-02T18:02:39</date>
+    <tool>Eeschema 10.0.6</tool>
+    <sheet number="1" name="/" tstamps="/">
+      <title_block>
+        <title/>
+        <company/>
+        <rev/>
+        <date/>
+        <source>regret.kicad_sch</source>
+        <comment number="1" value=""/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+        <comment number="5" value=""/>
+        <comment number="6" value=""/>
+        <comment number="7" value=""/>
+        <comment number="8" value=""/>
+        <comment number="9" value=""/>
+      </title_block>
+    </sheet>
+  </design>
+  <components>
+    <comp ref="BT1">
+      <value>Battery_Cell</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Device" part="Battery_Cell" description="Single-cell battery"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="battery cell"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>931876f1-fe62-4034-b07b-23af901bbb2c</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D1">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>24156fae-e549-49be-ab0b-0dbb1e72bd6e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D2">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>03bc5712-0f89-4ded-91a5-0e66e8a799cc</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D3">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>5be92add-be02-4402-92e1-ac1b56a9f63d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D4">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>2114084f-eba4-4a6f-ad77-3f35ced6ed8d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D5">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>74d38b40-8835-48d3-9bdf-faced6f2e5c8</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D6">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>e776d770-cada-491e-9c91-61bc7976f6a4</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D7">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>d4f369cd-b483-43cf-b5ad-821a8bf616e5</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D8">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>36ca0314-8395-4c37-867e-8c2cb3560dd8</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D9">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>480ecb4a-6aab-48db-b05a-9e2b4de621d4</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D10">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>3824661f-1972-4bcc-a51d-a374da0f807a</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D11">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>137e2487-dabf-4846-84b8-2c526383eca2</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D12">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>9d0bc6c1-67db-4081-8780-67367d6843c0</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D13">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>0154e465-f730-4013-b858-36a0fa708fea</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D14">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>6d7ad50f-3d9c-4e9a-a425-f6f246068d6e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D15">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>323952f6-344a-4bd3-98b7-d29c03a6e019</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D16">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>207515b1-c7d8-4840-9878-b6a0dae79f35</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D17">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>02beeffd-0535-41b4-bffd-74e9aa6312e0</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D18">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>74e7d031-9331-4a84-9466-351e6cbfb92c</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D19">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>96d0111b-8213-4803-8e43-e2b364bdb72f</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D20">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>3b7444d0-6f8a-4951-9b3a-d8622a2cb9f3</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D21">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>23a6f498-dfed-4d69-9549-9a7d4c58a1bd</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D22">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>77259841-ef0e-4ef4-b8c2-1c7101bd3880</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D23">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>82e65fff-c648-463d-b8db-97c0add5576e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D24">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>96dad8f9-315a-41d9-85c3-3fb0e495cc2b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D25">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>2b91577f-7967-4ac5-8676-8a99a5599d01</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D26">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>6f5820d5-50f0-4ca3-91ce-92cee73ad3e4</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D27">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>933a6c96-304d-4e5f-9b8b-9f78c5c6883d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D28">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>af4c5e97-7770-4ca5-98dd-6e789ab0046b</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D29">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>7e83d5cf-310a-4414-843b-c686788e6ab1</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D30">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>648219cc-e3e3-4141-8f18-a5c545d678fd</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D31">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>0495633c-cf71-41a8-9cef-0f3b73d06ca0</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D32">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>2863fd04-ba62-476e-969d-fafd1b5504e7</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D33">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>39f4646e-097a-434a-912b-05bb4cf19dd9</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D34">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>598a9ace-403d-4f86-a537-37e707c05e8a</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D35">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>1e901aed-4005-449a-82bf-e926e2c126b1</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D36">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>06d25aeb-9aec-4620-86a1-66d00fad0b3d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D37">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>c081c65b-deb3-47b5-acfa-e7896b95bd09</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D38">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>01ac5deb-9ad4-4a6b-945f-b63cd04fb0ce</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D39">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>a3ae8a13-a8be-4575-ad43-8d0db90ae776</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D40">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>afd9c08e-e5a8-4792-b676-724b1ee25f0d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D41">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>0fbba41a-13c2-4ce8-bc65-588dbf280640</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D42">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>eed4dde1-62fc-4ef0-ab03-b943d972e692</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D43">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>48d1964e-13c6-4b70-9c62-dd3fdbcb137d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D44">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>a073ac11-1a71-4846-b669-e08b9ce69433</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D45">
+      <value>SK6812</value>
+      <footprint>LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</footprint>
+      <datasheet>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</datasheet>
+      <fields>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="LED" part="SK6812" description="RGB LED with integrated controller"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="RGB LED NeoPixel addressable"/>
+      <property name="ki_fp_filters" value="LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>f08980a5-9e05-482b-a87b-56224496522e</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="1"/>
+            <pin num="4"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="D46">
+      <value>1N4148W</value>
+      <footprint>Diode_SMD:D_SOD-123</footprint>
+      <datasheet>https://www.vishay.com/docs/85748/1n4148w.pdf</datasheet>
+      <fields>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Diode" part="1N4148W" description="75V 0.15A Fast Switching Diode, SOD-123"/>
+      <property name="Sim.Device" value="D"/>
+      <property name="Sim.Pins" value="1=K 2=A"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="diode"/>
+      <property name="ki_fp_filters" value="D*SOD?123*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>520d203a-6ca0-4aae-8ac3-f444b83a00ec</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW1">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>5631bfc2-1805-4d26-9639-08770bf4c9da</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW2">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>15369e29-981d-426d-a83f-2f4fd3a503ca</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW3">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>24336728-dce6-4c90-bd3f-40c3ca403035</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW4">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>668f3486-b3e9-4cf7-a112-774e5b768d08</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW5">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>baf6863f-ce1b-44a4-b546-578180615a07</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW6">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>5767bc44-c0b5-4be1-8740-ea6f6de51082</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW7">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>2cef4749-3921-449c-90fd-9f46dc1a9608</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW8">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>f3e4f99a-863f-45c4-8890-75511329f9f7</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW9">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>6d0b3cd0-ef87-4d51-9cff-613a277fef7f</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW10">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>30f16ade-d725-499c-8f16-ec434be73982</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW11">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>eb575219-d49d-4eb7-b534-b881514aea3d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW12">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>3bdc6c9c-2ad0-419a-8819-33366471d0dd</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW13">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>242c1131-3ef7-43fa-9945-fee93884a3c7</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW14">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>c70de2e2-67f7-43d4-a92e-7828841a24b8</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW15">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>36837f9f-ab38-4676-99a8-3821e8c9ba15</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW16">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4b8c1568-a932-4225-a059-90b7213436ca</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW17">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>5da085be-3a5c-42f5-9222-04cbafd46471</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW18">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>85f6a42f-0089-41b1-85bf-957c50f80a10</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW19">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>aaa8829a-b798-495e-af6f-112cdb66d40c</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW20">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>1211de0d-9630-4007-8bf9-f02b7a1a8816</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW21">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4c4ae8e5-5b01-4632-a83f-90222cff3888</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW22">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>b71c76be-41ce-4f56-b16f-d48336a2fe66</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW23">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>95e4deda-1118-4fc6-9625-9b2f95900e78</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW24">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>a1fbbcc2-99e4-41e8-a7c8-e042c1c9c4c8</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW25">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>bab81585-5fb4-40cd-9728-3ef205bcbdbc</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW26">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4d381265-a23c-4482-bc78-4fd988716aeb</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW27">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>20e96233-7bbf-4a9c-90d0-5fd112a5e30c</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW28">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>1a984d09-ece0-4849-a785-c2af8dc1d16c</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW29">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>91898ae9-0e4d-4e92-9e12-97f68c7ca446</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW30">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>ce2e0878-6b4d-4796-8201-7896bb83dac8</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW31">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>f877aa89-67f9-4bca-acc1-c52e145cdd0d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW32">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>9af6b549-7c67-459f-a5a6-5872e5aaf295</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW33">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>4a22f8ad-ce81-4477-9d1a-96f545cefe31</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW34">
+      <value>SW_Push</value>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>829394f6-126e-4ea1-bea3-f46dd40f66ef</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW35">
+      <value>SW_SPDT</value>
+      <footprint>Button_Switch_SMD:SW_SPDT_PCM12</footprint>
+      <fields>
+        <field name="LCSC Part Number">C221841</field>
+        <field name="Footprint">Button_Switch_SMD:SW_SPDT_PCM12</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_SPDT" description="Switch, single pole double throw"/>
+      <property name="LCSC Part Number" value="C221841"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch single-pole double-throw spdt ON-ON"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>44ffdc98-88f5-44fe-9ef2-c94dab5dfedb</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="2"/>
+            <pin num="1"/>
+            <pin num="3"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="SW36">
+      <value>SW_Push</value>
+      <footprint>Button_Switch_SMD:Panasonic_EVQPUL_EVQPUC</footprint>
+      <fields>
+        <field name="LCSC Part Number">C79174</field>
+        <field name="Footprint">Button_Switch_SMD:Panasonic_EVQPUL_EVQPUC</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Switch" part="SW_Push" description="Push button switch, generic, two pins"/>
+      <property name="LCSC Part Number" value="C79174"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="switch normally-open pushbutton push-button"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>c0225846-c1c9-4841-916a-87b0538f769d</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U1">
+      <value>SeeeduinoXIAO_BLE</value>
+      <footprint>zaphod:Seeeduino XIAO-MOUDLE14P-2.54-21X17.8MM</footprint>
+      <fields>
+        <field name="Footprint">zaphod:Seeeduino XIAO-MOUDLE14P-2.54-21X17.8MM</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="Seeeduino XIAO" part="SeeeduinoXIAO_BLE" description=""/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>c68f7630-06d6-4e66-aeee-179a4d607816</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="7"/>
+            <pin num="15"/>
+            <pin num="16"/>
+            <pin num="14"/>
+            <pin num="13"/>
+            <pin num="12"/>
+            <pin num="11"/>
+            <pin num="10"/>
+            <pin num="9"/>
+            <pin num="8"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+    <comp ref="U2">
+      <value>74HC595</value>
+      <datasheet>http://www.ti.com/lit/ds/symlink/sn74hc595.pdf</datasheet>
+      <fields>
+        <field name="Footprint"/>
+        <field name="Datasheet">http://www.ti.com/lit/ds/symlink/sn74hc595.pdf</field>
+        <field name="Description"/>
+      </fields>
+      <libsource lib="74xx" part="74HC595" description="8-bit serial in/out Shift Register 3-State Outputs"/>
+      <property name="Sheetname" value="regret"/>
+      <property name="Sheetfile" value="regret.kicad_sch"/>
+      <property name="ki_keywords" value="HCMOS SR 3State"/>
+      <property name="ki_fp_filters" value="DIP*W7.62mm* SOIC*3.9x9.9mm*P1.27mm* TSSOP*4.4x5mm*P0.65mm* SOIC*5.3x10.2mm*P1.27mm* SOIC*7.5x10.3mm*P1.27mm*"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamps>f7bee726-00b6-4c23-9ce7-76c0d5b39494</tstamps>
+      <units>
+        <unit name="A">
+          <pins>
+            <pin num="14"/>
+            <pin num="11"/>
+            <pin num="10"/>
+            <pin num="12"/>
+            <pin num="13"/>
+            <pin num="16"/>
+            <pin num="8"/>
+            <pin num="15"/>
+            <pin num="1"/>
+            <pin num="2"/>
+            <pin num="3"/>
+            <pin num="4"/>
+            <pin num="5"/>
+            <pin num="6"/>
+            <pin num="7"/>
+            <pin num="9"/>
+          </pins>
+        </unit>
+      </units>
+    </comp>
+  </components>
+  <libparts>
+    <libpart lib="74xx" part="74HC595">
+      <description>8-bit serial in/out Shift Register 3-State Outputs</description>
+      <docs>http://www.ti.com/lit/ds/symlink/sn74hc595.pdf</docs>
+      <footprints>
+        <fp>DIP*W7.62mm*</fp>
+        <fp>SOIC*3.9x9.9mm*P1.27mm*</fp>
+        <fp>TSSOP*4.4x5mm*P0.65mm*</fp>
+        <fp>SOIC*5.3x10.2mm*P1.27mm*</fp>
+        <fp>SOIC*7.5x10.3mm*P1.27mm*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">U</field>
+        <field name="Value">74HC595</field>
+        <field name="Footprint"/>
+        <field name="Datasheet">http://www.ti.com/lit/ds/symlink/sn74hc595.pdf</field>
+        <field name="Description">8-bit serial in/out Shift Register 3-State Outputs</field>
+      </fields>
+      <pins>
+        <pin num="1" name="QB" type="tri_state"/>
+        <pin num="2" name="QC" type="tri_state"/>
+        <pin num="3" name="QD" type="tri_state"/>
+        <pin num="4" name="QE" type="tri_state"/>
+        <pin num="5" name="QF" type="tri_state"/>
+        <pin num="6" name="QG" type="tri_state"/>
+        <pin num="7" name="QH" type="tri_state"/>
+        <pin num="8" name="GND" type="power_in"/>
+        <pin num="9" name="QH'" type="output"/>
+        <pin num="10" name="~{SRCLR}" type="input"/>
+        <pin num="11" name="SRCLK" type="input"/>
+        <pin num="12" name="RCLK" type="input"/>
+        <pin num="13" name="~{OE}" type="input"/>
+        <pin num="14" name="SER" type="input"/>
+        <pin num="15" name="QA" type="tri_state"/>
+        <pin num="16" name="VCC" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="Device" part="Battery_Cell">
+      <description>Single-cell battery</description>
+      <fields>
+        <field name="Reference">BT</field>
+        <field name="Value">Battery_Cell</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Single-cell battery</field>
+      </fields>
+      <pins>
+        <pin num="1" name="+" type="passive"/>
+        <pin num="2" name="-" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Diode" part="1N4148W">
+      <description>75V 0.15A Fast Switching Diode, SOD-123</description>
+      <docs>https://www.vishay.com/docs/85748/1n4148w.pdf</docs>
+      <footprints>
+        <fp>D*SOD?123*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">D</field>
+        <field name="Value">1N4148W</field>
+        <field name="Footprint">Diode_SMD:D_SOD-123</field>
+        <field name="Datasheet">https://www.vishay.com/docs/85748/1n4148w.pdf</field>
+        <field name="Description">75V 0.15A Fast Switching Diode, SOD-123</field>
+        <field name="Sim.Device">D</field>
+        <field name="Sim.Pins">1=K 2=A</field>
+      </fields>
+      <pins>
+        <pin num="1" name="K" type="passive"/>
+        <pin num="2" name="A" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="LED" part="SK6812">
+      <description>RGB LED with integrated controller</description>
+      <docs>https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</docs>
+      <footprints>
+        <fp>LED*SK6812*PLCC*5.0x5.0mm*P3.2mm*</fp>
+      </footprints>
+      <fields>
+        <field name="Reference">D</field>
+        <field name="Value">SK6812</field>
+        <field name="Footprint">LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm</field>
+        <field name="Datasheet">https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf</field>
+        <field name="Description">RGB LED with integrated controller</field>
+      </fields>
+      <pins>
+        <pin num="1" name="VSS" type="power_in"/>
+        <pin num="2" name="DIN" type="input"/>
+        <pin num="3" name="VDD" type="power_in"/>
+        <pin num="4" name="DOUT" type="output"/>
+      </pins>
+    </libpart>
+    <libpart lib="Seeeduino XIAO" part="SeeeduinoXIAO_BLE">
+      <fields>
+        <field name="Reference">U1</field>
+        <field name="Value">SeeeduinoXIAO_BLE</field>
+        <field name="Footprint">zaphod:Seeeduino XIAO-MOUDLE14P-2.54-21X17.8MM</field>
+        <field name="Datasheet"/>
+        <field name="Description"/>
+      </fields>
+      <pins>
+        <pin num="1" name="PA02_A0_D0" type="bidirectional"/>
+        <pin num="2" name="PA4_A1_D1" type="bidirectional"/>
+        <pin num="3" name="PA10_A2_D2" type="bidirectional"/>
+        <pin num="4" name="PA11_A3_D3" type="bidirectional"/>
+        <pin num="5" name="PA8_A4_D4_SDA" type="bidirectional"/>
+        <pin num="6" name="PA9_A5_D5_SCL" type="bidirectional"/>
+        <pin num="7" name="PB08_A6_D6_TX" type="bidirectional"/>
+        <pin num="8" name="PB09_A7_D7_RX" type="bidirectional"/>
+        <pin num="9" name="PA7_A8_D8_SCK" type="bidirectional"/>
+        <pin num="10" name="PA5_A9_D9_MISO" type="bidirectional"/>
+        <pin num="11" name="PA6_A10_D10_MOSI" type="bidirectional"/>
+        <pin num="12" name="3V3" type="power_out"/>
+        <pin num="13" name="GND" type="power_out"/>
+        <pin num="14" name="5V" type="power_out"/>
+        <pin num="15" name="RESET" type="input"/>
+        <pin num="16" name="BAT+" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="Switch" part="SW_Push">
+      <description>Push button switch, generic, two pins</description>
+      <fields>
+        <field name="Reference">SW</field>
+        <field name="Value">SW_Push</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Push button switch, generic, two pins</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="passive"/>
+        <pin num="2" name="2" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="Switch" part="SW_SPDT">
+      <description>Switch, single pole double throw</description>
+      <fields>
+        <field name="Reference">SW</field>
+        <field name="Value">SW_SPDT</field>
+        <field name="Footprint"/>
+        <field name="Datasheet"/>
+        <field name="Description">Switch, single pole double throw</field>
+      </fields>
+      <pins>
+        <pin num="1" name="A" type="passive"/>
+        <pin num="2" name="B" type="passive"/>
+        <pin num="3" name="C" type="passive"/>
+      </pins>
+    </libpart>
+  </libparts>
+  <libraries>
+    <library logical="Seeeduino XIAO">
+      <uri>${KIPRJMOD}/Seeeduino XIAO.kicad_sym</uri>
+    </library>
+  </libraries>
+  <nets>
+    <net code="1" name="+3V3" class="Default">
+      <node ref="U1" pin="12" pinfunction="3V3_12" pintype="power_out"/>
+      <node ref="U2" pin="10" pinfunction="~{SRCLR}_10" pintype="input"/>
+      <node ref="U2" pin="16" pinfunction="VCC_16" pintype="power_in"/>
+    </net>
+    <net code="2" name="+5V" class="Default">
+      <node ref="D36" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D37" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D38" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D39" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D40" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D41" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D42" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D43" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D44" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D45" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D46" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="U1" pin="14" pinfunction="5V_14" pintype="power_out"/>
+    </net>
+    <net code="3" name="GND" class="Power">
+      <node ref="D35" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D36" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D37" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D38" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D39" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D40" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D41" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D42" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D43" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D44" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="D45" pin="1" pinfunction="VSS_1" pintype="power_in"/>
+      <node ref="SW35" pin="2" pinfunction="B_2" pintype="passive"/>
+      <node ref="SW36" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U1" pin="13" pinfunction="GND_13" pintype="power_out"/>
+      <node ref="U2" pin="13" pinfunction="~{OE}_13" pintype="input"/>
+      <node ref="U2" pin="8" pinfunction="GND_8" pintype="power_in"/>
+    </net>
+    <net code="4" name="MISO" class="Default">
+      <node ref="U1" pin="10" pinfunction="PA5_A9_D9_MISO_10" pintype="bidirectional"/>
+      <node ref="U2" pin="12" pinfunction="RCLK_12" pintype="input"/>
+    </net>
+    <net code="5" name="MOSI" class="Default">
+      <node ref="U1" pin="11" pinfunction="PA6_A10_D10_MOSI_11" pintype="bidirectional"/>
+      <node ref="U2" pin="14" pinfunction="SER_14" pintype="input"/>
+    </net>
+    <net code="6" name="Net-(BT1--)" class="Default">
+      <node ref="BT1" pin="2" pinfunction="-_2" pintype="passive"/>
+      <node ref="SW35" pin="1" pinfunction="A_1" pintype="passive"/>
+    </net>
+    <net code="7" name="Net-(D1-A)" class="Default">
+      <node ref="D1" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW1" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="8" name="Net-(D2-A)" class="Default">
+      <node ref="D2" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW2" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="9" name="Net-(D3-A)" class="Default">
+      <node ref="D3" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW3" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="10" name="Net-(D4-A)" class="Default">
+      <node ref="D4" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW4" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="11" name="Net-(D5-A)" class="Default">
+      <node ref="D5" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW5" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="12" name="Net-(D6-A)" class="Default">
+      <node ref="D6" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW6" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="13" name="Net-(D7-A)" class="Default">
+      <node ref="D7" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW7" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="14" name="Net-(D8-A)" class="Default">
+      <node ref="D8" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW8" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="15" name="Net-(D9-A)" class="Default">
+      <node ref="D9" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW9" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="16" name="Net-(D10-A)" class="Default">
+      <node ref="D10" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW10" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="17" name="Net-(D11-A)" class="Default">
+      <node ref="D11" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW11" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="18" name="Net-(D12-A)" class="Default">
+      <node ref="D12" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW12" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="19" name="Net-(D13-A)" class="Default">
+      <node ref="D13" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW13" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="20" name="Net-(D14-A)" class="Default">
+      <node ref="D14" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW14" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="21" name="Net-(D15-A)" class="Default">
+      <node ref="D15" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW15" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="22" name="Net-(D16-A)" class="Default">
+      <node ref="D16" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW16" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="23" name="Net-(D17-A)" class="Default">
+      <node ref="D17" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW17" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="24" name="Net-(D18-A)" class="Default">
+      <node ref="D18" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW18" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="25" name="Net-(D19-A)" class="Default">
+      <node ref="D19" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW19" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="26" name="Net-(D20-A)" class="Default">
+      <node ref="D20" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW20" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="27" name="Net-(D21-A)" class="Default">
+      <node ref="D21" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW21" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="28" name="Net-(D22-A)" class="Default">
+      <node ref="D22" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW22" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="29" name="Net-(D23-A)" class="Default">
+      <node ref="D23" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW23" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="30" name="Net-(D24-A)" class="Default">
+      <node ref="D24" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW24" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="31" name="Net-(D25-A)" class="Default">
+      <node ref="D25" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW25" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="32" name="Net-(D26-A)" class="Default">
+      <node ref="D26" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW26" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="33" name="Net-(D27-A)" class="Default">
+      <node ref="D27" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW27" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="34" name="Net-(D28-A)" class="Default">
+      <node ref="D28" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW28" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="35" name="Net-(D29-A)" class="Default">
+      <node ref="D29" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW29" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="36" name="Net-(D30-A)" class="Default">
+      <node ref="D30" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW30" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="37" name="Net-(D31-A)" class="Default">
+      <node ref="D31" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW31" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="38" name="Net-(D32-A)" class="Default">
+      <node ref="D32" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW32" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="39" name="Net-(D33-A)" class="Default">
+      <node ref="D33" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW33" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="40" name="Net-(D34-A)" class="Default">
+      <node ref="D34" pin="2" pinfunction="A_2" pintype="passive"/>
+      <node ref="SW34" pin="1" pinfunction="1_1" pintype="passive"/>
+    </net>
+    <net code="41" name="Net-(D35-DOUT)" class="Default">
+      <node ref="D35" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D36" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="42" name="Net-(D35-VDD)" class="Default">
+      <node ref="D35" pin="3" pinfunction="VDD_3" pintype="power_in"/>
+      <node ref="D46" pin="1" pinfunction="K_1" pintype="passive"/>
+    </net>
+    <net code="43" name="Net-(D36-DOUT)" class="Default">
+      <node ref="D36" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D37" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="44" name="Net-(D37-DOUT)" class="Default">
+      <node ref="D37" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D38" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="45" name="Net-(D38-DOUT)" class="Default">
+      <node ref="D38" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D39" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="46" name="Net-(D39-DOUT)" class="Default">
+      <node ref="D39" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D40" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="47" name="Net-(D40-DOUT)" class="Default">
+      <node ref="D40" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D41" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="48" name="Net-(D41-DOUT)" class="Default">
+      <node ref="D41" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D42" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="49" name="Net-(D42-DOUT)" class="Default">
+      <node ref="D42" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D43" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="50" name="Net-(D43-DOUT)" class="Default">
+      <node ref="D43" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D44" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="51" name="Net-(D44-DOUT)" class="Default">
+      <node ref="D44" pin="4" pinfunction="DOUT_4" pintype="output"/>
+      <node ref="D45" pin="2" pinfunction="DIN_2" pintype="input"/>
+    </net>
+    <net code="52" name="SCK" class="Default">
+      <node ref="U1" pin="9" pinfunction="PA7_A8_D8_SCK_9" pintype="bidirectional"/>
+      <node ref="U2" pin="11" pinfunction="SRCLK_11" pintype="input"/>
+    </net>
+    <net code="53" name="bat+" class="Default">
+      <node ref="BT1" pin="1" pinfunction="+_1" pintype="passive"/>
+      <node ref="U1" pin="16" pinfunction="BAT+_16" pintype="power_in"/>
+    </net>
+    <net code="54" name="col0" class="Default">
+      <node ref="D1" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D11" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D18" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D19" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D20" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D6" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="U1" pin="1" pinfunction="PA02_A0_D0_1" pintype="bidirectional"/>
+    </net>
+    <net code="55" name="col1" class="Default">
+      <node ref="D12" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D2" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D21" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D22" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D23" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D7" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="U1" pin="2" pinfunction="PA4_A1_D1_2" pintype="bidirectional"/>
+    </net>
+    <net code="56" name="col2" class="Default">
+      <node ref="D13" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D24" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D25" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D26" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D3" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D8" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="U1" pin="3" pinfunction="PA10_A2_D2_3" pintype="bidirectional"/>
+    </net>
+    <net code="57" name="col3" class="Default">
+      <node ref="D14" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D16" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D27" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D28" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D29" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D30" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D4" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D9" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="U1" pin="4" pinfunction="PA11_A3_D3_4" pintype="bidirectional"/>
+    </net>
+    <net code="58" name="col4" class="Default">
+      <node ref="D10" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D15" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D17" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D31" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D32" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D33" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D34" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="D5" pin="1" pinfunction="K_1" pintype="passive"/>
+      <node ref="U1" pin="5" pinfunction="PA8_A4_D4_SDA_5" pintype="bidirectional"/>
+    </net>
+    <net code="59" name="led" class="Default">
+      <node ref="D35" pin="2" pinfunction="DIN_2" pintype="input"/>
+      <node ref="U1" pin="6" pinfunction="PA9_A5_D5_SCL_6" pintype="bidirectional"/>
+    </net>
+    <net code="60" name="row0" class="Default">
+      <node ref="SW1" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW2" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW3" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW4" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW5" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="7" pinfunction="QH_7" pintype="tri_state"/>
+    </net>
+    <net code="61" name="row1" class="Default">
+      <node ref="SW10" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW6" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW7" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW8" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW9" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="6" pinfunction="QG_6" pintype="tri_state"/>
+    </net>
+    <net code="62" name="row2" class="Default">
+      <node ref="SW11" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW12" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW13" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW14" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW15" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="5" pinfunction="QF_5" pintype="tri_state"/>
+    </net>
+    <net code="63" name="row3" class="Default">
+      <node ref="SW16" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW17" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="4" pinfunction="QE_4" pintype="tri_state"/>
+    </net>
+    <net code="64" name="row4" class="Default">
+      <node ref="SW18" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW21" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW24" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW27" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW31" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="3" pinfunction="QD_3" pintype="tri_state"/>
+    </net>
+    <net code="65" name="row5" class="Default">
+      <node ref="SW19" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW22" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW25" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW28" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW32" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="2" pinfunction="QC_2" pintype="tri_state"/>
+    </net>
+    <net code="66" name="row6" class="Default">
+      <node ref="SW20" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW23" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW26" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW29" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW33" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="1" pinfunction="QB_1" pintype="tri_state"/>
+    </net>
+    <net code="67" name="row7" class="Default">
+      <node ref="SW30" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="SW34" pin="2" pinfunction="2_2" pintype="passive"/>
+      <node ref="U2" pin="15" pinfunction="QA_15" pintype="tri_state"/>
+    </net>
+    <net code="68" name="rst" class="Default">
+      <node ref="SW36" pin="1" pinfunction="1_1" pintype="passive"/>
+      <node ref="U1" pin="15" pinfunction="RESET_15" pintype="input"/>
+    </net>
+    <net code="69" name="unconnected-(D45-DOUT-Pad4)" class="Default">
+      <node ref="D45" pin="4" pinfunction="DOUT_4" pintype="output+no_connect"/>
+    </net>
+    <net code="70" name="unconnected-(SW35-C-Pad3)" class="Default">
+      <node ref="SW35" pin="3" pinfunction="C_3" pintype="passive+no_connect"/>
+    </net>
+    <net code="71" name="unconnected-(U1-PB08_A6_D6_TX-Pad7)" class="Default">
+      <node ref="U1" pin="7" pinfunction="PB08_A6_D6_TX_7" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="72" name="unconnected-(U1-PB09_A7_D7_RX-Pad8)" class="Default">
+      <node ref="U1" pin="8" pinfunction="PB09_A7_D7_RX_8" pintype="bidirectional+no_connect"/>
+    </net>
+    <net code="73" name="unconnected-(U2-QH'-Pad9)" class="Default">
+      <node ref="U2" pin="9" pinfunction="QH'_9" pintype="output+no_connect"/>
+    </net>
+  </nets>
+</export>

@@ -13,8 +13,8 @@ _SPEC.loader.exec_module(build_pcm_zip)
 
 
 def test_pcm_zip_layout_is_valid_and_reproducible(tmp_path):
-    first = build_pcm_zip.build("v0.0.0-test", "0.1.0", tmp_path / "a", allow_dirty=True)
-    second = build_pcm_zip.build("v0.0.0-test", "0.1.0", tmp_path / "b", allow_dirty=True)
+    first = build_pcm_zip.build("v0.0.0-test", "0.1.1", tmp_path / "a", allow_dirty=True)
+    second = build_pcm_zip.build("v0.0.0-test", "0.1.1", tmp_path / "b", allow_dirty=True)
     assert first["sha256"] == second["sha256"]
     assert hashlib.sha256(first["pcm_zip"].read_bytes()).hexdigest() == first["sha256"]
     assert first["demo_sha256"] == second["demo_sha256"]

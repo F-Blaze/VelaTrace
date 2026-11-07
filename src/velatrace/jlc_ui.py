@@ -19,10 +19,10 @@ from .bom import JLC_EXTENDED_FEE_USD, _ref_list, format_value, lcsc_code, parse
 from .errors import VelaTraceError
 from .kicad_cli import KiCadCli
 from .models import Component
+from .ui_effects import ACCENT
 
 COLUMNS = ("Parts", "Qty", "Value", "Package", "LCSC", "Tier", "Stock", "Unit $", "Ext. fee", "Data")
 TIER_COLORS = {"basic": "#0E9F6E", "preferred": "#0E9F6E", "extended": "#D97706", "unlisted": "#DC2626"}
-ACCENT = "#8B5CF6"
 
 
 def _confirm(parent, title: str, text: str) -> bool:

@@ -1,0 +1,358 @@
+{
+ "slug": "orbit-stm32-usb-battery",
+ "reviewer": "opus-blind-h3A",
+ "parts_reviewed": 52,
+ "issues": [
+  {
+   "rule": "other:switch.spdt_common_pin",
+   "severity": "error",
+   "refs": [
+    "PWR1"
+   ],
+   "nets": [
+    "Net-(BAT1-Pin_2)",
+    "+BATT"
+   ],
+   "confidence": "medium",
+   "evidence": "PWR1 (K3-1270L-F1 footprint, LCSC C145857 = K3-1270S-F2 SPDT slide switch) has its 3 contact pads in one row at 2 mm pitch: pad1 (169.0,81.5) = Net-(BAT1-Pin_2), pad2 (169.0,83.5) = unconnected, pad3 (169.0,85.5) = +BATT. On a 3-terminal SPDT slide switch the middle terminal (pad 2) is the common, so pads 1 and 3 are the two throws and are never connected to each other. The symbol is a plain box with no contact graphic, so it does not show which pin is common.",
+   "why_it_matters": "If pad 2 is the common, as on standard SPDT slide switches, the battery can never reach +BATT. The board then cannot run from the battery, and the charger (U1 VBAT is on +BATT) cannot charge it. Fix: wire the battery to the middle pad and +BATT to an outer pad.",
+   "time_or_money": "board respin / bodge wire; battery operation non-functional"
+  },
+  {
+   "rule": "other:switch.spdt_common_pin",
+   "severity": "warning",
+   "refs": [
+    "BOOT0",
+    "R2",
+    "U16"
+   ],
+   "nets": [
+    "Net-(U16-BOOT0)",
+    "+3.3V",
+    "Net-(BOOT0-Pad1)"
+   ],
+   "confidence": "medium",
+   "evidence": "The BOOT0 slide switch (same K3-1270 footprint) is wired with pad2 (the physical middle pad) = +3.3V, pad1 = R2 10K to GND and pad3 = U16 pin 44 BOOT0. The circuit only works if pad 3 is the common. If the middle pad is the common, as on standard SPDT slide switches, the 'normal' position connects +3.3V to R2 (wasting 0.33 mA) and leaves BOOT0 floating. The other position ties BOOT0 high.",
+   "why_it_matters": "With BOOT0 floating, the MCU may randomly boot into the system bootloader instead of user flash, and an extra 330 uA is drawn from the battery.",
+   "time_or_money": "unreliable boot; respin"
+  },
+  {
+   "rule": "value.missing",
+   "severity": "warning",
+   "refs": [
+    "U17"
+   ],
+   "nets": [],
+   "confidence": "high",
+   "evidence": "U17 (AT24C128C EEPROM symbol, SOIC-8) has Value '~' and no LCSC/MPN field, unlike every other part on the board.",
+   "why_it_matters": "BOM/assembly cannot identify the part. The value field shows nothing usable.",
+   "time_or_money": "BOM error / assembly query"
+  },
+  {
+   "rule": "other:value.wrong_part_name",
+   "severity": "info",
+   "refs": [
+    "U1"
+   ],
+   "nets": [],
+   "confidence": "medium",
+   "evidence": "U1 Value 'MCP73031', but the symbol is Project Symbols:MCP73831/2, the schematic text says 'MCP73831', and the pinout (1 STAT, 2 VSS, 3 VBAT, 4 VDD, 5 PROG) is the MCP73831's. MCP73031 is not a real Li-ion charger part number.",
+   "why_it_matters": "Typo in the BOM value can cause wrong-part sourcing (the LCSC field is the only correct identifier).",
+   "time_or_money": "BOM confusion"
+  },
+  {
+   "rule": "bom.value_normalise",
+   "severity": "saving",
+   "refs": [
+    "C2",
+    "C7",
+    "C8",
+    "C20"
+   ],
+   "nets": [],
+   "confidence": "high",
+   "evidence": "C2/C7/C8 value '4u7' and C20 '4.7uF', all LCSC C19666.",
+   "why_it_matters": "The same part written two ways splits the BOM into extra lines.",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "bom.value_normalise",
+   "severity": "saving",
+   "refs": [
+    "C3",
+    "C4",
+    "C5",
+    "C6",
+    "C9",
+    "C19",
+    "C21",
+    "C24"
+   ],
+   "nets": [],
+   "confidence": "high",
+   "evidence": "C3/C4/C5/C6/C9/C19 value '100n' and C21/C24 '100nF', all LCSC C14663.",
+   "why_it_matters": "The same part written two ways splits the BOM into extra lines.",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "bom.value_normalise",
+   "severity": "saving",
+   "refs": [
+    "R6",
+    "R8",
+    "R12"
+   ],
+   "nets": [],
+   "confidence": "high",
+   "evidence": "R6/R8 '100k' and R12 '100K', all LCSC C25803.",
+   "why_it_matters": "The same part written two ways splits the BOM into extra lines.",
+   "time_or_money": "1 BOM line"
+  },
+  {
+   "rule": "decoupling.missing",
+   "severity": "warning",
+   "refs": [
+    "U17"
+   ],
+   "nets": [
+    "+3.3V"
+   ],
+   "confidence": "medium",
+   "evidence": "U17 VCC (pin 8, +3.3V) has no dedicated bypass cap. The 4x100n caps (C3-C6) are allocated to the STM32's 4 supply pins. In the PCB the nearest +3.3V capacitor to U17 pin 8 is C5, 7.0 mm away (C4 8.6 mm).",
+   "why_it_matters": "EEPROM write current spikes can cause local supply droop and I2C errors. A 100 nF cap at the pin is standard.",
+   "time_or_money": "$0.002/board"
+  },
+  {
+   "rule": "other:unused_pullup",
+   "severity": "saving",
+   "refs": [
+    "R6",
+    "U15"
+   ],
+   "nets": [
+    "Net-(U15-PG)"
+   ],
+   "confidence": "low",
+   "evidence": "R6 100k pulls TPS63802 PG (open-drain) to +3.3V, but Net-(U15-PG) has only R6 and U15.5. Nothing reads the power-good signal.",
+   "why_it_matters": "Placed part with no function, unless PG was meant to drive NRST or a GPIO. Either remove R6 or route PG somewhere useful.",
+   "time_or_money": "1 part"
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "severity": "warning",
+   "refs": [
+    "BAT1"
+   ],
+   "nets": [
+    "Net-(BAT1-Pin_2)",
+    "GND",
+    "+BATT"
+   ],
+   "confidence": "low",
+   "evidence": "The JST-PH battery connector BAT1 feeds the MCP73831 VBAT and TPS63802 VIN directly through the slide switch, with no reverse-polarity protection (no P-FET or diode) and no fuse.",
+   "why_it_matters": "JST-PH LiPo packs come with both polarities on the market. A reversed cell destroys U1/U15 and can overheat the cell.",
+   "time_or_money": "functional risk"
+  },
+  {
+   "rule": "other:charger.through_switch_no_powerpath",
+   "severity": "info",
+   "refs": [
+    "U1",
+    "PWR1",
+    "U15"
+   ],
+   "nets": [
+    "+BATT",
+    "VBUS"
+   ],
+   "confidence": "low",
+   "evidence": "MCP73831 VBAT (U1.3) is on +BATT, which sits after the power switch PWR1. The TPS63802 load is on the same node, and there is no load-sharing/power-path circuit.",
+   "why_it_matters": "With the switch off, the battery cannot be charged from USB. With the switch on, the system current adds to the charge current the MCP73831 measures, which can delay or prevent charge termination.",
+   "time_or_money": "usability"
+  },
+  {
+   "rule": "decoupling.far",
+   "severity": "info",
+   "refs": [
+    "U15",
+    "C13"
+   ],
+   "nets": [
+    "+3.3V"
+   ],
+   "confidence": "low",
+   "evidence": "TPS63802 VOUT (pin 6) to its 22uF output cap C13 is 3.9 mm (next cap C2 6.2 mm). The datasheet asks for the output cap as close as possible to VOUT/PGND because boost-mode output current is pulsed.",
+   "why_it_matters": "Larger hot loop gives more switching noise and ripple.",
+   "time_or_money": "EMI/ripple"
+  },
+  {
+   "rule": "other:usb.shield_unconnected",
+   "severity": "info",
+   "refs": [
+    "USB1"
+   ],
+   "nets": [
+    "unconnected-(USB1-Shield-Pad6)"
+   ],
+   "confidence": "low",
+   "evidence": "Mini-USB shell/shield pads 6,7,8,9 are all no-connect (no net, no GND or RC to GND). There is also no ESD protection on D+/D-/VBUS.",
+   "why_it_matters": "A floating connector shell and unprotected USB lines are more prone to ESD damage to the CP2102 and to EMI. The pads are still soldered for mechanical retention.",
+   "time_or_money": "robustness"
+  }
+ ],
+ "acceptable_designs": [
+  {
+   "rule": "hs.pair.skew",
+   "refs": [
+    "U22",
+    "USB1"
+   ],
+   "nets": [
+    "/USB_D+",
+    "/USB_D-"
+   ],
+   "reason": "CP2102 is a USB full-speed (12 Mbps) device. The pair is 21.3 mm vs 19.0 mm, both on F.Cu with no vias over GND pours on both layers. 2.3 mm (~15 ps) of skew is irrelevant at full speed."
+  },
+  {
+   "rule": "hs.return.no_plane",
+   "refs": [
+    "U22",
+    "USB1"
+   ],
+   "nets": [
+    "/USB_D+",
+    "/USB_D-"
+   ],
+   "reason": "Full-speed USB only, short run, and a GND zone exists on both F.Cu and B.Cu."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U22"
+   ],
+   "nets": [
+    "unconnected-(U22-~{RST}-Pad9)"
+   ],
+   "reason": "CP2102 /RST has an internal power-on reset and may be left unconnected. The external reset is optional."
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "U16",
+    "U22",
+    "USB1"
+   ],
+   "nets": [
+    "unconnected-(U16-PA11-Pad32)",
+    "unconnected-(USB1-ID-Pad4)"
+   ],
+   "reason": "Explicit no-connect flags on unused MCU GPIOs, CP2102 modem/NC pins and the Mini-USB ID pin (correct for a device)."
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "R9",
+    "R10",
+    "U17"
+   ],
+   "nets": [
+    "I2C1_SCLK",
+    "I2C1_SDA"
+   ],
+   "reason": "I2C has exactly one pull-up pair: R9/R10, 2k2 to +3.3V. That is fine for a single on-board EEPROM."
+  },
+  {
+   "rule": "pin.input_floating",
+   "refs": [
+    "U17"
+   ],
+   "nets": [
+    "+3.3V",
+    "GND"
+   ],
+   "reason": "EEPROM A0/A1 are tied to +3.3V, and A2 and WP to GND. These are deliberate address/write-enable straps."
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U16"
+   ],
+   "nets": [
+    "+3.3V"
+   ],
+   "reason": "Each STM32 supply pin (1, 24, 48, VDDA 9) has a 100 nF cap within ~2 mm (C5, C6, C5/C4, C3), plus 4.7 uF and 22 uF bulk caps. VDDA is tied directly to VDD with its own 100 nF, which is acceptable for this MCU."
+  },
+  {
+   "rule": "led.no_resistor",
+   "refs": [
+    "D1",
+    "D2",
+    "D3"
+   ],
+   "nets": [
+    "Net-(D1-A)",
+    "Net-(D2-A)",
+    "Net-(D3-A)"
+   ],
+   "reason": "All LEDs have series resistors (R1, R4, R5). D1 is the MCP73831 STAT charge LED from VBUS, which is the standard app circuit."
+  },
+  {
+   "rule": "other:regulator.feedback",
+   "refs": [
+    "U15",
+    "R7",
+    "R8"
+   ],
+   "nets": [
+    "Net-(U15-FB)"
+   ],
+   "reason": "TPS63802 VFB = 500 mV. R7 560k over R8 100k gives 0.5*(1+5.6) = 3.30 V, correct for +3.3V. The pinout matches the datasheet DLA package (1 EN ... 10 VIN), and EN is tied to VIN and MODE to GND as allowed."
+  },
+  {
+   "rule": "fit.layout",
+   "refs": [
+    "BOOT0"
+   ],
+   "nets": [],
+   "reason": "[wrong] The EasyEDA C145857 land puts 3 terminals at +3/+1/-1 mm and posts at +/-3.15 mm. The footprint has pads at -1/+1/+3 and posts at +/-3.15, so the row positions are the same. The 4x2 vs 5x2 difference is a clustering artifact (3.0 vs 3.15). The only real differences are pin 1/3 numbering reversed and a ~0.5 mm pad-to-post offset, which the 2.5 mm pads absorb.",
+   "source": "blind adjudication"
+  },
+  {
+   "rule": "fit.layout",
+   "refs": [
+    "PWR1"
+   ],
+   "nets": [],
+   "reason": "[wrong] Same as H015: the K3-1270L-F1 project footprint matches the K3-1270S-F2 terminal and post rows. The reported layout difference is an artifact; a ~0.5 mm x offset sits within the 2.5 mm pad length.",
+   "source": "blind adjudication"
+  },
+  {
+   "rule": "fit.pad_count",
+   "refs": [
+    "BAT1"
+   ],
+   "nets": [],
+   "reason": "[wrong] BAT1 uses KiCad JST_PH_B2B-PH-SM4-TB_1x02-1MP_Vertical: 2 signal pads plus 2 MP pads, the exact B2B-PH-SM4-TB land. The tool ignored the MP pads.",
+   "source": "blind adjudication"
+  },
+  {
+   "rule": "fit.pad_count",
+   "refs": [
+    "SW1"
+   ],
+   "nets": [],
+   "reason": "[wrong] SW_Push_1P1T_NO_CK_KSC6xxJ has 4 pads (two numbered 1, two numbered 2) at +/-2.9 x +/-2.0 mm with 2.8x1 mm pads. The 5.1 mm TS-1187A (3.7 mm pitch, 6.5 mm lead span) puts all 4 legs on pads.",
+   "source": "blind adjudication"
+  },
+  {
+   "rule": "fit.pad_count",
+   "refs": [
+    "SW2"
+   ],
+   "nets": [],
+   "reason": "[wrong] Same as H018: the footprint has 4 pads, not 2, and the TS-1187A legs (3.7 mm pitch, 6.5 mm span) land within the 2.8x1.0 mm pads.",
+   "source": "blind adjudication"
+  }
+ ],
+ "notes": "Reviewed the netlist, the schematic text notes and the PCB pad/track geometry. Checked TPS63802 against the TI datasheet (pinout, VFB 500 mV, 0.47 uH inductor, 22 uF Cout) and the MCP73831, CP2102 and AT24C128 pinouts from memory/standard pinouts. I could not get a datasheet or pin drawing for the K3-1270L-F1 / K3-1270S-F2 (LCSC C145857) slide switch. The two switch issues rest on the convention that a 3-in-a-row SPDT slide switch has the middle pin as common, hence medium confidence. If this switch's common is really the end pin 3, both issues go away. L1 uses symbol 'DFE201612E-2R2M' (a 2.2 uH part name) with value 0.47uH and LCSC C668312. I could not verify which inductance C668312 is, so I did not flag it. The datasheet recommends 0.47 uH (DFE201612E-R47M). I checked the crystal (8 MHz, 30 pF caps) only for plausibility, without the crystal's CL spec. I did not check thermal or DRC."
+}
