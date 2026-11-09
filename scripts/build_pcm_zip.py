@@ -1,6 +1,6 @@
 """Build the KiCad Plugin and Content Manager (PCM) zip and the demo-board zip.
 
-    python scripts/build_pcm_zip.py --tag v0.1.0-alpha.2 --pcm-version 0.1.0 [--out dist]
+    python scripts/build_pcm_zip.py --tag v0.1.0-alpha.3 --pcm-version 0.1.1 [--out dist]
 
 Files come from the git index (`git ls-files`, LF line endings whatever core.autocrlf
 says), so untracked files are never shipped and two builds give the same bytes.
@@ -100,7 +100,7 @@ def build(tag: str, pcm_version: str, out: Path, allow_dirty: bool = False) -> d
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--tag", required=True, help="release tag, e.g. v0.1.0-alpha.2")
+    parser.add_argument("--tag", required=True, help="release tag, e.g. v0.1.0-alpha.3")
     parser.add_argument("--pcm-version", required=True, help="version entry in pcm/metadata.json, e.g. 0.1.0")
     parser.add_argument("--out", type=Path, default=ROOT / "dist")
     parser.add_argument("--allow-dirty", action="store_true", help="skip the uncommitted-changes check")

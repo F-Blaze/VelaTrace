@@ -9,7 +9,7 @@ import pytest
 from velatrace import part_lookup
 from velatrace.audit_rules import BETA_RULES, run_heavy
 from velatrace.findings import Severity
-from velatrace.jlc_http import JlcNetError
+from velatrace.jlc_http import Cancelled, JlcNetError
 from velatrace.models import Component, DesignSnapshot, Pin
 from velatrace.part_lookup import DigiKeyLogin, PartLookup
 
@@ -239,19 +239,92 @@ def test_an_unknown_part_is_cached_as_missing_for_a_while_and_a_bad_answer_is_a_
     assert again.needs_network(now=lambda: T0 + part_lookup.MISSING_AGE + timedelta(days=1)) == (2, 0)
 
 
-def test_three_failures_in_a_row_stop_the_run_and_the_limit_is_honoured(tmp_path):
-    net = Net(easyeda={f"C{i}": JlcNetError("easyeda.com timed out.") for i in range(1, 6)})
-    lookup = lookup_for(*(part(f"J{i}", fields={"LCSC": f"C{i}"}) for i in range(1, 6)), tmp_path=tmp_path)
+def test_repeated_failures_in_a_row_stop_the_run_and_the_limit_is_honoured(tmp_path):
+    count = part_lookup.EASYEDA_FAILURES + 2
+    net = Net(easyeda={f"C{i}": JlcNetError("easyeda.com timed out.") for i in range(1, count + 1)})
+    lookup = lookup_for(*(part(f"J{i}", fields={"LCSC": f"C{i}"}) for i in range(1, count + 1)), tmp_path=tmp_path)
     lookup.identify()
     net.run(lookup)
-    assert len(net.urls("easyeda.com")) == part_lookup.MAX_FAILURES
-    assert [lookup.unchecked[f"J{i}"][1] for i in (4, 5)] == ["not asked after repeated failures"] * 2
+    assert len(net.urls("easyeda.com")) == part_lookup.EASYEDA_FAILURES    # a timeout is not retried
+    assert [lookup.unchecked[f"J{i}"][1] for i in (count - 1, count)] == ["not asked after repeated failures"] * 2
     many = lookup_for(*(part(f"J{i}", fields={"LCSC": f"C{i + 10}"}) for i in range(1, part_lookup.MAX_PARTS + 3)),
                       tmp_path=tmp_path / "many")
     many.identify()
     assert many.needs_network(now=lambda: T0) == (part_lookup.MAX_PARTS, 0)
     Net(easyeda={f"C{i + 10}": {"success": False} for i in range(1, part_lookup.MAX_PARTS + 3)}).run(many)
     assert sum("limit" in why for _, why in many.unchecked.values()) == 2
+
+
+def refused(status, retry_after=""):
+    error = JlcNetError("easyeda.com answered HTTP %d." % status)
+    error.status, error.retry_after = status, retry_after
+    return error
+
+
+class lookup2_Limited(Net):
+    """EasyEDA refuses the first `refusals[code]` requests for a code, then answers normally."""
+
+    def __init__(self, refusals, **kwargs):
+        super().__init__(**kwargs)
+        self.refusals = dict(refusals)
+
+    def fetch(self, url, **kwargs):
+        code = url.split("/products/")[1].split("/")[0] if "/products/" in url else ""
+        if self.refusals.get(code):
+            self.refusals[code] -= 1
+            self.calls.append((url, kwargs, self.time))
+            self.time += 0.2
+            raise self.error
+        return super().fetch(url, **kwargs)
+
+
+def lookup2_run(tmp_path, codes, refusals, error):
+    net = lookup2_Limited(refusals)
+    net.error = error
+    lookup = lookup_for(*(part(f"J{i}", fields={"LCSC": c}) for i, c in enumerate(codes, 1)), tmp_path=tmp_path)
+    lookup.identify()
+    net.run(lookup)
+    return net, lookup
+
+
+def test_a_403_is_retried_after_a_growing_backoff_and_then_succeeds(tmp_path):
+    net, lookup = lookup2_run(tmp_path, ["C65114"], {"C65114": 2}, refused(403))
+    assert len(net.urls("easyeda.com")) == 3 and "J1" in lookup.parts
+    assert net.sleeps == [2.0, 4.0]
+
+
+def test_retry_after_is_honoured_and_capped_and_other_statuses_are_not_retried(tmp_path):
+    net, lookup = lookup2_run(tmp_path, ["C65114"], {"C65114": 1}, refused(429, "7"))
+    assert net.sleeps == [7.0] and "J1" in lookup.parts
+    net, _ = lookup2_run(tmp_path / "cap", ["C65114"], {"C65114": 1}, refused(429, "3600"))
+    assert net.sleeps == [part_lookup.BACKOFF_CAP]
+    net, _ = lookup2_run(tmp_path / "date", ["C65114"], {"C65114": 1}, refused(403, "Wed, 21 Oct 2026 07:28:00 GMT"))
+    assert net.sleeps == [2.0]
+    net, lookup = lookup2_run(tmp_path / "gone", ["C65114"], {"C65114": 9}, refused(404))
+    assert len(net.urls("easyeda.com")) == 1 and net.sleeps == [] and lookup.unchecked["J1"][0] == "failed"
+
+
+def test_a_code_that_stays_refused_is_not_cached_and_a_streak_of_them_stops_the_source(tmp_path):
+    count = part_lookup.EASYEDA_FAILURES + 2
+    codes = [f"C{i}" for i in range(1, count + 1)]
+    net, lookup = lookup2_run(tmp_path, codes, {c: 99 for c in codes}, refused(403))
+    tries = len(part_lookup.BACKOFF) + 1
+    assert len(net.urls("easyeda.com")) == part_lookup.EASYEDA_FAILURES * tries
+    assert all(lookup.unchecked[f"J{i}"][0] == "failed" for i in range(1, count + 1))
+    assert '"C1"' not in (tmp_path / "part-fit" / "easyeda.json").read_text(encoding="utf-8")   # retried next run
+    # Total waiting is bounded: the schedule per code (plus the 1 s spacing), nothing open-ended.
+    assert sum(net.sleeps) <= part_lookup.EASYEDA_FAILURES * (sum(part_lookup.BACKOFF) + part_lookup.EASYEDA_INTERVAL)
+
+
+def test_each_code_gets_its_own_retries(tmp_path):
+    net, lookup = lookup2_run(tmp_path, ["C65114", "C124378"], {"C65114": 1, "C124378": 1}, refused(403))
+    assert sorted(lookup.parts) == ["J1", "J2"] and net.sleeps.count(2.0) == 2
+
+
+def test_cancelling_during_a_lookup_is_not_retried(tmp_path):
+    net, lookup = lookup2_run(tmp_path, ["C65114"], {"C65114": 9}, Cancelled("Cancelled."))
+    assert len(net.urls("easyeda.com")) == 1 and net.sleeps == []
+    assert lookup.unchecked["J1"] == ("failed", "Cancelled.")
 
 
 def test_a_different_part_in_the_answer_is_refused(tmp_path):

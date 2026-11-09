@@ -1,0 +1,411 @@
+{
+ "avr-power-meter-v3": [
+  {
+   "rule": "bom.package_merge",
+   "refs": [
+    "R1",
+    "R2",
+    "R7"
+   ],
+   "nets": [
+    "/SDA"
+   ]
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J1"
+   ],
+   "nets": [
+    "Net-(J1-Pin_1)"
+   ]
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "R27",
+    "R28",
+    "R29",
+    "R4"
+   ],
+   "nets": []
+  }
+ ],
+ "cm5-carrier-board": [
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J7"
+   ],
+   "nets": [
+    "/CM5_5V"
+   ]
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U1",
+    "U5"
+   ],
+   "nets": [
+    "/CM5_3V3"
+   ]
+  },
+  {
+   "rule": "net.single_pin",
+   "refs": [
+    "Conn2"
+   ],
+   "nets": [
+    "/PCIe_PWR_EN"
+   ]
+  }
+ ],
+ "doorlink-esp32s3-doorbell": [
+  {
+   "rule": "bom.value_merge",
+   "refs": [
+    "C1",
+    "C3",
+    "C13",
+    "C20",
+    "C25",
+    "C26",
+    "C32",
+    "C33",
+    "C34"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "bom.value_normalise",
+   "refs": [
+    "J1",
+    "J6",
+    "R3",
+    "R30"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J1"
+   ],
+   "nets": [
+    "+BATT"
+   ]
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J2"
+   ],
+   "nets": [
+    "+5V"
+   ]
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D2",
+    "D3"
+   ],
+   "nets": []
+  }
+ ],
+ "orbit-stm32-usb-battery": [
+  {
+   "rule": "bom.value_normalise",
+   "refs": [
+    "C3",
+    "C4",
+    "C5",
+    "C6",
+    "C9",
+    "C19",
+    "C21",
+    "C24"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "bom.value_normalise",
+   "refs": [
+    "C2",
+    "C7",
+    "C8",
+    "C20"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "bom.value_normalise",
+   "refs": [
+    "R6",
+    "R8",
+    "R12"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D1"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "U17"
+   ],
+   "nets": []
+  }
+ ],
+ "quick-nic-usb3-ethernet": [
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U1"
+   ],
+   "nets": [
+    "Net-(J1-VBUS)"
+   ]
+  }
+ ],
+ "regret": [
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "D35"
+   ],
+   "nets": [
+    "Net-(D35-VDD)"
+   ]
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "D36",
+    "D37",
+    "D38",
+    "D39",
+    "D40",
+    "D41",
+    "D42",
+    "D43",
+    "D44",
+    "D45"
+   ],
+   "nets": [
+    "+5V"
+   ]
+  },
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "+3V3"
+   ]
+  }
+ ],
+ "seatalk-wifi-bridge": [
+  {
+   "rule": "bom.value_normalise",
+   "refs": [
+    "R8",
+    "R11"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D1"
+   ],
+   "nets": []
+  }
+ ],
+ "shipometer-i2c-imu": [
+  {
+   "rule": "value.missing",
+   "refs": [
+    "J201",
+    "J301"
+   ],
+   "nets": []
+  }
+ ],
+ "stm32f407-mvcu": [
+  {
+   "rule": "bom.value_normalise",
+   "refs": [
+    "C3",
+    "C4",
+    "C5",
+    "C6",
+    "C9",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C16",
+    "C18",
+    "C19",
+    "C21",
+    "C22",
+    "C28"
+   ],
+   "nets": []
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J11",
+    "J12",
+    "J6",
+    "J7",
+    "J8",
+    "J17"
+   ],
+   "nets": [
+    "+5V"
+   ]
+  },
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J17",
+    "J5"
+   ],
+   "nets": [
+    "/mornsun_Vin"
+   ]
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "/I2C1_SCL"
+   ]
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "U2"
+   ],
+   "nets": [
+    "/I2C1_SDA"
+   ]
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D1",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8",
+    "D9",
+    "R3",
+    "Y1"
+   ],
+   "nets": []
+  }
+ ],
+ "stm32l432-buck-vs-ldo": [
+  {
+   "rule": "connector.power_unprotected",
+   "refs": [
+    "J6",
+    "J7"
+   ],
+   "nets": [
+    "/VCC"
+   ]
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "FB1",
+    "Y1"
+   ],
+   "nets": []
+  }
+ ],
+ "umyo-v3-nrf52832": [
+  {
+   "rule": "decoupling.missing",
+   "refs": [
+    "U5"
+   ],
+   "nets": [
+    "+3V8"
+   ]
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "U2",
+    "U6"
+   ],
+   "nets": [
+    "SCL"
+   ]
+  },
+  {
+   "rule": "i2c.pullup.missing",
+   "refs": [
+    "U2",
+    "U6"
+   ],
+   "nets": [
+    "SDA"
+   ]
+  },
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D1",
+    "D3",
+    "F1"
+   ],
+   "nets": []
+  }
+ ],
+ "usb2-hub-mtt": [
+  {
+   "rule": "value.missing",
+   "refs": [
+    "D1",
+    "D10",
+    "D11",
+    "D12",
+    "D13",
+    "D14",
+    "D2",
+    "D3",
+    "D4",
+    "D5",
+    "D6",
+    "D7",
+    "D8",
+    "D9"
+   ],
+   "nets": []
+  }
+ ]
+}

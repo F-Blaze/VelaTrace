@@ -8,7 +8,7 @@ from decimal import Decimal
 from html import escape as _esc
 from pathlib import Path
 
-from .audit_rules import summarize
+from .audit_rules import experimental_note, summarize
 from .findings import Finding, Severity
 from .models import DesignSnapshot
 
@@ -58,7 +58,7 @@ def _finding(item: Finding) -> str:
 
 def render_report(snapshot: DesignSnapshot, findings: list[Finding], *, project_name: str = "",
                   generated_at: datetime | None = None, version: str = "",
-                  heavy: list[Finding] | None = None) -> str:
+                  heavy: list[Finding] | None = None, hidden_experimental: int = 0) -> str:
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
     name = project_name or (snapshot.path.stem if snapshot.path else "") or "Untitled design"
     meta = [when, f"{len(snapshot.components)} parts"] + ([f"VelaTrace {version}"] if version else [])
@@ -70,8 +70,10 @@ def render_report(snapshot: DesignSnapshot, findings: list[Finding], *, project_
             continue
         if heavy is not None:
             body.append(f"<h2>{title}</h2>")
-            if not rows:
-                body.append('<div class="fine">No issues found.</div>')
+        if title == "Light checks" and hidden_experimental:
+            body.append(f'<div class="fine">{_esc(experimental_note(hidden_experimental))}</div>')
+        if heavy is not None and not rows:
+            body.append('<div class="fine">No issues found.</div>')
         for severity, heading in _SECTIONS:
             group = [f for f in rows if f.severity == severity]
             if group:

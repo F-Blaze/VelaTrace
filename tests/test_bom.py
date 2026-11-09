@@ -127,6 +127,17 @@ class ConsolidationTests(unittest.TestCase):
                                          two_pin("C2", "10u 25V", C0402, "+3V3", "GND")))
         self.assertEqual(rules(findings, "bom.value_normalise"), [])
 
+    def test_rating_on_a_higher_voltage_rail_is_a_deliberate_distinction(self):
+        for plain, rated in (("100n", "100n 50V"), ("1u", "1u 50V")):
+            findings = bom_findings(snapshot(two_pin("C1", plain, C0402, "+3V3", "GND"),
+                                             two_pin("C2", rated, C0402, "+24V", "GND")))
+            self.assertEqual(rules(findings, "bom.value_normalise"), [], (plain, rated))
+        # The same rail, or a rail the netlist does not name a voltage for, is still a spelling variant.
+        for rail in ("+3V3", "VDD"):
+            findings = bom_findings(snapshot(two_pin("C1", "10uf 0402", C0402, "+3V3", "GND"),
+                                             two_pin("C2", "10uf 0402 6.3V", C0402, rail, "GND")))
+            self.assertEqual(len(rules(findings, "bom.value_normalise")), 1, rail)
+
     def test_near_pull_values_merge_without_parts_data(self):
         findings = bom_findings(snapshot(two_pin("R1", "4.7k", R0402, "+3V3", "/SDA"),
                                          two_pin("R2", "4.7k", R0402, "+3V3", "/SCL"),
@@ -363,5 +374,162 @@ class BomPrecisionTests(unittest.TestCase):
             two_pin("C1", "1u", C0402, "+3V3", "GND", SPN1="C1525")), db())
         self.assertTrue(rules(findings, "bom.lcsc_mismatch"))  # C1525 is a 100nF part
 
+
+D_SMA = "Diode_SMD:D_SMA"
+R_FOREIGN = "Resistor_SMD:R_1206_3216Metric"
+
+
+def c2d_diode(ref, value, footprint=D_SMA, **fields):
+    return two_pin(ref, value, footprint, "/A", "/K", **fields)
+
+
+class RecallTests(unittest.TestCase):
+    def test_lcsc_code_ignores_case_and_stray_whitespace(self):
+        for text in (" c25804 ", "C25804\t", "C 25804"):
+            self.assertEqual(lcsc_code(two_pin("C1", "1u", C0402, "A", "B", LCSC=text)), "C25804", text)
+        findings = bom_findings(snapshot(
+            two_pin("R1", "1k", R0402, "+3V3", "/SDA", LCSC=" C21190"),
+            two_pin("R2", "1k", R0402, "+3V3", "/SCL", LCSC="C21190"),
+            two_pin("R3", "1k", R0402, "+3V3", "/INT", LCSC="C21190")))
+        self.assertEqual(rules(findings, "bom.value_merge"), [])  # one code, not two lines
+        [finding] = rules(findings, "bom.value_normalise")
+        self.assertEqual(finding.refs, ("R1",))
+        self.assertEqual(rules(bom_findings(snapshot(
+            two_pin("R1", "1k", R0402, "+3V3", "/SDA", LCSC="C21190"))), "bom.value_normalise"), [])
+
+    def test_comma_decimal_on_a_foreign_footprint_library_is_normalised(self):
+        # A polarised-cap symbol dropped on a resistor footprint still spells its own unit.
+        [finding] = rules(bom_findings(snapshot(
+            two_pin("C1", "4,7uF", R_FOREIGN, "+5V", "GND"),
+            two_pin("C2", "4.7uF", R_FOREIGN, "+5V", "GND"))), "bom.value_normalise")
+        self.assertEqual(finding.refs, ("C1", "C2"))
+        # A bare number does not prove the part is a capacitor.
+        self.assertEqual(rules(bom_findings(snapshot(
+            two_pin("C1", "4,7", R_FOREIGN, "+5V", "GND"),
+            two_pin("C2", "4.7", R_FOREIGN, "+5V", "GND"))), "bom.value_normalise"), [])
+
+    def test_higher_diode_grade_replaces_lower_in_same_package(self):
+        [finding] = rules(bom_findings(snapshot(
+            c2d_diode("D1", "1N4002"), c2d_diode("D2", "1N4004"), c2d_diode("D3", "1N4004G"),
+            c2d_diode("D4", "1N4004"))), "bom.value_merge")
+        self.assertEqual(finding.refs, ("D1", "D2", "D3", "D4"))
+        self.assertTrue(finding.fix.startswith("Change D1 to 1N4004"), finding.fix)
+        [finding] = rules(bom_findings(snapshot(
+            c2d_diode("D1", "SS12"), c2d_diode("D2", "SS14"))), "bom.value_merge")
+        self.assertIn("SS14", finding.title)
+
+    def test_diode_grades_never_merge_across_families_packages_or_unlisted_parts(self):
+        for parts in ((c2d_diode("D1", "1N4004"), c2d_diode("D2", "1N4148")),
+                      (c2d_diode("D1", "1N4002"), c2d_diode("D2", "1N5819")),
+                      (c2d_diode("D1", "1N4002"), c2d_diode("D2", "1N4004", "Diode_THT:D_DO-41")),
+                      (c2d_diode("D1", "1N4004"), c2d_diode("D2", "1N4004G")),
+                      (c2d_diode("D1", "1N4004"), c2d_diode("D2", "1N40040"))):
+            self.assertEqual(rules(bom_findings(snapshot(*parts)), "bom.value_merge"), [])
+
+    def test_same_value_package_and_rating_on_two_lcsc_codes_merges(self):
+        [finding] = rules(bom_findings(snapshot(
+            two_pin("C1", "100n", C0402, "+3V3", "GND", LCSC="C1525"),
+            two_pin("C2", "100n", C0402, "+3V3", "GND", LCSC="C1525"),
+            two_pin("C3", "100n", C0402, "+3V3", "GND", LCSC="C386112"))), "bom.value_merge")
+        self.assertEqual(finding.refs, ("C1", "C2", "C3"))
+        self.assertIn("Use C1525", finding.fix)
+
+    def test_logic_rails_of_different_voltage_still_share_a_code(self):
+        [finding] = rules(bom_findings(snapshot(
+            two_pin("C1", "100n", C0402, "+1V1", "GND", LCSC="C1525"),
+            two_pin("C2", "100n", C0402, "+3V3", "GND", LCSC="C1525"),
+            two_pin("C3", "100n", C0402, "VBUS", "GND", LCSC="C386112"))), "bom.value_merge")
+        self.assertEqual(finding.refs, ("C1", "C2", "C3"))
+
+    def test_different_lcsc_codes_stay_apart_when_the_parts_differ(self):
+        def pair(v1, v2, rail2="+3V3", **extra):
+            return bom_findings(snapshot(
+                two_pin("C1", v1, C0402, "+3V3", "GND", LCSC="C1525", **extra),
+                two_pin("C2", v2, C0402, rail2, "GND", LCSC="C386112")))
+        for v1, v2 in (("100n", "100n 50V"), ("100n X7R", "100n C0G"), ("100n 10%", "100n 5%")):
+            self.assertEqual(rules(pair(v1, v2), "bom.value_merge"), [], (v1, v2))
+        self.assertEqual(rules(pair("100n", "100n", rail2="+24V"), "bom.value_merge"), [])
+        self.assertEqual(rules(pair("100n", "100n", MPN="GRM155R71C104KA88D"), "bom.value_merge"), [])
+        self.assertEqual(rules(bom_findings(snapshot(
+            two_pin("C1", "100n", C0402, "+3V3", "GND", LCSC="C1525", MPN="A"),
+            two_pin("C2", "100n", C0402, "+3V3", "GND", LCSC="C386112", MPN="B"))), "bom.value_merge"), [])
+        # An uncoded generic line is not a second code.
+        self.assertEqual(rules(bom_findings(snapshot(
+            two_pin("C1", "100n", C0402, "+3V3", "GND", LCSC="C1525"),
+            two_pin("C2", "100n", C0402, "+3V3", "GND"))), "bom.value_merge"), [])
+
+    def test_same_order_code_makes_rating_text_a_spelling_difference(self):
+        for field in ({"LCSC": "C25803"}, {"MPN": "RC0603FR-07100KL"}):
+            [finding] = rules(bom_findings(snapshot(
+                two_pin("R1", "100k", R0603, "+3V3", "/SDA", **field),
+                two_pin("R2", "100k 1%", R0603, "+3V3", "/SCL", **field))), "bom.value_normalise")
+            self.assertEqual(finding.refs, ("R1", "R2"))
+            self.assertIn("rating combinations", finding.evidence)
+        self.assertEqual(rules(bom_findings(snapshot(
+            two_pin("R1", "100k", R0603, "+3V3", "/SDA"),
+            two_pin("R2", "100k 1%", R0603, "+3V3", "/SCL"))), "bom.value_normalise"), [])
+
+    def test_package_merge_respects_voltage_and_power_ratings(self):
+        # A 50 V part on a 20 V rail beside a 5 V one, and a stated rating beside an unrated 3.3 V part.
+        for rail_a, rail_b in (("+20V", "+5V"), ("+24V", "+3V3")):
+            findings = bom_findings(snapshot(two_pin("C1", "100n", C0402, rail_b, "GND"),
+                                             two_pin("C2", "100n", C0402, rail_b, "GND"),
+                                             two_pin("C3", "100n", C0603, rail_a, "GND")))
+            self.assertEqual(rules(findings, "bom.package_merge"), [], rail_a)
+        findings = bom_findings(snapshot(two_pin("C1", "100n", C0402, "+3V3", "GND"),
+                                         two_pin("C2", "100n", C0402, "+3V3", "GND"),
+                                         two_pin("C3", "100n 50V", C0603, "+3V3", "GND")))
+        self.assertEqual(rules(findings, "bom.package_merge"), [])
+        # Rails of similar voltage still merge (3.3 V and 5 V).
+        findings = bom_findings(snapshot(two_pin("C1", "100n", C0402, "+3V3", "GND"),
+                                         two_pin("C2", "100n", C0402, "+3V3", "GND"),
+                                         two_pin("C3", "100n", C0603, "+5V", "GND")))
+        self.assertEqual(len(rules(findings, "bom.package_merge")), 1)
+        # A low-value pull-up in a power package is not a spare 0603.
+        findings = bom_findings(snapshot(two_pin("R1", "1k", R0603, "+3V3", "/SDA"),
+                                         two_pin("R2", "1k", R0603, "+3V3", "/SCL"),
+                                         two_pin("R3", "1k", R_FOREIGN, "VIN", "/INT")))
+        self.assertEqual(rules(findings, "bom.package_merge"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+R0805 = "Resistor_SMD:R_0805_2012Metric"
+R0805_HAND = "Resistor_SMD:R_0805_2012Metric_Pad1.20x1.40mm_HandSolder"
+
+
+def ck4_rules(*parts):
+    return [f for f in bom_findings(snapshot(*parts)) if f.rule == "bom.package_merge"]
+
+
+def test_ck4_pad_variant_of_one_chip_size_is_a_package_merge():
+    # Round 5 (noahfc): R1 on the stock footprint, R3/R6 on the HandSolder variant, same 10K / LCSC code.
+    found = ck4_rules(
+        two_pin("R1", "10K", R0805, "+5V", "/RESET", LCSC="C84376"),
+        two_pin("R3", "10K", R0805_HAND, "+3V3", "/SCL", LCSC="C84376"),
+        two_pin("R6", "10K", R0805_HAND, "+3V3", "/SDA", LCSC="C84376"))
+    assert len(found) == 1 and found[0].refs == ("R1", "R3", "R6")
+    assert "R_0805_2012Metric_Pad1.20x1.40mm_HandSolder" in found[0].title
+
+
+def test_ck4_pad_variant_merge_keeps_the_order_code_and_mpn_guards():
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET", LCSC="C84376"),
+                         two_pin("R3", "10K", R0805_HAND, "+3V3", "/SCL", LCSC="C17414"))
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET", MPN="RC0805FR-0710KL"),
+                         two_pin("R3", "10K", R0805_HAND, "+3V3", "/SCL", MPN="ERJ-6ENF1002V"))
+    assert not ck4_rules(two_pin("R1", "10K 1%", R0805, "+5V", "/RESET"),
+                         two_pin("R3", "10K 5%", R0805_HAND, "+3V3", "/SCL"))
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET"),
+                         two_pin("R3", "10K", R0805, "+3V3", "/SCL"))
+
+
+def test_package_merge_ignores_a_footprint_that_differs_only_in_library_name():
+    assert not ck4_rules(two_pin("R1", "10K", R0805, "+5V", "/RESET", LCSC="C84376"),
+                         two_pin("R2", "10K", "MyProject:R_0805_2012Metric", "+3V3", "/SCL", LCSC="C84376"))
+
+
+def test_snapeda_mp_field_is_an_mpn():
+    from velatrace.bom import mpn_of
+    assert mpn_of(Component("D14", "ESD", "Diode_SMD:D_0402", (), {"MP": "ESDALC6V1-1U2"})) == "ESDALC6V1-1U2"
