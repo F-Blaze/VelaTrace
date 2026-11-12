@@ -97,7 +97,7 @@ _NOT_SUPPLY_PIN = re.compile(r"(?:SW|LX|PH|DCC\w*|EN|PG|PGOOD|BOOT|BST)\d*")
 # nodes, enable/shutdown, boot, references, charge-pump and internal-regulator capacitor pins.
 _NOT_SUPPLY_TOKEN = re.compile(
     r"(?:SW|LX|PH|PHASE|DCC\w*|N?EN|PG|PGOOD|BOOT|BST|VCP|CP|CAP|VCAP|CFLY)\d*|SWITCH|N?ENABLE|SHDN|SHUTDOWN|"
-    r"RUN|UVLO|V?REF\w*|V?FB\d*")
+    r"RUN|UVLO|V?REF\w*|V?FB\d*|\w*SENSE\w*|\w*SNS\w*|BATP|BATN")
 _LED_VDD_PIN = re.compile(r"V?DD|VCC|V\+")
 # Op-amp offset-null/trim and compensation pins: left open when unused, per datasheets.
 _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
@@ -383,6 +383,8 @@ def _not_a_rail(design: _Design, ic: Component, net: str, pins: list[Pin]) -> bo
 # Modules and dev boards carry their own decoupling; the caps beside them are bulk/board caps, not pin bypass.
 _BUILT_IN_DECOUPLING = re.compile(
     r"ESP32[\w-]*-(?:MINI|WROOM|WROVER)|ESP-WROOM|ESP8266MOD|(?<![A-Z])PICO(?![A-Z])|RP2040.?ZERO|XIAO|TEENSY|NODEMCU|WEMOS")
+# Display modules (an LCD/TFT board on a header carries its own regulator and caps); IC sockets hold a target chip.
+_DISPLAY_MODULE = re.compile(r"(?<![A-Z])(?:LCD|TFT)(?![A-Z])")
 # Regulator, charger and LDO families whose pins an untyped netlist does not show as power_out.
 _REGULATOR_PART = re.compile(r"(?<!\d)(?:78|79)[LMS]?\d\d(?!\d)|1117|LM317|BQ2\d{4}|TP40\d\d|MCP73\d+|LDO")
 _SOURCE_PIN = re.compile(r"[+-]?(?:V?OUT|VO|V?BAT|SW|LX|SYS)\d*[+-]?")  # output, charger battery or switch node
@@ -404,7 +406,7 @@ def _is_linear_amp(ic: Component) -> bool:
 
 
 # Parts drawing microamps whatever their pin count: fuel gauges, power-path controllers (not EEPROMs: writes draw mA).
-_MICROAMP_PART = re.compile(r"MAX1704\d|LTC441[12]")
+_MICROAMP_PART = re.compile(r"MAX1704\d|LTC441[12]|TPL50\d\d|BME280|BMP280|BMP3\d\d|AHT[12]\d|SHT[34]\d|HDC10\d\d")
 
 
 def _r6_low_current(ic: Component) -> bool:
@@ -430,10 +432,13 @@ def _is_regulator(ic: Component) -> bool:
 _SLOW_PART = re.compile(
     r"DS1[23]\d\d|DS32\d\d|PCF85\d\d|PCF2129|RV-?(?:3028|8803|3032)|MCP79\d{3}|M41T\d\d|"
     r"SN65HVD\d+|MCP25[56]\d|TJA1\d{3}|TCAN\d+|MAX3?485|MAX1348\d|SP3?485|THVD\d+|ADM2?48\d|"
-    r"74[A-Z]{0,5}[12]G\d|NC7S[A-Z]?\d|H11L\d|6N13[5-9]|PC817|TLP\d{3}")
+    r"74[A-Z]{0,5}[12]G\d|NC7S[A-Z]?\d|H11L\d|6N13[5-9]|PC817|TLP\d{3}|MCP230\d\d|PCF857\d|PCA95[3-7]\d|"
+    r"^(?:N?AND|N?OR|XN?OR|INV|NOT|BUF)\d?$")  # a generic single gate
 SLOW_PART_NEAR_MM = 12.0
 # eFuses and load switches (not USB current-limit switches, which want an output capacitor).
-_LOAD_SWITCH = re.compile(r"TPS259\d\d|TPS22\d{3}|MIC94\d{3}|SIP32\d{3}|E-?FUSE|LOAD.?SWITCH")
+_LOAD_SWITCH = re.compile(r"TPS259\d\d|TPS22\d{3}|MIC94\d{2,3}|SIP32\d{3}|E-?FUSE|LOAD.?SWITCH")
+# Surge stoppers / overvoltage controllers: their datasheets keep capacitors off the raw input on purpose.
+_SURGE_STOPPER = re.compile(r"LTC436[0-9]|LTC4380|LT4363|MAX1690\d|TPS2660\d")
 RAIL_NEAR_MM = 3.0  # "beside the pin" when judging whether a shared rail is well decoupled
 RAIL_BULK_F = Decimal("4.7e-6")
 
@@ -490,14 +495,15 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
         # 1-Wire sensors, references and supervisors in TO-92/SOT-23-3 draw microamps and need no bypass;
         # a 3-pin regulator still does (input/output caps).
         tiny = len(terminals(ic)) <= 3 and not _is_regulator(ic)
-        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic) or _r6_low_current(ic) or _is_linear_amp(ic) or bool(_PAIR_ESD.search(ic.value))
+        far_ok = (bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or "SOCKET" in ic.footprint.upper()
+                  or bool(_DISPLAY_MODULE.search(ic.value.upper()))) or _is_regulator(ic) or _r6_low_current(ic) or _is_linear_amp(ic) or bool(_PAIR_ESD.search(ic.value))
         # A capacitor to any of the IC's own power/ground pin nets also decouples: stacked
         # domains (cap to the neighbouring rail), protection ICs on a local ground (DW01 B-).
         returns = base_returns | {pin.net for pin in ic.pins if pin.net and (
             _base_type(pin) in {"power_in", "power_out"} or _GROUND.fullmatch(pin.name.upper()))}
         for net, pins in sorted(supply_pins.items()):
             if not caps.get(net):
-                if tiny or (_LOAD_SWITCH.search(ic.value.upper()) and all(
+                if tiny or _SURGE_STOPPER.search(ic.value.upper()) or (_LOAD_SWITCH.search(ic.value.upper()) and all(
                         _OUT_PIN.fullmatch(_plain_pin(pin.name)) for pin in pins)):
                     continue  # an eFuse/load-switch output: the load's capacitors, none required at the switch
                 if not _decoupled(design, net, cap_ends, returns - {net}) and not _not_a_rail(design, ic, net, pins):

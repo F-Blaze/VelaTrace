@@ -742,6 +742,33 @@ def test_efuse_output_needs_no_cap_but_usb_power_switch_output_does():
         assert [f.nets for f in found] == nets, value
 
 
+def test_far_cap_quiet_for_sockets_display_modules_microamp_sensors_and_generic_gates():
+    def chip(value, footprint="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", extra=4):
+        return part("U1", value, footprint, ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)),
+                    *[(str(n), f"/S{n}", f"IO{n}", "bidirectional") for n in range(1, extra + 1)])
+    far = cap(a="+3V3", pin_pos=((19.0, 10.0), (20.0, 10.0)))  # 9 mm
+    farther = cap(a="+3V3", pin_pos=((40.0, 10.0), (41.0, 10.0)))  # 30 mm
+    for comp in (chip("PIC_18_PINS", "Package_DIP:DIP-18_W7.62mm_Socket_LongPads"), chip("LCD_ST7735S_1.8"),
+                 chip("BME280"), chip("TPL5010DDC"), chip("NAND", "Package_TO_SOT_SMD:SOT-353", 2), chip("MCP23008-xSO")):
+        assert rules(design(comp, far), "decoupling") == [], comp.value
+    assert [f.rule for f in rules(design(chip("MCP23008-xSO"), farther), "decoupling")] == ["decoupling.far"]
+    assert [f.rule for f in rules(design(chip("ATmega328P"), far), "decoupling")] == ["decoupling.far"]
+
+
+def test_missing_cap_quiet_for_surge_stopper_input_battery_sense_and_mic94xx_output():
+    stopper = part("U2", "LTC4365", "Package_DFN_QFN:DFN-8", ("1", "+12V_RAW", "VIN", "power_in"),
+                   ("2", "GND", "GND", "power_in"), ("3", "/GATE", "GATE", "output"), ("4", "/UV", "UV", "input"))
+    charger = part("U3", "BQ25792", "Package_DFN_QFN:QFN-29", ("1", "+VBAT", "BAT", "power_out"),
+                   ("2", "GND", "GND", "power_in"), ("3", "Net-(U3-BATP)", "BATP", "power_in"), ("4", "/SDA", "SDA", "bidirectional"))
+    sense = res("R8", "Net-(U3-BATP)", "+VBAT", "100")
+    switch = part("U4", "MIC9409C6", "Package_TO_SOT_SMD:SOT-23-6", ("4", "+3V3", "VIN", "power_in"),
+                  ("1", "VSWITCH", "VOUT", "power_in"), ("2", "GND", "GND", "power_in"), ("6", "/CTRL", "EN", "input"))
+    load = part("J3", "Screw", "TerminalBlock:TerminalBlock_1x02", ("1", "VSWITCH"), ("2", "GND"))
+    found = rules(design(stopper, charger, sense, switch, load, cap(a="+3V3"), cap("C2", "+VBAT")), "decoupling.missing")
+    assert found == [], [f.title for f in found]
+
+
 def test_unconnected_supply_pin_needs_no_decoupling():
     module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
                   ("2", "GND", "GND", "power_in"), *exp4_spare())

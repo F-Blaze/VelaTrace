@@ -254,6 +254,9 @@ def _label(rows: int, cols: int) -> str:
     return f"{rows} × {cols}"
 
 
+_SWITCH = re.compile(r"(?:^|\s)(?:SW|S|PWR|BOOT|RST|RESET)\d*\s|SWITCH|SLIDE|TOGGLE|SPDT|(?<![A-Z])K3-\d|SS-?1[23]|MSK-?1[23]")
+
+
 def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
             nets: dict[str, str] | None = None, generic_header: bool = False) -> list[Finding]:
     """Findings (at most one) for a footprint whose pads do not fit the real part. With nets (from
@@ -357,6 +360,10 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
             return []
         wrong.append(bad)
     bad = min(wrong, key=len)
+    # An SPDT slide/toggle switch with its two throws (pins 1 and 3, common 2) swapped only reverses
+    # which position is on; the circuit is the same.
+    if sorted(bad) == [("1", "3"), ("3", "1")] and "2" in numbers and _SWITCH.search(f"{reference} {name}".upper()):
+        return []
     if not bad:
         return finding("fit.pin_order", f"footprint is a mirror image of {name}",
                        "The pads and numbers match the part only when flipped left-to-right, so pin 1 "
