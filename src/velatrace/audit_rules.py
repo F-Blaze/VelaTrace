@@ -1789,6 +1789,11 @@ RULES: dict[str, Check] = {
     "power.divider_voltage": _sibling("rules_tables", "check_divider_voltage"),
     "mcu.strap_pins": _sibling("rules_tables", "check_strap_pins"),
     "power.ldo_dropout": _sibling("rules_tables", "check_ldo_dropout"),
+    "part.mpn_value_mismatch": _sibling("rules_parts", "check_mpn_value_mismatch"),
+    "part.footprint_kind_mismatch": _sibling("rules_parts", "check_footprint_kind_mismatch"),
+    "part.polarized_symbol": _sibling("rules_parts", "check_polarized_symbol"),
+    "part.diode_type_mismatch": _sibling("rules_parts", "check_diode_type_mismatch"),
+    "value.nonstandard": _sibling("rules_parts", "check_nonstandard_value"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
