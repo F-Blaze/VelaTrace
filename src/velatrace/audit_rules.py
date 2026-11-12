@@ -1867,6 +1867,10 @@ RULES: dict[str, Check] = {
     "usb.vbus_capacitance": _sibling("rules_ratings", "check_vbus_capacitance"),
     "inductive.flyback_missing": _sibling("rules_ratings", "check_flyback_missing"),
     "pin.power_unconnected": _sibling("rules_ratings", "check_power_unconnected"),
+    "led.current_high": _sibling("rules_circuit", "check_led_current_high"),
+    "logic.level_mismatch": _sibling("rules_circuit", "check_level_mismatch"),
+    "mosfet.gate_pulldown_missing": _sibling("rules_circuit", "check_gate_pulldown_missing"),
+    "i2c.address_conflict": _sibling("rules_circuit", "check_i2c_address_conflict"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
