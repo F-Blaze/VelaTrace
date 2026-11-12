@@ -1807,6 +1807,11 @@ RULES: dict[str, Check] = {
     "part.polarized_symbol": _sibling("rules_parts", "check_polarized_symbol"),
     "part.diode_type_mismatch": _sibling("rules_parts", "check_diode_type_mismatch"),
     "value.nonstandard": _sibling("rules_parts", "check_nonstandard_value"),
+    "cap.voltage_rating": _sibling("rules_ratings", "check_cap_voltage_rating"),
+    "resistor.power_rating": _sibling("rules_ratings", "check_resistor_power_rating"),
+    "usb.vbus_capacitance": _sibling("rules_ratings", "check_vbus_capacitance"),
+    "inductive.flyback_missing": _sibling("rules_ratings", "check_flyback_missing"),
+    "pin.power_unconnected": _sibling("rules_ratings", "check_power_unconnected"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
