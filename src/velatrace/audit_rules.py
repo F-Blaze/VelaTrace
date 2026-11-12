@@ -1789,6 +1789,11 @@ RULES: dict[str, Check] = {
     "power.divider_voltage": _sibling("rules_tables", "check_divider_voltage"),
     "mcu.strap_pins": _sibling("rules_tables", "check_strap_pins"),
     "power.ldo_dropout": _sibling("rules_tables", "check_ldo_dropout"),
+    "cap.voltage_rating": _sibling("rules_ratings", "check_cap_voltage_rating"),
+    "resistor.power_rating": _sibling("rules_ratings", "check_resistor_power_rating"),
+    "usb.vbus_capacitance": _sibling("rules_ratings", "check_vbus_capacitance"),
+    "inductive.flyback_missing": _sibling("rules_ratings", "check_flyback_missing"),
+    "pin.power_unconnected": _sibling("rules_ratings", "check_power_unconnected"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
