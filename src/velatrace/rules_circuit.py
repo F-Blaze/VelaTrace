@@ -12,7 +12,7 @@ from __future__ import annotations
 from decimal import Decimal
 import re
 
-from .audit_rules import Check, _Design, _base_type, parse_resistance, two_terminal_nets
+from .audit_rules import _Design, _base_type, parse_resistance, two_terminal_nets
 from .bom import rail_voltage
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
@@ -298,11 +298,3 @@ def check_i2c_address_conflict(snapshot: DesignSnapshot) -> list[Finding]:
             "so only one of them can be addressed.",
             "Change the address-select pin of one part, move it to its own bus, or use an I2C multiplexer."))
     return findings
-
-
-CIRCUIT_RULES: dict[str, Check] = {
-    "led.current_high": check_led_current_high,
-    "logic.level_mismatch": check_level_mismatch,
-    "mosfet.gate_pulldown_missing": check_gate_pulldown_missing,
-    "i2c.address_conflict": check_i2c_address_conflict,
-}
