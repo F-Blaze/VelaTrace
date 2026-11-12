@@ -607,7 +607,8 @@ def _pair_pullup_rail(design: _Design, net: str, other: str) -> bool:
         return False
     for comp, _ in design.nodes[other]:
         nets = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
-        if nets and other in nets:
+        ohms = parse_resistance(comp.value) if nets else None
+        if nets and other in nets and ohms is not None and ohms >= 100:  # a 0 Ω link routes, it does not pull up
             far = nets[1] if nets[0] == other else nets[0]
             if far != net and i2c_line(far) not in {None, line}:
                 return True
@@ -1417,7 +1418,7 @@ def _full_speed_usb(snapshot: DesignSnapshot, p: str, n: str) -> bool:
     or any grounded U part of at most 6 pins and 4 signal nets): those are not the chip at the end.
     Only USB lines qualify: named USB/D+/D-/DP/DM, or reaching a USB connector."""
     nets = {p, n}
-    if not (any(_USB_LINE.search(net_label(net).upper()) for net in nets) or any(
+    if not (any(_USB_LINE.search(net.rsplit("/", 1)[-1].upper()) for net in nets) or any(
             part_kind(comp) == "connector" and "USB" in f"{comp.value} {comp.footprint}".upper() and comp.nets & nets
             for comp in snapshot.components)):
         return False
@@ -1602,8 +1603,8 @@ def _inside(points, polygon):
     return cross.sum(1) % 2 == 1
 
 
-def _gaps(seg, polygons, holes) -> list[tuple[float, tuple[float, float]]]:
-    """(length, start) of each stretch of ``seg`` longer than GAP_MM with no fill polygon under it.
+def _gaps(seg, polygons, holes, min_mm: float = GAP_MM) -> list[tuple[float, tuple[float, float]]]:
+    """(length, start) of each stretch of ``seg`` longer than min_mm with no fill polygon under it.
 
     ponytail: per segment and along the chord for arcs, so a gap that starts on one track and
     ends on the next is two stretches; chain segments if that misses real crossings."""
@@ -1626,7 +1627,7 @@ def _gaps(seg, polygons, holes) -> list[tuple[float, tuple[float, float]]]:
             start = start if run else tuple(float(v) for v in pts[i])
             run += 1
             continue
-        if run * step > GAP_MM:
+        if run * step > min_mm:
             stretches.append((run * step, start))
         run = 0
     return stretches
@@ -1655,6 +1656,7 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
         holes[via.net].append(via.position)
     lengths: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     gaps: dict[str, list] = defaultdict(list)
+    uncovered: dict[str, float] = defaultdict(float)  # full-speed nets: all unreferenced length, any stretch
     for seg in copper.segments:
         model = copper.models.get(seg.layer)
         if seg.net not in nets or model is None or seg.layer in copper.planes:
@@ -1668,10 +1670,13 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
             refs = _references(copper, seg.layer)
         polygons = [polygon for ref in refs for polygon in fills.get(ref, ())]
         for length, start in _gaps(seg, polygons, holes[seg.net]) if polygons else ():
-            if seg.net not in full_speed or length > FULL_SPEED_GAP_MM:
-                gaps[seg.net].append((seg.layer, refs, length, start))
+            gaps[seg.net].append((seg.layer, refs, length, start))
+        if seg.net in full_speed and polygons:
+            uncovered[seg.net] += sum(length for length, _ in _gaps(seg, polygons, holes[seg.net], 0.0))
     findings = []
     for net, rows in sorted(gaps.items()):
+        if net in full_speed and uncovered[net] <= FULL_SPEED_GAP_MM:
+            continue  # full-speed USB: only a long total stretch without a reference matters
         total = sum(row[2] for row in rows)
         layer, refs, longest, (x, y) = max(rows, key=lambda row: row[2])
         findings.append(Finding(

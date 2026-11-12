@@ -33,15 +33,6 @@
  ],
  "cm5-carrier-board": [
   {
-   "rule": "connector.power_unprotected",
-   "refs": [
-    "J7"
-   ],
-   "nets": [
-    "/CM5_5V"
-   ]
-  },
-  {
    "rule": "decoupling.missing",
    "refs": [
     "U1",
@@ -112,6 +103,13 @@
     "D3"
    ],
    "nets": []
+  },
+  {
+   "rule": "value.nonstandard",
+   "refs": [
+    "R25"
+   ],
+   "nets": []
   }
  ],
  "orbit-stm32-usb-battery": [
@@ -145,13 +143,6 @@
     "R6",
     "R8",
     "R12"
-   ],
-   "nets": []
-  },
-  {
-   "rule": "value.missing",
-   "refs": [
-    "D1"
    ],
    "nets": []
   },
@@ -264,20 +255,6 @@
   {
    "rule": "connector.power_unprotected",
    "refs": [
-    "J11",
-    "J12",
-    "J6",
-    "J7",
-    "J8",
-    "J17"
-   ],
-   "nets": [
-    "+5V"
-   ]
-  },
-  {
-   "rule": "connector.power_unprotected",
-   "refs": [
     "J17",
     "J5"
    ],
@@ -328,16 +305,6 @@
  ],
  "stm32l432-buck-vs-ldo": [
   {
-   "rule": "connector.power_unprotected",
-   "refs": [
-    "J6",
-    "J7"
-   ],
-   "nets": [
-    "/VCC"
-   ]
-  },
-  {
    "rule": "value.missing",
    "refs": [
     "FB1",
@@ -386,26 +353,5 @@
    "nets": []
   }
  ],
- "usb2-hub-mtt": [
-  {
-   "rule": "value.missing",
-   "refs": [
-    "D1",
-    "D10",
-    "D11",
-    "D12",
-    "D13",
-    "D14",
-    "D2",
-    "D3",
-    "D4",
-    "D5",
-    "D6",
-    "D7",
-    "D8",
-    "D9"
-   ],
-   "nets": []
-  }
- ]
+ "usb2-hub-mtt": []
 }

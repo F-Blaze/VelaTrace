@@ -84,7 +84,9 @@ def _same(a: Decimal, b: Decimal) -> bool:
 
 
 def check_mpn_value_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
-    findings = []
+    """One finding per (value shown, value ordered, field): a batch of parts with one wrong part number
+    is one mistake."""
+    groups: dict[tuple[str, str, str], list[tuple[Component, str]]] = {}
     for comp in snapshot.components:
         kind = ar.part_kind(comp)
         if comp.dnp or kind not in {"resistor", "capacitor"}:
@@ -96,13 +98,25 @@ def check_mpn_value_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
         for name, text, wanted in [*claims, *_described(comp, kind)]:
             if wanted is not None and not _same(shown.value, wanted):
                 have, want = bom.format_value(shown.value, kind), bom.format_value(wanted, kind)
-                findings.append(Finding(
-                    "part.mpn_value_mismatch", Severity.WARNING,
-                    f"{comp.reference} is labelled {have} but its {name} field says {want}", (comp.reference,), (),
-                    f"{comp.reference} Value '{comp.value}' ({have}); field '{name}' = '{text}' decodes to {want}.",
-                    f"Correct the Value to {want}, or fix the {name} field if {have} is what you want."))
+                groups.setdefault((have, want, name), []).append((comp, text))
                 break
+    findings = []
+    for (have, want, name), rows in groups.items():
+        refs = tuple(sorted((comp.reference for comp, _ in rows), key=_ref_order))
+        shown = ", ".join(refs[:6]) + (", …" if len(refs) > 6 else "")
+        comp, text = rows[0]
+        findings.append(Finding(
+            "part.mpn_value_mismatch", Severity.WARNING,
+            f"{shown} {'is' if len(refs) == 1 else 'are'} labelled {have} but the {name} field says {want}", refs, (),
+            f"{len(refs)} part{'s' if len(refs) > 1 else ''} with Value {have}; {comp.reference} field '{name}' = "
+            f"'{text}' decodes to {want}.",
+            f"Correct the Value to {want}, or fix the {name} field if {have} is what you want."))
     return findings
+
+
+def _ref_order(ref: str) -> tuple[str, int]:
+    match = re.match(r"([A-Za-z]+)(\d*)", ref)
+    return (match.group(1), int(match.group(2) or 0)) if match else (ref, 0)
 
 
 def _footprint_kind(footprint: str) -> str | None:

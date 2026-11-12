@@ -181,9 +181,9 @@ def check_vbus_capacitance(snapshot: DesignSnapshot) -> list[Finding]:
                 continue
             findings.append(Finding(
                 "usb.vbus_capacitance", Severity.INFO,
-                f"{conn.reference} VBUS carries {total * 1000000:g} µF, above the USB limit of 10 µF",
+                f"{conn.reference} VBUS carries {float(total) * 1e6:.3g} µF, above the USB limit of 10 µF",
                 (conn.reference, *sorted(caps)), (net,),
-                f"{', '.join(sorted(caps))} total {total * 1000000:g} µF from {net} to ground, directly on the "
+                f"{', '.join(sorted(caps))} total {float(total) * 1e6:.3g} µF from {net} to ground, directly on the "
                 f"{conn.reference} VBUS net with no load switch or current limiter; USB 2.0 allows a device "
                 "at most 10 µF at attach.",
                 "Add a load switch or inrush limiter after the connector, or keep the capacitance on VBUS at "
