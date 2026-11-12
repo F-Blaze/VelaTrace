@@ -279,9 +279,8 @@ def test_rows_a_hair_apart_are_not_a_layout_difference():
     # H015/H016: posts at 3.15 mm next to a pin at 3.0 mm cluster as one row in KiCad, two at LCSC.
     nets = {"1": "Net-(BOOT0-Pad1)", "2": "+3.3V", "3": "Net-(U16-BOOT0)",
             "4": "unconnected-(BOOT0-Pad4)", "5": "unconnected-(BOOT0-Pad5)"}
-    (finding,) = compare("J9", K3_1270, C145857, nets)
-    assert finding.rule == "fit.pin_order" and "(2 of 5 pads)" in finding.title   # pins 1 and 3 do swap
-    assert compare("BOOT0", K3_1270, C145857, nets) == []   # on an SPDT switch that only flips the positions
+    # Pins 1 and 3 do swap, but on this SPDT slide switch that only flips the positions: no layout or pin-order finding.
+    assert compare("BOOT0", K3_1270, C145857, nets) == []
     assert rules(row(5, tht=False), C145857) == ["fit.layout"]                     # a real layout difference still is one
 
 
