@@ -79,6 +79,19 @@ def test_full_speed_device_behind_series_resistors_is_found():
     assert ids(hs_adapter_board(connector, r1, r2, mcu)) == []
 
 
+def test_full_speed_device_behind_esd_array_and_choke_is_found():
+    connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
+    # An ESD array by an unknown part number: 6 pins, 4 signal nets, ground and VBUS.
+    esd = hs_part("U5", "82400102", "Package_TO_SOT_SMD:SOT-23-6", {"4": "USB_D+", "6": "USB_D-", "3": "/2D+",
+                                                                     "1": "/2D-", "2": "GND", "5": "VBUS"})
+    choke = hs_part("L4", "744232090", "Inductor_SMD:L_CommonModeChoke", {"1": "/2D+", "2": "/2D-", "3": "/3D+",
+                                                                           "4": "/3D-"})
+    for value, quiet in (("CP2102N-A02-GQFN20", True), ("USB2514B", False)):
+        chip = hs_part("U2", value, "Package_DFN_QFN:QFN-20", {"4": "/3D+", "5": "/3D-", "6": "/RXD", "7": "/TXD",
+                                                               "8": "/RST", "9": "/SUSPEND"})
+        assert (ids(hs_adapter_board(connector, esd, choke, chip)) == []) is quiet, value
+
+
 def test_matched_pair_and_small_mismatch_are_quiet():
     assert ids(board(track("USB_D+", 20), track("USB_D-", 19, y=1))) == []
 

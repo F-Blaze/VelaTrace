@@ -1380,17 +1380,30 @@ _FULL_SPEED_USB = re.compile(
 
 
 def _full_speed_usb(snapshot: DesignSnapshot, p: str, n: str) -> bool:
-    """The pair reaches ICs, and every IC on it is a full-speed-only USB device (connectors,
-    ESD parts and series resistors of up to 100 Ω in between do not count)."""
+    """The pair reaches ICs, and every IC on it is a full-speed-only USB device. The signal is
+    followed through series resistors of up to 100 Ω, common-mode chokes and ESD arrays (by name,
+    or any grounded U part of at most 6 pins and 4 signal nets): those are not the chip at the end."""
     nets = {p, n}
-    for comp in snapshot.components:
-        ends = two_terminal_nets(comp)
-        ohms = parse_resistance(comp.value) if comp.reference.upper().startswith("R") else None
-        if ends and ohms is not None and ohms <= 100 and set(ends) & {p, n}:
-            nets |= set(ends)
+    passed: set[str] = set()
+    for _ in range(3):  # connector -> ESD -> choke -> resistor -> chip at most
+        for comp in snapshot.components:
+            if comp.reference in passed or not comp.nets & nets:
+                continue
+            ends = two_terminal_nets(comp)
+            ohms = parse_resistance(comp.value) if comp.reference.upper().startswith("R") else None
+            signals = {net for net in comp.nets if not (is_ground(net) or is_supply_name(net))}
+            if ends and ohms is not None and ohms <= 100:
+                nets |= set(ends)
+            elif (_PROTECTION_VALUE.search(f"{comp.value} {comp.footprint}".upper()) or _PAIR_ESD.search(comp.value)
+                  or part_kind(comp) in {"inductor", "ferrite"}
+                  or (comp.reference.upper().startswith("U") and len(terminals(comp)) <= 6 and len(signals) <= 4
+                      and any(is_ground(net) for net in comp.nets))):
+                nets |= signals
+            else:
+                continue
+            passed.add(comp.reference)
     chips = [comp for comp in snapshot.components if comp.reference.upper().startswith(("U", "IC"))
-             and any(pin.net in nets for pin in comp.pins)]
-    chips = [comp for comp in chips if not _PROTECTION_VALUE.search(f"{comp.value} {comp.footprint}".upper())]
+             and comp.reference not in passed and any(pin.net in nets for pin in comp.pins)]
     return bool(chips) and all(_FULL_SPEED_USB.search(f"{comp.value} {mpn_of(comp) or ''}".upper()) for comp in chips)
 
 
