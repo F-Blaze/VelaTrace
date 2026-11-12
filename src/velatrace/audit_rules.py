@@ -386,6 +386,8 @@ _BUILT_IN_DECOUPLING = re.compile(
 # Regulator, charger and LDO families whose pins an untyped netlist does not show as power_out.
 _REGULATOR_PART = re.compile(r"(?<!\d)(?:78|79)[LMS]?\d\d(?!\d)|1117|LM317|BQ2\d{4}|TP40\d\d|MCP73\d+|LDO")
 _SOURCE_PIN = re.compile(r"[+-]?(?:V?OUT|VO|V?BAT|SW|LX|SYS)\d*[+-]?")  # output, charger battery or switch node
+# DC-DC converter modules often drawn with a pin-header symbol.
+_DCDC_MODULE = re.compile(r"MP1584|LM2596|LM2577|XL[46]0\d\d|MT3608|MINI.?360|DC.?DC|BUCK|BOOST|STEP.?(?:DOWN|UP)")
 # Single-gate logic and reset supervisors draw microamps; a far bypass cap is harmless (decoupling.missing still applies).
 _LOW_CURRENT_PART = re.compile(
     r"74[A-Z]{0,5}1G\d|NC7S[A-Z]?\d|MAX8(?:09|1[012])(?!\d)|APX80[39]|TPS38\d\d|STM8(?:0\d|1\d)(?!\d)|MCP1\d\d(?!\d)")
@@ -596,6 +598,22 @@ def _is_rail(design: _Design, net: str) -> bool:
         for comp, pin in design.nodes[net]))
 
 
+def _pair_pullup_rail(design: _Design, net: str, other: str) -> bool:
+    """A resistor from the partner I2C line (SDA for SCL and back) also ends on `other`: two resistors
+    from SDA and SCL to one non-ground net are a pull-up pair, whatever that rail is called (e.g. a
+    sensor supply switched by a transistor)."""
+    line = i2c_line(net)
+    if other in design.grounds or _is_return(design, other):
+        return False
+    for comp, _ in design.nodes[other]:
+        nets = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
+        if nets and other in nets:
+            far = nets[1] if nets[0] == other else nets[0]
+            if far != net and i2c_line(far) not in {None, line}:
+                return True
+    return False
+
+
 def _breakout(design: _Design, ref: str) -> bool:
     """A pin header that exposes many other signals (not a dedicated I2C connector)."""
     comp = design.parts[ref]
@@ -704,7 +722,7 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
             if not nets or net not in nets:
                 continue
             other = nets[1] if nets[0] == net else nets[0]
-            if _is_rail(design, other):
+            if _is_rail(design, other) or _pair_pullup_rail(design, net, other):
                 pullups.append((comp, other, parse_resistance(comp.value)))
         zero = [row for row in pullups if row[2] == 0]
         for comp, rail, _ in zero:
@@ -1118,6 +1136,8 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
         nets = set(terminals(conn).values())
         if _NOT_POWER_ENTRY.search(f"{conn.value} {conn.footprint}".upper()):
             continue  # card sockets, M.2, SWD/Tag-Connect: loads and programming pads
+        if _DCDC_MODULE.search(conn.value.upper()):
+            continue  # a buck/boost module drawn as a header is a source, not a power entry
         if not any(net in design.grounds or _RETURN.fullmatch(net_label(net)) for net in nets):
             continue
         signals = {n for n in nets if net_label(n) and n not in design.grounds and n not in design.supplies}
@@ -1184,6 +1204,13 @@ def _rail_group(design: _Design, net: str) -> set[str]:
     return group
 
 
+def _selector(design: _Design, comp: Component) -> bool:
+    """A jumper, or a 2-3 pin header with no ground pin: it links or selects rails, it is no entry."""
+    kind = design.kind[comp.reference]
+    return kind == "jumper" or (kind == "connector" and 2 <= len(terminals(comp)) <= 3
+                                and not any(net in design.grounds for net in comp.nets))
+
+
 def _fed_group(design: _Design, group: set[str]) -> set[str]:
     """group plus the supply nets reached through a series resistor (≤100 Ω), ferrite, fuse or diode,
     and supply nets of the same name: a rail that something on the board feeds, however lossy the link."""
@@ -1196,6 +1223,8 @@ def _fed_group(design: _Design, group: set[str]) -> set[str]:
             nets = two_terminal_nets(comp)
             if nets and current in nets and (_series_link(design, comp, 100) or design.kind[comp.reference] == "diode"):
                 near.append(nets[1] if nets[0] == current else nets[0])
+            elif _selector(design, comp):  # a jumper picks which output feeds the rail
+                fed |= {net for net in comp.nets if net not in design.grounds and net != current}
         for other in near:
             if other in design.supplies and other not in fed:
                 fed.add(other)
@@ -1379,11 +1408,19 @@ _FULL_SPEED_USB = re.compile(
     r"CH34[0-9]|CH9102|CH55\d|CH32V|CP21\d\d|PCM29\d\d|FT23[012][RXQ]|MCP2221|PIC1[68]F\d*K?5\d|GD32F")
 
 
+_USB_LINE = re.compile(r"USB|D[+-]$|(?<![A-Z])(?:U?D[PMN]|D_?[PN])(?![A-Z])")
+
+
 def _full_speed_usb(snapshot: DesignSnapshot, p: str, n: str) -> bool:
     """The pair reaches ICs, and every IC on it is a full-speed-only USB device. The signal is
     followed through series resistors of up to 100 Ω, common-mode chokes and ESD arrays (by name,
-    or any grounded U part of at most 6 pins and 4 signal nets): those are not the chip at the end."""
+    or any grounded U part of at most 6 pins and 4 signal nets): those are not the chip at the end.
+    Only USB lines qualify: named USB/D+/D-/DP/DM, or reaching a USB connector."""
     nets = {p, n}
+    if not (any(_USB_LINE.search(net_label(net).upper()) for net in nets) or any(
+            part_kind(comp) == "connector" and "USB" in f"{comp.value} {comp.footprint}".upper() and comp.nets & nets
+            for comp in snapshot.components)):
+        return False
     passed: set[str] = set()
     for _ in range(3):  # connector -> ESD -> choke -> resistor -> chip at most
         for comp in snapshot.components:

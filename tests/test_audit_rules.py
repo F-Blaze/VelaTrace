@@ -746,6 +746,28 @@ def test_qwiic_and_fan_ports_are_not_power_entries():
 
 
 
+def test_i2c_pullup_pair_to_a_switched_rail_counts():
+    sda_scl = design(ic("U1", ("3", "SDA", "SDA"), ("4", "SCL", "SCL")), ic("U2", ("3", "SDA", "SDA"), ("4", "SCL", "SCL"),
+                     value="SENSOR"), cap(), res("R1", "SDA", "Net-(Q5-D)"), res("R2", "SCL", "Net-(Q5-D)"))
+    assert [f.rule for f in rules(sda_scl, "i2c.pullup.missing")] == []
+    lone = design(ic("U1", ("3", "SDA", "SDA")), ic("U2", ("3", "SDA", "SDA"), value="SENSOR"), cap(),
+                  res("R1", "SDA", "Net-(U1-X)"))  # one resistor to an unknown net is not a pull-up
+    assert [f.rule for f in rules(lone, "i2c.pullup.missing")] == ["i2c.pullup.missing"]
+
+
+def test_rail_selected_by_a_jumper_and_buck_module_headers_are_not_entries():
+    buck = part("U3", "TPS62840", "Package_SON:WSON-6", ("1", "+5V", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", "/Vo_Buck", "VOUT", "power_out"))
+    sel = part("J5", "Conn_01x03_Pin", "", ("1", "/Vo_Buck"), ("2", "/VCC"), ("3", "/Vo_LDO"))
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "/VCC", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    header = part("J6", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "/VCC"), ("2", "GND"))
+    assert rules(design(buck, sel, mcu, header, cap("C1", "/VCC")), "connector") == []
+    assert [f.refs for f in rules(design(mcu, header, cap("C1", "/VCC")), "connector")] == [("J6",)]
+    module = part("M1", "MP1584EN", "Connector_PinHeader_2.54mm:PinHeader_1x04", ("1", "+12V"), ("2", "GND"), ("3", "+5V"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert "M1" not in [ref for f in rules(design(module, load, cap("C1", "+5V")), "connector") for ref in f.refs]
+
+
 def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
     led = part("D1", "LED", "LED_SMD:LED_0603", ("1", "A"), fields={"LCSC": "C2297", "lib_id": "Device:LED"})
     named = part("C1", "20p_0402_C0G_50V", "Capacitor_SMD:C_0402", ("1", "A"),
