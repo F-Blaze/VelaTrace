@@ -424,6 +424,16 @@ def _is_regulator(ic: Component) -> bool:
         for pin in ic.pins))
 
 
+# Slow, low-current interface parts: RTCs, CAN/RS-485 transceivers, 1-2 gate logic, optocouplers. Their
+# edges are slow and their supply current small, so a bypass cap a centimetre away still works; beyond
+# that (often the only cap is at the regulator) it is reported as for any other part.
+_SLOW_PART = re.compile(
+    r"DS1[23]\d\d|DS32\d\d|PCF85\d\d|PCF2129|RV-?(?:3028|8803|3032)|MCP79\d{3}|M41T\d\d|"
+    r"SN65HVD\d+|MCP25[56]\d|TJA1\d{3}|TCAN\d+|MAX3?485|MAX1348\d|SP3?485|THVD\d+|ADM2?48\d|"
+    r"74[A-Z]{0,5}[12]G\d|NC7S[A-Z]?\d|H11L\d|6N13[5-9]|PC817|TLP\d{3}")
+SLOW_PART_NEAR_MM = 12.0
+# eFuses and load switches (not USB current-limit switches, which want an output capacitor).
+_LOAD_SWITCH = re.compile(r"TPS259\d\d|TPS22\d{3}|MIC94\d{3}|SIP32\d{3}|E-?FUSE|LOAD.?SWITCH")
 RAIL_NEAR_MM = 3.0  # "beside the pin" when judging whether a shared rail is well decoupled
 RAIL_BULK_F = Decimal("4.7e-6")
 
@@ -487,8 +497,9 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
             _base_type(pin) in {"power_in", "power_out"} or _GROUND.fullmatch(pin.name.upper()))}
         for net, pins in sorted(supply_pins.items()):
             if not caps.get(net):
-                if tiny:
-                    continue
+                if tiny or (_LOAD_SWITCH.search(ic.value.upper()) and all(
+                        _OUT_PIN.fullmatch(_plain_pin(pin.name)) for pin in pins)):
+                    continue  # an eFuse/load-switch output: the load's capacitors, none required at the switch
                 if not _decoupled(design, net, cap_ends, returns - {net}) and not _not_a_rail(design, ic, net, pins):
                     missing[net].append((ic, pins))
                 continue
@@ -504,9 +515,10 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
                 distances += [(dist(a, b), cap.reference) for a in points for b in cap_points]
             if distances:
                 nearest, ref = min(distances)
+                limit = SLOW_PART_NEAR_MM if _SLOW_PART.search(ic.value.upper()) else DECOUPLING_NEAR_MM
                 if nearest > DECOUPLING_NEAR_MM and _is_addressable(ic):
                     far_leds[net].append((ic, ref, nearest))
-                elif nearest > DECOUPLING_NEAR_MM and not (
+                elif nearest > limit and not (
                         _rc_filtered(design, net) or _well_decoupled_rail(design, net, caps[net])):
                     findings.append(Finding(
                         "decoupling.far", Severity.WARNING,

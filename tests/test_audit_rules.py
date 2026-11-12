@@ -719,6 +719,29 @@ def test_regulator_feedback_pin_is_not_a_supply_input():
     assert rules(design(driver, bulk), "decoupling") == []
 
 
+def test_slow_parts_get_a_centimetre_but_not_more():
+    def chip(value):
+        return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)), ("5", "/CANH", "CANH", "bidirectional"),
+                    ("6", "/CANL", "CANL", "bidirectional"))
+    def at(mm):
+        return cap(a="+3V3", pin_pos=((10.0 + mm, 10.0), (11.0 + mm, 10.0)))
+    for value in ("SN65HVD230", "MAX3485", "DS3231M", "74LVC2G14", "H11L1"):
+        assert rules(design(chip(value), at(9.0)), "decoupling") == [], value
+        assert [f.rule for f in rules(design(chip(value), at(20.0)), "decoupling")] == ["decoupling.far"], value
+    assert [f.rule for f in rules(design(chip("ATtiny85"), at(9.0)), "decoupling")] == ["decoupling.far"]
+
+
+def test_efuse_output_needs_no_cap_but_usb_power_switch_output_does():
+    def switch(value):
+        return part("U1", value, "Package_TO_SOT_SMD:SOT-23-6", ("5", "+5V_IN", "IN", "power_in"),
+                    ("1", "+5V", "OUT", "power_out"), ("2", "GND", "GND", "power_in"), ("3", "/EN", "EN", "input"))
+    load = part("J2", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+5V"), ("2", "GND"))
+    for value, nets in (("TPS259470A", []), ("TPS22918", []), ("CH217K", [("+5V",)])):
+        found = rules(design(switch(value), load, cap(a="+5V_IN")), "decoupling.missing")
+        assert [f.nets for f in found] == nets, value
+
+
 def test_unconnected_supply_pin_needs_no_decoupling():
     module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
                   ("2", "GND", "GND", "power_in"), *exp4_spare())
