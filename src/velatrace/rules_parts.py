@@ -172,14 +172,27 @@ def check_polarized_symbol(snapshot: DesignSnapshot) -> list[Finding]:
         if reason is None:
             reason = next((f"'{text}' names a polarized capacitor" for text in texts
                            if _POLAR_WORDS.search(text) and not _NOT_POLAR.search(text)), None)
-        if reason is None and comp.footprint.rsplit(":", 1)[-1].upper().startswith("CP_"):
-            reason = f"its footprint {comp.footprint} is polarized"
+        if comp.footprint.rsplit(":", 1)[-1].upper().startswith("CP_"):
+            # The footprint marks + (pad 1), so the board is marked; the risk is that pad 1 landed on ground,
+            # since a non-polar symbol's pin 1 is arbitrary.
+            pads = {pin.number: pin.net for pin in comp.pins}
+            plus, minus = pads.get("1", ""), pads.get("2", "")
+            if plus and minus and ar.is_ground(plus) and not ar.is_ground(minus):
+                findings.append(Finding(
+                    "part.polarized_symbol", Severity.WARNING,
+                    f"{comp.reference}'s + pad is on {plus}: the polarized capacitor would be fitted backwards",
+                    (comp.reference,), (plus, minus),
+                    f"{comp.reference} uses non-polar symbol {lib_id} on polarized footprint {comp.footprint}; "
+                    f"footprint pad 1 (+) is on {plus}, pad 2 (-) on {minus}.",
+                    "Use a polarized symbol (for example Device:C_Polarized) with + on the supply side."))
+            continue
         if reason:
             findings.append(Finding(
                 "part.polarized_symbol", Severity.WARNING,
                 f"{comp.reference} is a polarized capacitor drawn with a non-polar symbol", (comp.reference,), (),
-                f"{comp.reference} uses symbol {lib_id} but {reason}, so the board has no polarity mark.",
-                "Use a polarized symbol (for example Device:C_Polarized) so the + pin is marked and checked."))
+                f"{comp.reference} uses symbol {lib_id} and footprint {comp.footprint} but {reason}, so the board "
+                "has no polarity mark.",
+                "Use a polarized symbol and footprint (for example Device:C_Polarized, CP_*) so + is marked."))
     return findings
 
 
@@ -227,8 +240,8 @@ def check_nonstandard_value(snapshot: DesignSnapshot) -> list[Finding]:
         if len(mantissa.as_tuple().digits) < 2 or mantissa in _E_SERIES:
             continue
         orderable = (_decode_mpn(text, "resistor") for _, text in _text_fields(comp, bom._MPN_FIELDS))
-        if any(want is not None and _same(parsed.value, want) for want in orderable):
-            continue
+        if any(want is not None and _same(parsed.value, want) for want in orderable) or bom.lcsc_code(comp):
+            continue  # a decoded MPN or an LCSC code names a part that exists at this value
         groups.setdefault(parsed.value.normalize(), []).append(comp.reference)
     findings = []
     for value, refs in sorted(groups.items()):

@@ -108,11 +108,24 @@ def usb(footprint="Connector_USB:USB_C_Receptacle_GCT_USB4105", value="USB_C_Rec
 
 
 def test_vbus_fires_above_ten_microfarad_with_summed_caps():
-    parts = (usb(), cap("C1", "VBUS", "GND", value="10uF"), cap("C2", "VBUS", "GND", value="4.7uF"))
+    parts = (usb(), cap("C1", "VBUS", "GND", value="10uF"), cap("C2", "VBUS", "GND", value="10uF"))
     hits = rules(design(*parts), "usb.vbus_capacitance")
     assert [(f.severity, f.refs, f.nets) for f in hits] == [
         (Severity.INFO, ("J1", "C1", "C2"), ("VBUS",))]
-    assert "14.7" in hits[0].evidence
+    assert "20" in hits[0].evidence
+    # A small excess is within what ceramics lose at 5 V bias.
+    assert rules(design(usb(), cap("C1", "VBUS", "GND", value="10uF"), cap("C2", "VBUS", "GND", value="1uF")),
+                 "usb.vbus_capacitance") == []
+
+
+def test_vbus_quiet_on_a_source_port_with_cc_pull_ups():
+    source = part("J1", "USB_C_Receptacle", "Connector_USB:USB_C_Receptacle_GCT_USB4105", ("A4", "VBUS", "VBUS", "passive"),
+                  ("A1", "GND", "GND", "passive"), ("A5", "/CC1", "CC1", "bidirectional"))
+    rp = res("R5", "/CC1", "VBUS", "56k")
+    assert rules(design(source, rp, cap("C1", "VBUS", "GND", value="22uF")), "usb.vbus_capacitance") == []
+    rd = res("R5", "/CC1", "GND", "5.1k")
+    assert [f.rule for f in rules(design(source, rd, cap("C1", "VBUS", "GND", value="22uF")), "usb.vbus_capacitance")] == [
+        "usb.vbus_capacitance"]
 
 
 @pytest.mark.parametrize("fp,value", [("Connector_USB:USB_Micro-B_Molex", "USB_B_Micro"),

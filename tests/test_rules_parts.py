@@ -168,10 +168,12 @@ def test_polarized_words_fire(fields):
     assert found(POLAR, c(lib_id="Device:C", **fields)) == [(POLAR, ("C1",))]
 
 
-def test_polarized_footprint_fires():
-    assert found(POLAR, c(footprint="Capacitor_SMD:CP_Elec_6.3x5.4", lib_id="Device:C")) == [(POLAR, ("C1",))]
-    assert found(POLAR, c(footprint="Capacitor_Tantalum_SMD:CP_EIA-3528-21_Kemet-B", lib_id="Device:C_Small")) == [
-        (POLAR, ("C1",))]
+def test_polarized_footprint_fires_only_when_its_plus_pad_is_on_ground():
+    for fp in ("Capacitor_SMD:CP_Elec_6.3x5.4", "Capacitor_Tantalum_SMD:CP_EIA-3528-21_Kemet-B"):
+        reversed_ = part("C1", "220uF", fp, ("1", "GND"), ("2", "+12V"), fields={"lib_id": "Device:C"})
+        assert found(POLAR, reversed_) == [(POLAR, ("C1",))], fp
+        right = part("C1", "220uF", fp, ("1", "+12V"), ("2", "GND"), fields={"lib_id": "Device:C"})
+        assert found(POLAR, right) == [], fp  # the footprint marks + on the board
 
 
 @pytest.mark.parametrize("comp", [

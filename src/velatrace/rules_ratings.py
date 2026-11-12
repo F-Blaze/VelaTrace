@@ -156,6 +156,20 @@ def _limits_inrush(design: _Design, comp: Component, pin: Pin) -> bool:
     return _base_type(pin) == "power_out" or (_name(pin) in {"VIN", "IN"} and bool(_INRUSH_PART.search(text)))
 
 
+def _source_port(design: _Design, conn: Component) -> bool:
+    """A CC pin pulled up by a resistor to a non-ground net (Rp): the board supplies power on this port."""
+    for pin in conn.pins:
+        if not pin.net or not re.fullmatch(r"CC\d?", _name(pin)):
+            continue
+        for comp, _ in design.nodes[pin.net]:
+            ends = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
+            if ends and pin.net in ends:
+                other = ends[1] if ends[0] == pin.net else ends[0]
+                if other not in design.grounds and not _is_return(design, other):
+                    return True
+    return False
+
+
 def check_vbus_capacitance(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
     findings = []
@@ -177,7 +191,9 @@ def check_vbus_capacitance(snapshot: DesignSnapshot) -> list[Finding]:
                         and any(end in design.grounds for end in ends)):
                     caps[comp.reference] = value.value
             total = sum(caps.values(), Decimal(0))
-            if total <= _USB_LIMIT_F:
+            # Ceramics lose much of their value at 5 V, so only a clear excess is reported; a port with
+            # CC pull-ups (Rp) is a source, where the limit does not apply.
+            if total <= _USB_LIMIT_F * Decimal("1.5") or _source_port(design, conn):
                 continue
             findings.append(Finding(
                 "usb.vbus_capacitance", Severity.INFO,

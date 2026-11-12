@@ -1307,7 +1307,8 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
         empty = value in _EMPTY_VALUES
-        if not (empty or _GENERIC_VALUE.fullmatch(value)
+        # A connector's text ("LED", "Crystal") labels what plugs in; generic names only mean "unset" on the part itself.
+        if not (empty or (kind != "connector" and _GENERIC_VALUE.fullmatch(value))
                 or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol
                      and not _PART_NUMBER_SYMBOL.search(symbol))):
             continue
