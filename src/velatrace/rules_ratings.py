@@ -306,12 +306,3 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
             "nothing (no net, no no-connect flag).",
             "Connect the pin to its supply or ground, or flag it no-connect if the datasheet allows leaving it open."))
     return findings
-
-
-RATINGS_RULES: dict[str, Check] = {
-    "cap.voltage_rating": check_cap_voltage_rating,
-    "resistor.power_rating": check_resistor_power_rating,
-    "usb.vbus_capacitance": check_vbus_capacitance,
-    "inductive.flyback_missing": check_flyback_missing,
-    "pin.power_unconnected": check_power_unconnected,
-}

@@ -432,12 +432,12 @@ def _is_regulator(ic: Component) -> bool:
 _SLOW_PART = re.compile(
     r"DS1[23]\d\d|DS32\d\d|PCF85\d\d|PCF2129|RV-?(?:3028|8803|3032)|MCP79\d{3}|M41T\d\d|"
     r"SN65HVD\d+|MCP25[56]\d|TJA1\d{3}|TCAN\d+|MAX3?485|MAX1348\d|SP3?485|THVD\d+|ADM2?48\d|"
-    r"74[A-Z]{0,5}[12]G\d|NC7S[A-Z]?\d|H11L\d|6N13[5-9]|PC817|TLP\d{3}|MCP230\d\d|PCF857\d|PCA95[3-7]\d|"
+    r"74[A-Z]{0,5}[12]G\d|NC7S[A-Z]?\d|H11L\d|6N13[5-9]|PC817|TLP\d{3}|MCP230\d\d|PCF857\d|PCA95[3-7]\d|"
     r"^(?:N?AND|N?OR|XN?OR|INV|NOT|BUF)\d?$")  # a generic single gate
 SLOW_PART_NEAR_MM = 12.0
 # eFuses and load switches (not USB current-limit switches, which want an output capacitor).
-_LOAD_SWITCH = re.compile(r"TPS259\d\d|TPS22\d{3}|MIC94\d{2,3}|SIP32\d{3}|E-?FUSE|LOAD.?SWITCH")
-# Surge stoppers / overvoltage controllers: their datasheets keep capacitors off the raw input on purpose.
+_LOAD_SWITCH = re.compile(r"TPS259\d\d|TPS22\d{3}|MIC94\d{2,3}|SIP32\d{3}|E-?FUSE|LOAD.?SWITCH")
+# Surge stoppers / overvoltage controllers: their datasheets keep capacitors off the raw input on purpose.
 _SURGE_STOPPER = re.compile(r"LTC436[0-9]|LTC4380|LT4363|MAX1690\d|TPS2660\d")
 RAIL_NEAR_MM = 3.0  # "beside the pin" when judging whether a shared rail is well decoupled
 RAIL_BULK_F = Decimal("4.7e-6")
@@ -1873,6 +1873,10 @@ RULES: dict[str, Check] = {
     "usb.vbus_capacitance": _sibling("rules_ratings", "check_vbus_capacitance"),
     "inductive.flyback_missing": _sibling("rules_ratings", "check_flyback_missing"),
     "pin.power_unconnected": _sibling("rules_ratings", "check_power_unconnected"),
+    "led.current_high": _sibling("rules_circuit", "check_led_current_high"),
+    "logic.level_mismatch": _sibling("rules_circuit", "check_level_mismatch"),
+    "mosfet.gate_pulldown_missing": _sibling("rules_circuit", "check_gate_pulldown_missing"),
+    "i2c.address_conflict": _sibling("rules_circuit", "check_i2c_address_conflict"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.
