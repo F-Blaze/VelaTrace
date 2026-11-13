@@ -302,9 +302,8 @@ class BomPrecisionTests(unittest.TestCase):
         parts = (two_pin("C1", "1uF, 25V", C1206, "+3V3", "GND", **mpn),
                  two_pin("C2", "1uF, 50V", C1206, "/VGH", "GND", **mpn),
                  two_pin("C3", "1uF, 10V", C1206, "/VGL", "GND", **mpn))
-        [finding] = rules(bom_findings(snapshot(*parts)), "bom.value_normalise")
-        self.assertEqual(finding.refs, ("C1", "C2", "C3"))
-        self.assertIn("CL31B105KBHNFNE", finding.evidence)
+        # One part number on all: the rating notes differ, the order is one line.
+        self.assertEqual(rules(bom_findings(snapshot(*parts)), "bom.value_normalise"), [])
         generic = tuple(two_pin(p.reference, p.value, C1206, "+3V3", "GND") for p in parts)
         self.assertEqual(rules(bom_findings(snapshot(*generic)), "bom.value_normalise"), [])
 
@@ -460,11 +459,14 @@ class RecallTests(unittest.TestCase):
 
     def test_same_order_code_makes_rating_text_a_spelling_difference(self):
         for field in ({"LCSC": "C25803"}, {"MPN": "RC0603FR-07100KL"}):
+            self.assertEqual(rules(bom_findings(snapshot(
+                two_pin("R1", "100k", R0603, "+3V3", "/SDA", **field),
+                two_pin("R2", "100k 1%", R0603, "+3V3", "/SCL", **field))), "bom.value_normalise"), [])
+            # A pure spelling difference on one part number is still two BOM lines.
             [finding] = rules(bom_findings(snapshot(
                 two_pin("R1", "100k", R0603, "+3V3", "/SDA", **field),
-                two_pin("R2", "100k 1%", R0603, "+3V3", "/SCL", **field))), "bom.value_normalise")
+                two_pin("R2", "100K", R0603, "+3V3", "/SCL", **field))), "bom.value_normalise")
             self.assertEqual(finding.refs, ("R1", "R2"))
-            self.assertIn("rating combinations", finding.evidence)
         self.assertEqual(rules(bom_findings(snapshot(
             two_pin("R1", "100k", R0603, "+3V3", "/SDA"),
             two_pin("R2", "100k 1%", R0603, "+3V3", "/SCL"))), "bom.value_normalise"), [])

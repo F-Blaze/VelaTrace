@@ -13,8 +13,8 @@ from __future__ import annotations
 from decimal import Decimal
 import re
 
-from .audit_rules import (Check, _Design, _PROTECTING_IC, _base_type, _is_return, _pin_text, parse_resistance,
-                          two_terminal_nets)
+from .audit_rules import (_BUILT_IN_DECOUPLING, _Design, _PROTECTING_IC, _base_type, _is_return, _pin_text,
+                          is_ground, parse_resistance, two_terminal_nets)
 from .bom import package_of, parse_value, rail_voltage
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
@@ -282,6 +282,9 @@ def check_flyback_missing(snapshot: DesignSnapshot) -> list[Finding]:
 _OPTIONAL_POWER = re.compile(r"VBAT\w*|VBACKUP|VRTC|VPP")
 
 
+_MODULE_BOARD = re.compile(_BUILT_IN_DECOUPLING.pattern + r"|MODULE|DEVKIT|(?<![A-Z])ZERO(?![A-Z])|ARDUINO|NANO")
+
+
 def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
     if not any(pin.electrical_type for comp in snapshot.components for pin in comp.pins):
         return []  # a PCB-sourced design has no pin types
@@ -296,6 +299,10 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
                and not {"NC", "DNC"} & set(re.split(r"[^A-Z0-9]+", pin.name.upper()))]
         if not bad:
             continue
+        powered = any(_base_type(pin) == "power_in" and pin.net and not pin.net.startswith("unconnected-(")
+                      and not is_ground(pin.net) for pin in ic.pins)
+        if powered and _MODULE_BOARD.search(f"{ic.value} {ic.footprint}".upper()):
+            continue  # a dev-board module takes power on any one of its supply pins (5V or 3V3)
         names = ", ".join(sorted({pin.name or pin.number for pin in bad}))
         plural = "s" if len(bad) > 1 else ""
         findings.append(Finding(

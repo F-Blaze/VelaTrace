@@ -487,6 +487,8 @@ def _normalise_findings(ctx: _Context) -> list[Finding]:
                  - {None} for rated in (True, False)]
         if not same_part and all(rails) and rails[0] != rails[1]:
             continue
+        if same_part and len(ratings) > 1:
+            continue  # one part number on all; the texts differ only by a rating note the part already meets
         canonical = max(texts, key=lambda text: (
             # Never suggest a spelling that drops or lowers a stated voltage rating.
             same_part or not volts or parse_value(text, kind).voltage == max(volts),

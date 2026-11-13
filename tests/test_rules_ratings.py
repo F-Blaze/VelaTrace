@@ -271,3 +271,12 @@ def test_power_pin_quiet_for_dnp_and_connected_pins():
     ic = chip(("3", "", "VDDA", "power_in"))
     assert found("pin.power_unconnected", ic.__class__(**{**ic.__dict__, "dnp": True})) == []
     assert found("pin.power_unconnected", chip(("3", "+3V3A", "VDDA", "power_in"))) == []
+
+
+def test_power_unconnected_quiet_for_a_module_powered_on_another_pin():
+    zero = part("U4", "RP2040-Zero", "Module:RP2040-Zero", ("1", "unconnected-(U4-5V-Pad1)", "5V", "power_in"),
+                ("2", "+3V3", "3V3", "power_in"), ("3", "GND", "GND", "power_in"))
+    assert rules(design(zero), "pin.power_unconnected") == []
+    chip = part("U4", "STM32F103C8T6", "Package_QFP:LQFP-48", ("1", "unconnected-(U4-VDD-Pad1)", "VDD", "power_in"),
+                ("2", "+3V3", "VDD", "power_in"), ("3", "GND", "VSS", "power_in"))
+    assert [f.rule for f in rules(design(chip), "pin.power_unconnected")] == ["pin.power_unconnected"]
