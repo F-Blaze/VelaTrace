@@ -153,6 +153,11 @@ def test_gate_pulldown_fires_for_fields_and_series_resistor():
     assert found("mosfet.gate_pulldown_missing", mcu("GATE"), sized("R1", "G1", "GATE", "100"), nmos()) != []
 
 
+def test_gate_pulldown_quiet_for_mcus_that_reset_with_pull_downs():
+    for value in ("RP2040", "RP2350A", "Pico"):
+        assert found("mosfet.gate_pulldown_missing", mcu("G1", value=value), nmos()) == [], value
+
+
 def test_gate_pulldown_quiet_when_pulled_down_or_resistor_too_big():
     assert found("mosfet.gate_pulldown_missing", mcu("G1"), sized("R2", "G1", "GND", "10k"), nmos()) == []
     assert found("mosfet.gate_pulldown_missing", mcu("GATE"), sized("R1", "GATE", "G1", "100"),

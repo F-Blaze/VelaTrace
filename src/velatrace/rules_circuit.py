@@ -157,6 +157,10 @@ def _gpio_on(design: _Design, net: str, exclude: Component) -> tuple[Component, 
     return comp, pin
 
 
+# MCUs whose GPIOs reset with internal pull-downs enabled (RP2040/RP2350 datasheets: default pad state).
+_PULLED_DOWN_AT_RESET = re.compile(r"RP2040|RP2350|(?<![A-Z])PICO")
+
+
 def check_gate_pulldown_missing(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
     findings = []
@@ -183,6 +187,8 @@ def check_gate_pulldown_missing(snapshot: DesignSnapshot) -> list[Finding]:
             if far == gate or (driver := _gpio_on(design, far, series)) is None:
                 continue
         mcu, pin = driver
+        if _PULLED_DOWN_AT_RESET.search(_texts(mcu)):
+            continue  # its GPIOs come out of reset with the internal pull-down on
         via = f" through {series.reference} ({series.value})" if series else ""
         findings.append(Finding(
             "mosfet.gate_pulldown_missing", Severity.INFO,
