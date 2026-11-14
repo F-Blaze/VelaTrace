@@ -97,6 +97,16 @@
    ]
   },
   {
+   "rule": "usb.vbus_capacitance",
+   "refs": [
+    "J2",
+    "C24"
+   ],
+   "nets": [
+    "+5V"
+   ]
+  },
+  {
    "rule": "value.missing",
    "refs": [
     "D2",
@@ -353,5 +363,25 @@
    "nets": []
   }
  ],
- "usb2-hub-mtt": []
+ "usb2-hub-mtt": [
+  {
+   "rule": "usb.vbus_capacitance",
+   "refs": [
+    "J5",
+    "C10",
+    "C11",
+    "C12",
+    "C30",
+    "C31",
+    "C5",
+    "C6",
+    "C7",
+    "C8",
+    "C9"
+   ],
+   "nets": [
+    "5V"
+   ]
+  }
+ ]
 }
