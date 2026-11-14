@@ -439,6 +439,21 @@ def test_spdt_switch_with_its_throws_swapped_is_not_a_pin_order_finding():
     assert [f.rule for f in compare("J3", pads, part, nets)] == ["fit.pin_order"]  # not a switch: numbering matters
 
 
+def test_numbering_differs_but_every_pad_has_the_right_function_is_not_a_pin_order_finding():
+    # WS2812B-2020 (LCSC C52917434: 1 DO, 2 GND, 3 DI, 4 VDD) on a footprint numbered like the
+    # 5050 symbol (1 VDD, 2 DOUT, 3 VSS, 4 DIN) and drawn by function, as on a real board.
+    part = real("C52917434")
+    assert [(p.number, p.name) for p in sorted(part.pads, key=lambda p: p.number)] == [
+        ("1", "DO"), ("2", "GND"), ("3", "DI"), ("4", "VDD")]
+    pads = [("1", 0.745, -0.66, False), ("2", 2.575, -0.66, False), ("3", 2.575, -1.76, False), ("4", 0.745, -1.76, False)]
+    nets = {"1": "+5V", "2": "/D1", "3": "GND", "4": "/D0"}
+    assert [f.rule for f in compare("D1", pads, part, nets)] == ["fit.pin_order"]          # no names: numbers only
+    names = {"1": "VDD", "2": "DOUT", "3": "VSS", "4": "DIN"}
+    assert compare("D1", pads, part, nets, names=names) == []
+    swapped = {"1": "VDD", "2": "DIN", "3": "VSS", "4": "DOUT"}                              # data in/out reversed
+    assert [f.rule for f in compare("D1", pads, part, nets, names=swapped)] == ["fit.pin_order"]
+
+
 # ---- IPC offsets ----
 
 def _reader_snapshot(angle, layer, pads):

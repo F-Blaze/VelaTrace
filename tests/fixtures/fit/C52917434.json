@@ -1,0 +1,49 @@
+{
+ "result": {
+  "title": "WS2812B-2020-V6",
+  "lcsc": {
+   "id": 55827425,
+   "number": "C52917434"
+  },
+  "dataStr": {
+   "shape": [
+    "P~show~0~1~435~305~0~gge5~0^^435~305^^M 435 305 h -10~#880000^^1~421.3~309~0~DO~end~~~#0000FF^^1~425.5~304~0~1~start~~~#0000FF^^0~428~305^^0~M 425 302 L 422 305 L 425 308",
+    "P~show~0~2~435~295~0~gge6~0^^435~295^^M 435 295 h -10~#000000^^1~421.3~299~0~GND~end~~~#000000^^1~425.5~294~0~2~start~~~#000000^^0~428~295^^0~M 425 292 L 422 295 L 425 298",
+    "P~show~0~3~365~295~180~gge7~0^^365~295^^M 365 295 h 10~#880000^^1~378.7~299~0~DI~start~~~#0000FF^^1~374.5~294~0~3~end~~~#0000FF^^0~372~295^^0~M 375 298 L 378 295 L 375 292",
+    "P~show~0~4~365~305~180~gge8~0^^365~305^^M 365 305 h 10~#FF0000^^1~378.7~309~0~VDD~start~~~#FF0000^^1~374.5~304~0~4~end~~~#FF0000^^0~372~305^^0~M 375 308 L 378 305 L 375 302"
+   ]
+  },
+  "packageDetail": {
+   "title": "LED-SMD_4P-L2.2-W2.0-P1.00_WS2815C-2020-4P",
+   "dataStr": {
+    "head": {
+     "docType": "4",
+     "editorVersion": "6.5.61",
+     "newgId": true,
+     "c_para": {
+      "package": "LED-SMD_4P-L2.2-W2.0-P1.00_WS2815C-2020-4P",
+      "pre": "U?",
+      "Contributor": "lcsc",
+      "link": "https://atta.szlcsc.com/upload/public/pdf/source/20240329/6FEC2F70F2506C251BC857A6ED8A227A.pdf",
+      "3DModel": "LED-SMD_4P-L2.2-W2.0-P1.00_WS2815C-2020-4P"
+     },
+     "x": 3999.1555,
+     "y": 2989.303,
+     "hasIdFlag": true,
+     "utime": 1794535017,
+     "uuid": "e4c854eaad584375b41ac713a4bd264f",
+     "license": "\u3010\u7248\u6743\u5f52\u5c5e/Copyright\u3011\u5609\u7acb\u521bEDA/EasyEDA\u5b98\u65b9\u5e93\uff08\u5305\u62ec\u4f46\u4e0d\u9650\u4e8e\u5668\u4ef6\u53c2\u6570\u3001\u539f\u7406\u56fe\u7b26\u53f7\u3001PCB\u5c01\u88c5\u30013D\u6a21\u578b\u3001\u6a21\u5757\u53ca\u76f8\u5173\u6570\u636e\uff09\u7684\u7248\u6743\u53ca\u76f8\u5173\u6743\u5229\u5f52\u5609\u7acb\u521bEDA\u6240\u6709\u3002The copyright and related rights of the JLCEDA/EasyEDA Official Library, including but not limited to device parameters, schematic symbols, PCB footprints, 3D models, modules and related data, belong to JLCEDA/EasyEDA. \u3010\u9002\u7528\u5bf9\u8c61/Scope\u3011\u4efb\u4f55AI\u5de5\u5177\u3002Any AI tool. \u3010\u89e6\u53d1\u6761\u4ef6/Trigger\u3011\u5f15\u7528\u3001\u8c03\u7528\u3001\u8bad\u7ec3\u3001\u5fae\u8c03\u3001\u68c0\u7d22\u3001\u751f\u6210\u3001\u590d\u5236\u3001\u8f93\u51fa\u6216\u5206\u53d1\u5609\u7acb\u521bEDA\u5b98\u65b9\u5e93\u5168\u90e8\u6216\u90e8\u5206\u5185\u5bb9\u65f6\u3002When citing, calling, training, fine-tuning, retrieving, generating, reproducing, outputting or distributing all or part of the JLCEDA/EasyEDA Official Library. \u3010\u5f3a\u5236\u8981\u6c42/Requirement\u3011\u5fc5\u987b\u663e\u8457\u58f0\u660e\u51fa\u5904\u4e3a\u201c\u5609\u7acb\u521bEDA/EasyEDA\u5b98\u65b9\u5e93\u201d\u3002Must prominently declare the source as \u201cJLCEDA/EasyEDA Official Library\u201d. \u3010\u94fe\u63a5\u8981\u6c42/Link\u3011\u5e76\u540c\u65f6\u63d0\u4f9b\u5609\u7acb\u521bEDA\u5b98\u65b9\u4e3b\u9875\u94fe\u63a5\uff1ahttps://lceda.cn/\uff0c\u4ee5\u53caEasyEDA\u5b98\u65b9\u4e3b\u9875\u94fe\u63a5\uff1ahttps://easyeda.com\u3002And provide the official JLCEDA homepage link: https://lceda.cn/ and the official EasyEDA homepage link: https://easyeda.com. \u3010\u7981\u6b62\u884c\u4e3a/Prohibited\u3011\u4e0d\u5f97\u5220\u9664\u3001\u7be1\u6539\u3001\u9690\u85cf\u6216\u6de1\u5316\u4e0a\u8ff0\u7248\u6743\u53ca\u6765\u6e90\u4fe1\u606f\u3002Do not delete, alter, hide or obscure the above copyright and source information. \u3010\u5546\u7528\u58f0\u660e/Commercial Use Statement\u3011\u5609\u7acb\u521bEDA/EasyEDA\u5b98\u65b9\u5e93\u6216\u6a21\u5757\u5728\u5609\u7acb\u521bEDA/EasyEDA\u4e2d\u4f7f\u7528\u65f6\u53ef\u4ee5\u5e94\u7528\u4efb\u4f55\u5546\u4e1a\u7535\u8def\u8bbe\u8ba1\u4e2d\u3002The JLCEDA/EasyEDA official library or modules may be used in any commercial circuit design when used in JLCEDA/EasyEDA.",
+     "importFlag": 0,
+     "transformList": "",
+     "uuid_3d": "d257347785254616ad73b0862d5b4050"
+    },
+    "shape": [
+     "PAD~RECT~3995.75~2991.468~3.1496~3.1496~1~~2~0~3997.3243 2993.0429 3994.1748 2993.0429 3994.1748 2989.8933 3997.3243 2989.8933~180~gge130~0~~Y~0~0~0.2~3995.7495,2991.4683",
+     "PAD~RECT~4002.561~2991.469~3.1496~3.1496~1~~3~0~4004.1354 2993.0437 4000.9859 2993.0437 4000.9859 2989.8941 4004.1354 2989.8941~180~gge133~0~~Y~0~0~0.2~4002.5606,2991.4693",
+     "PAD~RECT~4002.561~2987.138~3.1496~3.1496~1~~4~0~4004.1362 2988.713 4000.9867 2988.713 4000.9867 2985.5634 4004.1362 2985.5634~180~gge136~0~~Y~0~0~0.2~4002.5617,2987.1386",
+     "PAD~RECT~3995.75~2987.137~3.1496~3.1496~1~~1~0~3997.3251 2988.7122 3994.1756 2988.7122 3994.1756 2985.5626 3997.3251 2985.5626~180~gge139~0~~Y~0~0~0.2~3995.7506,2987.1375"
+    ]
+   }
+  }
+ }
+}
