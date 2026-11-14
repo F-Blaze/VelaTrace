@@ -275,3 +275,46 @@ def test_i2c_conflict_quiet_on_different_buses_modules_and_dnp():
     off = off.__class__(**{**off.__dict__, "dnp": True})
     assert conflicts(dev("U1", "DS3231"), off) == []
     assert conflicts(dev("U1", "DS3231")) == []
+
+
+# --- led.current_high behind a low-side switch / RGB channels ---------------------------------------
+
+def rgb(names=("A", "R", "G", "B"), nets=("+3V3", "LR", "LG", "LB")):
+    return part("D3", "RGB", "LED_SMD:LED_RGB_PLCC", *[(str(i + 1), net, name) for i, (net, name) in
+                                                       enumerate(zip(nets, names))])
+
+
+def low_side(net="LD", kind="BSS138", gnd="GND", pins=("G", "S", "D")):
+    g, s, d = pins
+    return part("Q1", kind, "Package_TO_SOT_SMD:SOT-23", ("1", "GATE", g), ("2", gnd, s), ("3", net, d))
+
+
+def test_rgb_channel_behind_a_mosfet_fires_with_the_channel_arithmetic():
+    hits = rules(design(rgb(), sized("R22", "LR", "LD", "5.1"), low_side()), "led.current_high")
+    assert [(f.severity, f.refs, f.nets) for f in hits] == [(Severity.WARNING, ("D3", "R22", "Q1"), ("+3V3",))]
+    assert "(3.3 V - 1.8 V) / 5.1 Ω = 294 mA" in hits[0].evidence and "through Q1" in hits[0].evidence
+
+
+def test_each_rgb_channel_uses_its_colour_drop_and_one_finding_lists_them_all():
+    parts = (rgb(), sized("R1", "LR", "GND", "100"), sized("R2", "LG", "GND", "10"), sized("R3", "LB", "GND", "1k"))
+    hits = rules(design(*parts), "led.current_high")
+    assert [f.refs for f in hits] == [("D3", "R2")]  # R1: 15 mA, R3: 0.5 mA; green/blue 2.8 V: 50 mA
+    assert "(3.3 V - 2.8 V) / 10 Ω = 50 mA" in hits[0].evidence
+
+
+def test_led_behind_an_npn_collector_fires():
+    led = part("D1", "LED_Red", "LED_SMD:LED_0603_1608Metric", ("1", "LK", "K"), ("2", "+5V", "A"))
+    npn = low_side(kind="BC847", pins=("B", "E", "C"))
+    assert found("led.current_high", led, sized("R1", "LK", "LD", "100"), npn) == [("led.current_high", ("D1", "R1", "Q1"))]
+
+
+def test_led_behind_a_switch_is_quiet_for_safe_resistors_and_unclear_topologies():
+    assert found("led.current_high", rgb(), sized("R22", "LR", "LD", "330"), low_side()) == []
+    assert found("led.current_high", rgb(names=("A", "K1", "K2", "K3")), sized("R22", "LR", "LD", "5.1"),
+                 low_side()) == []  # colour of each cathode unknown
+    assert found("led.current_high", rgb(names=("K", "RA", "GA", "BA")), sized("R22", "LR", "LD", "5.1"),
+                 low_side()) == []  # common cathode
+    for sink in (low_side(gnd="Net-(Q1-S)"), low_side(kind="IRLML6401 P-channel"), low_side(pins=("G", "D", "S"))):
+        assert found("led.current_high", rgb(), sized("R22", "LR", "LD", "5.1"), sink) == []
+    assert found("led.current_high", rgb(), sized("R22", "LR", "LD", "5.1"), low_side(),
+                 sized("R23", "LD", "+3V3", "10k")) == []  # something else on the drain net

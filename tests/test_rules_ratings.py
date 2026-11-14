@@ -143,28 +143,70 @@ def test_vbus_quiet_at_exactly_ten_microfarad_and_without_caps():
     assert found("usb.vbus_capacitance", usb()) == []
 
 
-def test_vbus_quiet_with_load_switch_or_other_driver():
-    big = cap("C1", "VBUS", "GND", value="22uF")
+def test_vbus_fires_even_with_a_load_switch_on_the_net_because_it_only_protects_what_is_behind_it():
+    big = cap("C1", "VBUS", "GND", value="100uF")
     switch = part("U1", "TPS2051", "Package_SO:SOIC-8", ("1", "VBUS", "IN", "power_in"), ("2", "GND", "GND"))
-    assert found("usb.vbus_capacitance", usb(), big, switch) == []
-    fet = part("U2", "Whatever", "Package_SO:SOIC-8", ("1", "VBUS", "VIN", "power_in"))
-    assert found("usb.vbus_capacitance", usb(), big, fet) != []  # unknown part is not an inrush limiter
+    hits = rules(design(usb(), big, switch), "usb.vbus_capacitance")
+    assert [(f.refs, f.nets) for f in hits] == [(("J1", "C1"), ("VBUS",))]
     efuse = part("U2", "TPS25940", "Package_SO:SOIC-8", ("1", "VBUS", "VIN", "power_in"))
-    assert found("usb.vbus_capacitance", usb(), big, efuse) == []
+    assert found("usb.vbus_capacitance", usb(), big, efuse) != []
+    fet = part("U2", "Whatever", "Package_SO:SOIC-8", ("1", "VBUS", "VIN", "power_in"))
+    assert found("usb.vbus_capacitance", usb(), big, fet) != []
+
+
+def test_vbus_quiet_when_an_ic_output_drives_the_net():
+    big = cap("C1", "VBUS", "GND", value="22uF")
     hub = part("U3", "Hub", "Package_SO:SOIC-8", ("1", "VBUS", "VBUSOUT", "power_out"))
     assert found("usb.vbus_capacitance", usb(), big, hub) == []
 
 
-def test_vbus_quiet_for_host_connector_dnp_caps_and_caps_behind_a_series_part():
+def test_vbus_quiet_for_host_connector_and_dnp_caps():
     big = cap("C1", "VBUS", "GND", value="22uF")
     assert found("usb.vbus_capacitance", usb("Connector_USB:USB_A_Receptacle", "USB_A"), big) == []
-    behind = cap("C1", "VBUS_F", "GND", value="22uF")
-    ferrite = part("FB1", "BLM18", "Inductor_SMD:L_0603", ("1", "VBUS"), ("2", "VBUS_F"))
-    assert found("usb.vbus_capacitance", usb(), behind, ferrite) == []
+    assert found("usb.vbus_capacitance", usb("Connector_USB:USB_C_Receptacle", "USB_C_HOST_PORT"), big) == []
+    assert found("usb.vbus_capacitance", usb("Connector_USB:USB_C_Receptacle", "USB_C_Downstream"), big) == []
     dnp = big.__class__(**{**big.__dict__, "dnp": True})
     assert found("usb.vbus_capacitance", usb(), dnp) == []
     other = part("J2", "Conn_01x02", "Connector_PinHeader:PinHeader_1x02", ("1", "VBUS", "VBUS"), ("2", "GND", "GND"))
     assert found("usb.vbus_capacitance", other, big) == []
+
+
+def schottky(net_a="VBUS", net_k="+5V", value="SS14"):
+    return part("D1", value, "Diode_SMD:D_SMA", ("1", net_k, "K"), ("2", net_a, "A"))
+
+
+def test_vbus_counts_capacitors_behind_a_series_schottky_diode():
+    caps = (cap("C1", "+5V", "GND", value="100uF"), cap("C2", "+5V", "GND", value="100uF"),
+            cap("C3", "+5V", "GND", value="47uF"))
+    hits = rules(design(usb(), schottky(), *caps), "usb.vbus_capacitance")
+    assert [(f.severity, f.refs, f.nets) for f in hits] == [
+        (Severity.INFO, ("J1", "D1", "C1", "C2", "C3"), ("VBUS",))]
+    assert "247" in hits[0].evidence and "behind D1" in hits[0].evidence
+
+
+def test_vbus_counts_direct_and_ferrite_or_fuse_hop_capacitors_together():
+    ferrite = part("FB1", "BLM18", "Inductor_SMD:L_0603", ("1", "VBUS"), ("2", "VBUS_F"))
+    hits = rules(design(usb(), ferrite, cap("C1", "VBUS", "GND", value="10uF"),
+                         cap("C2", "VBUS_F", "GND", value="10uF")), "usb.vbus_capacitance")
+    assert [f.refs for f in hits] == [("J1", "C1", "FB1", "C2")]
+    fuse = part("F1", "500mA", "Fuse:Fuse_0603", ("1", "VBUS"), ("2", "VBUS_F"))
+    assert found("usb.vbus_capacitance", usb(), fuse, cap("C2", "VBUS_F", "GND", value="22uF")) != []
+    assert found("usb.vbus_capacitance", usb(), res("R1", "VBUS", "VBUS_F", "0.5"),
+                 cap("C2", "VBUS_F", "GND", value="22uF")) != []
+
+
+def test_vbus_quiet_for_small_diode_isolated_capacitance_and_non_series_parts():
+    small = cap("C1", "+5V", "GND", value="8uF")
+    assert found("usb.vbus_capacitance", usb(), schottky(), small) == []
+    big = cap("C1", "+5V", "GND", value="100uF")
+    assert found("usb.vbus_capacitance", usb(), schottky(net_a="+5V", net_k="VBUS"), big) == []  # reversed diode
+    assert found("usb.vbus_capacitance", usb(), schottky(value="SMAJ5.0A"), big) == []  # TVS, not a rectifier
+    assert found("usb.vbus_capacitance", usb(), res("R1", "VBUS", "+5V", "100"), big) == []  # not a <=1 ohm link
+    switch = part("U1", "TPS22918", "Package_TO_SOT_SMD:SOT-23-5", ("1", "VBUS", "VIN", "power_in"),
+                  ("2", "GND", "GND"), ("3", "+5V", "VOUT", "power_out"))
+    assert found("usb.vbus_capacitance", usb(), switch, big) == []  # behind a switch, not a diode
+    driven = part("U2", "Boost", "Package_SO:SOIC-8", ("1", "+5V", "VOUT", "power_out"))
+    assert found("usb.vbus_capacitance", usb(), schottky(), driven, big) == []  # rail driven by an IC output
 
 
 # --- inductive.flyback_missing ----------------------------------------------------------------
@@ -273,6 +315,45 @@ def test_power_pin_quiet_for_dnp_and_connected_pins():
     assert found("pin.power_unconnected", chip(("3", "+3V3A", "VDDA", "power_in"))) == []
 
 
+RAIL = part("U9", "LDO", "Package_SO:SOIC-8", ("1", "+3V3", "VOUT", "power_out"), ("2", "GND", "GND", "power_in"))
+
+
+def fed(*parts):
+    """Findings with a regulator driving +3V3, so only the pin under test can be cap-fed."""
+    return found("pin.power_unconnected", RAIL, *parts)
+
+
+def test_power_pin_fed_only_through_a_capacitor_fires():
+    hits = rules(design(RAIL, chip(("3", "VBAT", "VBAT", "power_in")), cap("C9", "VBAT", "+3V3")), "pin.power_unconnected")
+    assert [(f.severity, f.refs, f.nets) for f in hits] == [(Severity.ERROR, ("U1", "C9"), ("VBAT",))]
+    assert "fed only through capacitor C9 (other end +3V3): no DC path" in hits[0].evidence
+    # A cap to ground on a net that no name marks as a supply leaves the pin unfed too.
+    assert fed(chip(("3", "Net-(U1-VDDIO)", "VDDIO", "power_in")),
+                 cap("C9", "Net-(U1-VDDIO)", "GND")) == [("pin.power_unconnected", ("U1", "C9"))]
+
+
+def test_power_pin_with_a_dc_path_or_a_regulator_pin_is_quiet():
+    vbat = chip(("3", "VBAT", "VBAT", "power_in"))
+    c9 = cap("C9", "VBAT", "+3V3")
+    assert fed(vbat, c9, res("R9", "VBAT", "+3V3", "1k")) == []
+    assert fed(vbat, c9, part("U2", "LDO", "Package_SO:SOIC-8",
+                                                          ("1", "VBAT", "VOUT", "power_out"))) == []
+    assert fed(vbat, c9, part("BT1", "Battery", "Battery:BatteryHolder",
+                                                          ("1", "VBAT"), ("2", "GND"))) == []
+    # A supply-named rail with only decoupling caps to ground is fed from outside the drawing.
+    assert found("pin.power_unconnected", chip(("3", "+3V3", "VDD", "power_in")), cap("C1", "+3V3", "GND")) == []
+    for name in ("VCAP_1", "VCAP", "VDDCORE", "VCORE", "REGOUT", "DEC1", "VDDCR", "LDO_OUT"):
+        assert fed(chip(("3", "Net-(U1-X)", name, "power_in")),
+                     cap("C9", "Net-(U1-X)", "GND")) == []
+    assert fed(chip(("3", "VBAT", "VBAT", "power_out")), c9) == []
+    dnp = c9.__class__(**{**c9.__dict__, "dnp": True})
+    assert fed(vbat, dnp) == []
+    module = part("U4", "ESP32-WROOM-MODULE", "RF_Module:ESP32-WROOM-32", ("1", "VBAT", "VBAT", "power_in"),
+                  ("2", "GND", "GND", "power_in"))
+    assert fed(module, c9) == []
+    assert fed(chip(("3", "VBAT", "VBAT", "power_in+no_connect")), c9) == []
+
+
 def test_power_unconnected_quiet_for_a_module_powered_on_another_pin():
     zero = part("U4", "RP2040-Zero", "Module:RP2040-Zero", ("1", "unconnected-(U4-5V-Pad1)", "5V", "power_in"),
                 ("2", "+3V3", "3V3", "power_in"), ("3", "GND", "GND", "power_in"))
@@ -280,3 +361,27 @@ def test_power_unconnected_quiet_for_a_module_powered_on_another_pin():
     chip = part("U4", "STM32F103C8T6", "Package_QFP:LQFP-48", ("1", "unconnected-(U4-VDD-Pad1)", "VDD", "power_in"),
                 ("2", "+3V3", "VDD", "power_in"), ("3", "GND", "VSS", "power_in"))
     assert [f.rule for f in rules(design(chip), "pin.power_unconnected")] == ["pin.power_unconnected"]
+
+
+# --- LEDs returning through a low-side switch ------------------------------------------------------
+
+def rgb(ref="D3", names=("A", "R", "G", "B"), nets=("+3V3", "LR", "LG", "LB")):
+    return part(ref, "RGB", "LED_SMD:LED_RGB_PLCC", *[(str(i + 1), net, name) for i, (net, name) in
+                                                      enumerate(zip(nets, names))])
+
+
+def bss138(net="LR", gnd="GND"):
+    return part("Q1", "BSS138", "Package_TO_SOT_SMD:SOT-23", ("1", "GATE", "G"), ("2", gnd, "S"), ("3", net, "D"))
+
+
+def sized(ref, a, b, value, size="0603"):
+    return part(ref, value, f"Resistor_SMD:R_{size}_1608Metric", ("1", a), ("2", b))
+
+
+def test_power_rating_fires_for_an_rgb_channel_behind_a_low_side_mosfet():
+    hits = rules(design(rgb(), sized("R22", "LR", "LD", "5.1"), bss138("LD")), "resistor.power_rating")
+    assert [(f.refs, f.nets) for f in hits] == [(("R22", "D3", "Q1"), ("+3V3",))]
+    assert "294 mA" in hits[0].evidence and "(3.3 V - 1.8 V)" in hits[0].evidence
+    assert found("resistor.power_rating", rgb(), sized("R22", "LR", "LD", "330"), bss138("LD")) == []
+    assert found("resistor.power_rating", rgb(names=("A", "K1", "K2", "K3")), sized("R22", "LR", "LD", "5.1"),
+                 bss138("LD")) == []

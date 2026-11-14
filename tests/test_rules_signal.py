@@ -1,6 +1,8 @@
 """Signal-mistake rules: crystal load capacitors, swapped USB D+/D-, output contention. Fire every time, stay quiet otherwise."""
 import pytest
 
+from velatrace.findings import Severity
+
 from test_audit_rules import cap, design, exp4_spare, part, res, rules
 
 XTAL_FP = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
@@ -253,3 +255,87 @@ def test_wch_usb_chip_with_internal_load_caps_is_quiet():
     import velatrace.rules_signal as rs
     assert rs._INTERNAL_CAPS.search("CH334F") and rs._INTERNAL_CAPS.search("CH340C")
     assert not rs._INTERNAL_CAPS.search("STM32F103") and not rs._INTERNAL_CAPS.search("ATCH3400")
+
+
+# --- bus.polarity_swapped -----------------------------------------------------------------------
+
+def can_ic(h_net, l_net, h="CANH", l="CANL", ref="U1", value="TCAN1044"):
+    return part(ref, value, "Package_SO:SOIC-8", ("7", h_net, h), ("6", l_net, l), ("3", "+5V", "VCC"),
+                ("2", "GND", "GND"), ("1", "TXD_NET", "TXD"), ("4", "RXD_NET", "RXD"))
+
+
+def can_conn(h_net="/CAN_H", l_net="/CAN_L"):
+    return part("J2", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+                ("1", h_net, "1"), ("2", l_net, "2"))
+
+
+def bus_found(*parts):
+    return [(f.severity, f.refs, f.nets) for f in rules(design(*parts), "bus.polarity_swapped")]
+
+
+def test_can_swapped_lines_fire_once_per_transceiver_with_the_connector():
+    hits = rules(design(can_ic("/CAN_L", "/CAN_H"), can_conn()), "bus.polarity_swapped")
+    assert [(f.severity, f.refs, f.nets) for f in hits] == [
+        (Severity.ERROR, ("U1", "J2"), ("/CAN_L", "/CAN_H"))]
+    assert "pin 7 (CANH) on CAN_L" in hits[0].evidence and "pin 6 (CANL) on CAN_H" in hits[0].evidence
+
+
+@pytest.mark.parametrize("h_net,l_net,h,l", [("CANL", "CANH", "CANH", "CANL"), ("CAN_L", "CAN_H", "CAN_H", "CAN_L"),
+                                             ("CAN-", "CAN+", "CANH", "CANL"), ("CAN1_L", "CAN1_H", "CANH1", "CANL1"),
+                                             ("CANH", "CANL", "CANL", "CANH")])
+def test_can_swap_fires_for_each_spelling(h_net, l_net, h, l):
+    assert len(bus_found(can_ic(h_net, l_net, h=h, l=l))) == 1
+
+
+def test_can_one_swapped_pin_fires_when_the_other_net_is_named():
+    assert len(bus_found(can_ic("/CAN_L", "/CAN_L"))) == 1
+
+
+def test_can_correct_wiring_and_ambiguous_names_are_quiet():
+    assert bus_found(can_ic("/CAN_H", "/CAN_L"), can_conn()) == []
+    assert bus_found(can_ic("CANH_CANL_BUS", "CAN_BUS_B")) == []  # both tokens in one name, and none
+    assert bus_found(can_ic("BUS_P", "BUS_N")) == []
+    assert bus_found(can_ic("/CAN_L", "/CAN_H", h="TXD1", l="RXD1")) == []  # pins not named for the bus
+
+
+def test_can_single_swapped_pin_next_to_an_unnamed_net_is_quiet():
+    assert bus_found(can_ic("/CAN_L", "Net-(U1-CANL)")) == []
+
+
+def test_can_esd_choke_and_connector_pins_are_quiet():
+    esd = part("U3", "ESDCAN24", "Package_TO_SOT_SMD:SOT-23", ("1", "/CAN_H", "CANL"), ("2", "/CAN_L", "CANH"),
+               ("3", "GND", "GND"))
+    choke = part("U4", "ACT45B-510", "Inductor_SMD:L_Choke", ("1", "/CAN_H", "CANL"), ("2", "/CAN_L", "CANH"))
+    conn = part("J3", "CAN_Conn", "Connector_PinHeader_2.54mm:PinHeader_1x03", ("1", "/CAN_H", "CANL"),
+                ("2", "/CAN_L", "CANH"), ("3", "GND", "GND"))
+    assert bus_found(esd, choke, conn, can_ic("/CAN_H", "/CAN_L")) == []
+
+
+def rs485_ic(a_net, b_net, a="A", b="B", ref="U2", value="MAX485"):
+    return part(ref, value, "Package_SO:SOIC-8", ("6", a_net, a), ("7", b_net, b), ("1", "RXD_NET", "RO"),
+                ("2", "RE_NET", "~{RE}"), ("3", "DE_NET", "DE"), ("4", "TXD_NET", "DI"), ("8", "+5V", "VCC"),
+                ("5", "GND", "GND"))
+
+
+@pytest.mark.parametrize("a_net,b_net", [("RS485_B", "RS485_A"), ("/RS485B", "/RS485A"), ("485_B", "485_A")])
+def test_rs485_swapped_lines_fire(a_net, b_net):
+    assert bus_found(rs485_ic(a_net, b_net)) == [(Severity.ERROR, ("U2",), (a_net, b_net))]
+
+
+def test_rs485_single_swapped_pin_next_to_an_unnamed_net_is_quiet():
+    assert bus_found(rs485_ic("RS485_B", "Net-(U2-B)")) == []
+
+
+def test_rs485_correct_wiring_ambiguous_names_and_other_pin_names_are_quiet():
+    assert bus_found(rs485_ic("RS485_A", "RS485_B")) == []
+    assert bus_found(rs485_ic("/A", "/B")) == []  # bare A/B net names are too ambiguous
+    assert bus_found(rs485_ic("RS485_B", "RS485_A", a="A1", b="B1")) == []
+    assert bus_found(rs485_ic("RS485_B", "RS485_A", a="Y", b="Z")) == []
+    assert bus_found(rs485_ic("RS485_B", "RS485_A", a="", b="")) == []
+    assert bus_found(rs485_ic("RS485_AB", "RS485_A_B")) == []
+
+
+def test_rs485_a_b_pins_without_transceiver_control_pins_are_quiet():
+    mux = part("U5", "74HC157", "Package_SO:SOIC-16", ("1", "RS485_B", "A"), ("2", "RS485_A", "B"),
+               ("8", "GND", "GND"), ("16", "+5V", "VCC"))
+    assert bus_found(mux) == []

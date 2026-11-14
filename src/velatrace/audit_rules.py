@@ -1868,6 +1868,7 @@ RULES: dict[str, Check] = {
     "power.rail_voltage_mismatch": lambda snapshot: rules_polarity.check_rail_voltage_mismatch(snapshot),
     "crystal.load_caps_missing": _signal("check_crystal_load_caps"),
     "usb.dp_dn_swapped": _signal("check_usb_dp_dn_swapped"),
+    "bus.polarity_swapped": _signal("check_bus_polarity_swapped"),
     "net.output_contention": _signal("check_output_contention"),
     "power.divider_voltage": _sibling("rules_tables", "check_divider_voltage"),
     "mcu.strap_pins": _sibling("rules_tables", "check_strap_pins"),

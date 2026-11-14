@@ -1,6 +1,6 @@
 """Common hobby-circuit mistakes the netlist shows clearly.
 
-  led.current_high              indicator LED whose series resistor passes more than 30 mA
+  led.current_high              indicator LED (or RGB channel) whose series resistor passes more than 30 mA
   logic.level_mismatch          5 V push-pull output wired straight to a 3.3 V-only input
   mosfet.gate_pulldown_missing  low-side N-MOSFET driven by a GPIO with no gate pull-down
   i2c.address_conflict          two parts on one I2C bus answering at the same 7-bit address
@@ -16,7 +16,7 @@ from .audit_rules import _Design, _base_type, parse_resistance, two_terminal_net
 from .bom import rail_voltage
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
-from .rules_ratings import _ANODE, _CATHODE, _LED_HIGH, _LED_LOW, _led_pin_net, _name, _series_resistor, _volts
+from .rules_ratings import _LED_HIGH, _LED_LOW, _name, _volts, led_branches, led_cases
 
 
 def _texts(comp: Component) -> str:
@@ -48,34 +48,39 @@ def check_led_current_high(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
     findings = []
     for led in design.of_kind("led"):
-        anode, cathode = _led_pin_net(led, _ANODE), _led_pin_net(led, _CATHODE)
-        if not anode or not cathode or led.dnp or len(led.pins) != 2 or _power_led(led):
+        if led.dnp or _power_led(led):
             continue
-        vf = _led_volts(led)
-        cases = []  # (resistor, rail, ground)
-        if cathode in design.grounds and (found := _series_resistor(design, anode)):
-            cases.append((found[0], found[1], cathode))
-        if found := _series_resistor(design, cathode):
-            cases.append((found[0], anode, found[1]))
-        for resistor, rail, ground in cases:
-            volts = rail_voltage(rail)
-            ohms = parse_resistance(resistor.value)
-            if (volts is None or ground not in design.grounds or rail in design.grounds or resistor.dnp
-                    or not ohms or volts <= vf):
-                continue
-            amps = (volts - vf) / ohms
-            if amps <= _LED_MAX_A:
-                continue
-            findings.append(Finding(
-                "led.current_high", Severity.WARNING,
-                f"{led.reference} runs at about {amps * 1000:.0f} mA, above the 30 mA of an indicator LED",
-                (led.reference, resistor.reference), (rail,),
-                f"{resistor.reference} ({resistor.value}) limits {led.reference} from {rail}: "
-                f"({volts:g} V - {vf:g} V) / {ohms:g} Ω = {amps * 1000:.0f} mA (LED drop assumed {vf:g} V); "
-                "a small indicator LED is rated about 20 mA.",
-                "Raise the resistor so the current stays near 2-10 mA for an indicator, or name the LED as a "
-                "power LED if it is meant to carry this current."))
-            break
+        hits = []  # (amps, resistor, rail, volts, ohms, vf, switch): the first case that fires per channel
+        for anode, cathode, vf in led_branches(led, _led_volts(led)):
+            for resistor, rail, ground, switch in led_cases(design, led, anode, cathode):
+                volts = rail_voltage(rail)
+                ohms = parse_resistance(resistor.value)
+                if (volts is None or ground not in design.grounds or rail in design.grounds or resistor.dnp
+                        or not ohms or volts <= vf):
+                    continue
+                amps = (volts - vf) / ohms
+                if amps > _LED_MAX_A:
+                    hits.append((amps, resistor, rail, volts, ohms, vf, switch))
+                    break
+        if not hits:
+            continue
+        hits.sort(key=lambda hit: -hit[0])
+        amps = hits[0][0]
+        evidence = []
+        for amps_, resistor, rail, volts, ohms, vf, switch in hits:
+            via = f", returning through {switch.reference} to ground" if switch else ""
+            evidence.append(
+                f"{resistor.reference} ({resistor.value}) limits {led.reference} from {rail}{via}: "
+                f"({volts:g} V - {vf:g} V) / {ohms:g} Ω = {amps_ * 1000:.0f} mA (LED drop assumed {vf:g} V)")
+        findings.append(Finding(
+            "led.current_high", Severity.WARNING,
+            f"{led.reference} runs at about {amps * 1000:.0f} mA, above the 30 mA of an indicator LED",
+            tuple(dict.fromkeys([led.reference, *(ref for hit in hits for ref in
+                                                  (hit[1].reference, *([hit[6].reference] if hit[6] else [])))])),
+            tuple(dict.fromkeys(hit[2] for hit in hits)),
+            "; ".join(evidence) + "; a small indicator LED is rated about 20 mA.",
+            "Raise the resistor so the current stays near 2-10 mA for an indicator, or name the LED as a "
+            "power LED if it is meant to carry this current."))
     return findings
 
 
