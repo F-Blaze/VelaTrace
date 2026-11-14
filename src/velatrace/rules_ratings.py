@@ -369,7 +369,7 @@ _CAP_ONLY_PIN = re.compile(r"CAP|CORE|REG|DEC|LDO|OUT|BYP|VCP|VREF|VDDCR|VINT|VC
 
 def _cap_only_pins(design: _Design, ic: Component) -> list[tuple[Pin, list[Component]]]:
     """Power inputs whose net holds, besides this IC's own power_in pins, only capacitors: no DC path feeds them.
-    A supply-named net with caps only to ground is a rail powered from outside the drawing, so it stays quiet."""
+    Fires only when every capacitor's other end is on a supply rail (a cap in series from a supply)."""
     result = []
     for pin in ic.pins:
         if (_base_type(pin) != "power_in" or pin.no_connect or not pin.net or pin.net.startswith("unconnected-(")
@@ -382,7 +382,9 @@ def _cap_only_pins(design: _Design, ic: Component) -> list[tuple[Pin, list[Compo
                 or any(design.kind[ref] != "capacitor" or design.parts[ref].dnp for ref in caps)):
             continue
         far = [_far_end(design.parts[ref], pin.net) for ref in caps]
-        if is_supply_name(pin.net) and all(end is None or _is_return(design, end) for end in far):
+        # Only a capacitor in series from a supply (other end on a rail, not ground) is the mistake; a pin
+        # with caps to ground only is an internal regulator, charge-pump or gate-drive output typed power_in.
+        if not far or any(end is None or _is_return(design, end) or not is_supply_name(end) for end in far):
             continue
         result.append((pin, [design.parts[ref] for ref in caps]))
     return result

@@ -327,9 +327,9 @@ def test_power_pin_fed_only_through_a_capacitor_fires():
     hits = rules(design(RAIL, chip(("3", "VBAT", "VBAT", "power_in")), cap("C9", "VBAT", "+3V3")), "pin.power_unconnected")
     assert [(f.severity, f.refs, f.nets) for f in hits] == [(Severity.ERROR, ("U1", "C9"), ("VBAT",))]
     assert "fed only through capacitor C9 (other end +3V3): no DC path" in hits[0].evidence
-    # A cap to ground on a net that no name marks as a supply leaves the pin unfed too.
-    assert fed(chip(("3", "Net-(U1-VDDIO)", "VDDIO", "power_in")),
-                 cap("C9", "Net-(U1-VDDIO)", "GND")) == [("pin.power_unconnected", ("U1", "C9"))]
+    # A pin with only a cap to ground is an internal regulator / charge-pump output typed power_in
+    # (CP2102 VDD, TPA3116 GVDD): not reported.
+    assert fed(chip(("3", "Net-(U1-VDDIO)", "VDDIO", "power_in")), cap("C9", "Net-(U1-VDDIO)", "GND")) == []
 
 
 def test_power_pin_with_a_dc_path_or_a_regulator_pin_is_quiet():
