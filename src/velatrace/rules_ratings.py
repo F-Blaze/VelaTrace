@@ -190,6 +190,19 @@ _USB_TEXT = re.compile(r"USB", re.IGNORECASE)
 _USB_A = re.compile(r"USB[_\- ]?A(?![A-Z])|TYPE[_\- ]?A(?![A-Z])", re.IGNORECASE)  # host receptacles drive VBUS
 _VBUS_PIN = re.compile(r"VBUS\d*")
 _USB_LIMIT_F = Decimal("10e-6")
+# Effective capacitance at 5 V above which the 10 uF attach limit is clearly exceeded (margin for tolerance).
+_USB_EFFECTIVE_MAX_F = Decimal("13e-6")
+# Share of a ceramic's nominal value left at 5 V DC bias, by case size (typical X5R/X7R curves); electrolytic
+# and tantalum parts keep their value.
+_BIAS = {"0201": Decimal("0.3"), "0402": Decimal("0.3"), "0603": Decimal("0.45"), "0805": Decimal("0.55"),
+         "1206": Decimal("0.7"), "1210": Decimal("0.8"), "1812": Decimal("0.85"), "2220": Decimal("0.85")}
+
+
+def _bias_factor(cap: Component) -> Decimal:
+    text = f"{cap.footprint} {cap.fields.get('lib_id', '')} {cap.value}".upper()
+    if re.search(r"CP_|POLARI[SZ]ED|ELEC|TANTAL|RADIAL|AXIAL", text):
+        return Decimal(1)
+    return _BIAS.get(package_of(cap.footprint) or "", Decimal("0.55"))
 _HOST_PORT = re.compile(r"(?<![A-Z])(?:HOST|DOWNSTREAM|DFP)(?![A-Z])", re.IGNORECASE)
 _NOT_RECTIFIER = re.compile(r"TVS|ESD|ZENER|SMAJ|SMBJ|SMCJ|P6KE|USBLC|PESD|TPD\d|BZ[XT]|TL431", re.IGNORECASE)
 
@@ -264,9 +277,12 @@ def check_vbus_capacitance(snapshot: DesignSnapshot) -> list[Finding]:
                     behind[part.reference] = found
             total = sum(caps.values(), Decimal(0)) + sum((sum(f.values(), Decimal(0)) for f in behind.values()),
                                                          Decimal(0))
-            # Ceramics lose much of their value at 5 V, so only a clear excess is reported; a port with
-            # CC pull-ups (Rp) is a source, where the limit does not apply.
-            if total <= _USB_LIMIT_F * Decimal("1.5") or _source_port(design, conn):
+            # Ceramics lose much of their value at 5 V (DC bias), the smaller the case the more: judge the
+            # effective capacitance; a port with CC pull-ups (Rp) is a source, where the limit does not apply.
+            refs = [*caps, *(ref for found in behind.values() for ref in found)]
+            every = {**caps, **{ref: farad for found in behind.values() for ref, farad in found.items()}}
+            effective = sum((every[ref] * _bias_factor(design.parts[ref]) for ref in refs), Decimal(0))
+            if effective <= _USB_EFFECTIVE_MAX_F or _source_port(design, conn):
                 continue
             parts = [f"{', '.join(sorted(caps))} directly on the {conn.reference} VBUS net"] if caps else []
             parts += [f"{', '.join(sorted(found))} behind {part} ({design.parts[part].value})"
@@ -276,7 +292,8 @@ def check_vbus_capacitance(snapshot: DesignSnapshot) -> list[Finding]:
                 f"{conn.reference} VBUS carries {float(total) * 1e6:.3g} µF, above the USB limit of 10 µF",
                 (conn.reference, *sorted(caps), *(ref for part, found in behind.items() for ref in (part, *sorted(found)))),
                 (net,),
-                f"{'; '.join(parts)}: {float(total) * 1e6:.3g} µF to ground charges from {net} at attach with no "
+                f"{'; '.join(parts)}: {float(total) * 1e6:.3g} µF nominal (about {float(effective) * 1e6:.3g} µF at "
+                f"5 V bias) to ground charges from {net} at attach with no "
                 "inrush limiter (a load switch only protects the capacitors behind it, not those on VBUS ahead of "
                 "it, and a diode or ferrite does not limit the charge current); USB 2.0 allows a device at most "
                 "10 µF at attach.",

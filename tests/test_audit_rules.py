@@ -818,6 +818,13 @@ def test_rail_selected_by_a_jumper_and_buck_module_headers_are_not_entries():
     assert "M1" not in [ref for f in rules(design(module, load, cap("C1", "+5V")), "connector") for ref in f.refs]
 
 
+def test_connector_labelled_as_an_output_is_not_a_power_entry():
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+BATT", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    for value, quiet in (("Battery_conn_out", True), ("LOAD", True), ("Battery_conn", False)):
+        conn = part("J2", value, "Connector_JST:JST_PH_B2B-PH-K_1x02", ("1", "+BATT"), ("2", "GND"))
+        assert (rules(design(conn, mcu, cap("C1", "+BATT")), "connector") == []) is quiet, value
+
+
 def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
     led = part("D1", "LED", "LED_SMD:LED_0603", ("1", "A"), fields={"LCSC": "C2297", "lib_id": "Device:LED"})
     named = part("C1", "20p_0402_C0G_50V", "Capacitor_SMD:C_0402", ("1", "A"),

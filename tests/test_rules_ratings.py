@@ -103,18 +103,23 @@ def test_power_rating_quiet_when_led_pins_are_unnamed_or_cathode_not_grounded():
 
 # --- usb.vbus_capacitance ---------------------------------------------------------------------
 
+def vcap(ref, a, b, value):
+    """A 1210 ceramic: keeps about 80 % of its value at 5 V."""
+    return part(ref, value, "Capacitor_SMD:C_1210_3225Metric", ("1", a), ("2", b))
+
+
 def usb(footprint="Connector_USB:USB_C_Receptacle_GCT_USB4105", value="USB_C_Receptacle"):
     return part("J1", value, footprint, ("A4", "VBUS", "VBUS", "passive"), ("A1", "GND", "GND", "passive"))
 
 
 def test_vbus_fires_above_ten_microfarad_with_summed_caps():
-    parts = (usb(), cap("C1", "VBUS", "GND", value="10uF"), cap("C2", "VBUS", "GND", value="10uF"))
+    parts = (usb(), vcap("C1", "VBUS", "GND", value="10uF"), vcap("C2", "VBUS", "GND", value="10uF"))
     hits = rules(design(*parts), "usb.vbus_capacitance")
     assert [(f.severity, f.refs, f.nets) for f in hits] == [
         (Severity.INFO, ("J1", "C1", "C2"), ("VBUS",))]
     assert "20" in hits[0].evidence
     # A small excess is within what ceramics lose at 5 V bias.
-    assert rules(design(usb(), cap("C1", "VBUS", "GND", value="10uF"), cap("C2", "VBUS", "GND", value="1uF")),
+    assert rules(design(usb(), vcap("C1", "VBUS", "GND", value="10uF"), vcap("C2", "VBUS", "GND", value="1uF")),
                  "usb.vbus_capacitance") == []
 
 
@@ -122,9 +127,9 @@ def test_vbus_quiet_on_a_source_port_with_cc_pull_ups():
     source = part("J1", "USB_C_Receptacle", "Connector_USB:USB_C_Receptacle_GCT_USB4105", ("A4", "VBUS", "VBUS", "passive"),
                   ("A1", "GND", "GND", "passive"), ("A5", "/CC1", "CC1", "bidirectional"))
     rp = res("R5", "/CC1", "VBUS", "56k")
-    assert rules(design(source, rp, cap("C1", "VBUS", "GND", value="22uF")), "usb.vbus_capacitance") == []
+    assert rules(design(source, rp, vcap("C1", "VBUS", "GND", value="22uF")), "usb.vbus_capacitance") == []
     rd = res("R5", "/CC1", "GND", "5.1k")
-    assert [f.rule for f in rules(design(source, rd, cap("C1", "VBUS", "GND", value="22uF")), "usb.vbus_capacitance")] == [
+    assert [f.rule for f in rules(design(source, rd, vcap("C1", "VBUS", "GND", value="22uF")), "usb.vbus_capacitance")] == [
         "usb.vbus_capacitance"]
 
 
@@ -132,19 +137,19 @@ def test_vbus_quiet_on_a_source_port_with_cc_pull_ups():
                                       ("Connector_USB:USB_C_Receptacle", "USB4105"),
                                       ("Connector_USB:USB_Mini-B", "USB_B_Mini")])
 def test_vbus_fires_for_each_device_connector(fp, value):
-    assert found("usb.vbus_capacitance", usb(fp, value), cap("C1", "VBUS", "GND", value="22uF")) == [
+    assert found("usb.vbus_capacitance", usb(fp, value), vcap("C1", "VBUS", "GND", value="22uF")) == [
         ("usb.vbus_capacitance", ("J1", "C1"))]
 
 
 def test_vbus_quiet_at_exactly_ten_microfarad_and_without_caps():
-    assert found("usb.vbus_capacitance", usb(), cap("C1", "VBUS", "GND", value="10uF")) == []
-    assert found("usb.vbus_capacitance", usb(), cap("C1", "VBUS", "GND", value="4.7uF"),
-                 cap("C2", "VBUS", "GND", value="5.3uF")) == []
+    assert found("usb.vbus_capacitance", usb(), vcap("C1", "VBUS", "GND", value="10uF")) == []
+    assert found("usb.vbus_capacitance", usb(), vcap("C1", "VBUS", "GND", value="4.7uF"),
+                 vcap("C2", "VBUS", "GND", value="5.3uF")) == []
     assert found("usb.vbus_capacitance", usb()) == []
 
 
 def test_vbus_fires_even_with_a_load_switch_on_the_net_because_it_only_protects_what_is_behind_it():
-    big = cap("C1", "VBUS", "GND", value="100uF")
+    big = vcap("C1", "VBUS", "GND", value="100uF")
     switch = part("U1", "TPS2051", "Package_SO:SOIC-8", ("1", "VBUS", "IN", "power_in"), ("2", "GND", "GND"))
     hits = rules(design(usb(), big, switch), "usb.vbus_capacitance")
     assert [(f.refs, f.nets) for f in hits] == [(("J1", "C1"), ("VBUS",))]
@@ -155,13 +160,13 @@ def test_vbus_fires_even_with_a_load_switch_on_the_net_because_it_only_protects_
 
 
 def test_vbus_quiet_when_an_ic_output_drives_the_net():
-    big = cap("C1", "VBUS", "GND", value="22uF")
+    big = vcap("C1", "VBUS", "GND", value="22uF")
     hub = part("U3", "Hub", "Package_SO:SOIC-8", ("1", "VBUS", "VBUSOUT", "power_out"))
     assert found("usb.vbus_capacitance", usb(), big, hub) == []
 
 
 def test_vbus_quiet_for_host_connector_and_dnp_caps():
-    big = cap("C1", "VBUS", "GND", value="22uF")
+    big = vcap("C1", "VBUS", "GND", value="22uF")
     assert found("usb.vbus_capacitance", usb("Connector_USB:USB_A_Receptacle", "USB_A"), big) == []
     assert found("usb.vbus_capacitance", usb("Connector_USB:USB_C_Receptacle", "USB_C_HOST_PORT"), big) == []
     assert found("usb.vbus_capacitance", usb("Connector_USB:USB_C_Receptacle", "USB_C_Downstream"), big) == []
@@ -176,8 +181,8 @@ def schottky(net_a="VBUS", net_k="+5V", value="SS14"):
 
 
 def test_vbus_counts_capacitors_behind_a_series_schottky_diode():
-    caps = (cap("C1", "+5V", "GND", value="100uF"), cap("C2", "+5V", "GND", value="100uF"),
-            cap("C3", "+5V", "GND", value="47uF"))
+    caps = (vcap("C1", "+5V", "GND", value="100uF"), vcap("C2", "+5V", "GND", value="100uF"),
+            vcap("C3", "+5V", "GND", value="47uF"))
     hits = rules(design(usb(), schottky(), *caps), "usb.vbus_capacitance")
     assert [(f.severity, f.refs, f.nets) for f in hits] == [
         (Severity.INFO, ("J1", "D1", "C1", "C2", "C3"), ("VBUS",))]
@@ -186,19 +191,19 @@ def test_vbus_counts_capacitors_behind_a_series_schottky_diode():
 
 def test_vbus_counts_direct_and_ferrite_or_fuse_hop_capacitors_together():
     ferrite = part("FB1", "BLM18", "Inductor_SMD:L_0603", ("1", "VBUS"), ("2", "VBUS_F"))
-    hits = rules(design(usb(), ferrite, cap("C1", "VBUS", "GND", value="10uF"),
-                         cap("C2", "VBUS_F", "GND", value="10uF")), "usb.vbus_capacitance")
+    hits = rules(design(usb(), ferrite, vcap("C1", "VBUS", "GND", value="10uF"),
+                         vcap("C2", "VBUS_F", "GND", value="10uF")), "usb.vbus_capacitance")
     assert [f.refs for f in hits] == [("J1", "C1", "FB1", "C2")]
     fuse = part("F1", "500mA", "Fuse:Fuse_0603", ("1", "VBUS"), ("2", "VBUS_F"))
-    assert found("usb.vbus_capacitance", usb(), fuse, cap("C2", "VBUS_F", "GND", value="22uF")) != []
+    assert found("usb.vbus_capacitance", usb(), fuse, vcap("C2", "VBUS_F", "GND", value="22uF")) != []
     assert found("usb.vbus_capacitance", usb(), res("R1", "VBUS", "VBUS_F", "0.5"),
-                 cap("C2", "VBUS_F", "GND", value="22uF")) != []
+                 vcap("C2", "VBUS_F", "GND", value="22uF")) != []
 
 
 def test_vbus_quiet_for_small_diode_isolated_capacitance_and_non_series_parts():
-    small = cap("C1", "+5V", "GND", value="8uF")
+    small = vcap("C1", "+5V", "GND", value="8uF")
     assert found("usb.vbus_capacitance", usb(), schottky(), small) == []
-    big = cap("C1", "+5V", "GND", value="100uF")
+    big = vcap("C1", "+5V", "GND", value="100uF")
     assert found("usb.vbus_capacitance", usb(), schottky(net_a="+5V", net_k="VBUS"), big) == []  # reversed diode
     assert found("usb.vbus_capacitance", usb(), schottky(value="SMAJ5.0A"), big) == []  # TVS, not a rectifier
     assert found("usb.vbus_capacitance", usb(), res("R1", "VBUS", "+5V", "100"), big) == []  # not a <=1 ohm link
@@ -207,6 +212,15 @@ def test_vbus_quiet_for_small_diode_isolated_capacitance_and_non_series_parts():
     assert found("usb.vbus_capacitance", usb(), switch, big) == []  # behind a switch, not a diode
     driven = part("U2", "Boost", "Package_SO:SOIC-8", ("1", "+5V", "VOUT", "power_out"))
     assert found("usb.vbus_capacitance", usb(), schottky(), driven, big) == []  # rail driven by an IC output
+
+
+def test_vbus_judged_at_5v_bias_small_ceramics_lose_most_of_their_value():
+    def three(case):
+        return [part(f"C{n}", "10uF", f"Capacitor_SMD:C_{case}", ("1", "VBUS"), ("2", "GND")) for n in (1, 2, 3)]
+    assert found("usb.vbus_capacitance", usb(), *three("0402_1005Metric")) == []          # ~9 uF left at 5 V
+    assert found("usb.vbus_capacitance", usb(), *three("0805_2012Metric")) != []          # ~16.5 uF
+    elec = part("C1", "22uF", "Capacitor_SMD:CP_Elec_5x5.4", ("1", "VBUS"), ("2", "GND"))
+    assert found("usb.vbus_capacitance", usb(), elec) != []                                # electrolytic keeps it
 
 
 # --- inductive.flyback_missing ----------------------------------------------------------------

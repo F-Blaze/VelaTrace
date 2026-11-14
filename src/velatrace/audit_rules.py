@@ -1157,6 +1157,8 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
             continue  # card sockets, M.2, SWD/Tag-Connect: loads and programming pads
         if _DCDC_MODULE.search(conn.value.upper()):
             continue  # a buck/boost module drawn as a header is a source, not a power entry
+        if {"OUT", "OUTPUT", "LOAD"} & set(re.split(r"[^A-Z0-9]+", conn.value.upper())):
+            continue  # labelled as an output (Battery_conn_out, LOAD): power leaves the board there
         if not any(net in design.grounds or _RETURN.fullmatch(net_label(net)) for net in nets):
             continue
         signals = {n for n in nets if net_label(n) and n not in design.grounds and n not in design.supplies}

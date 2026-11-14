@@ -97,16 +97,6 @@
    ]
   },
   {
-   "rule": "usb.vbus_capacitance",
-   "refs": [
-    "J2",
-    "C24"
-   ],
-   "nets": [
-    "+5V"
-   ]
-  },
-  {
    "rule": "value.missing",
    "refs": [
     "D2",
