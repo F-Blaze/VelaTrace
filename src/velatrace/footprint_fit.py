@@ -254,8 +254,27 @@ def _label(rows: int, cols: int) -> str:
     return f"{rows} × {cols}"
 
 
+_SWITCH = re.compile(r"(?:^|\s)(?:SW|S|PWR|BOOT|RST|RESET)\d*\s|SWITCH|SLIDE|TOGGLE|SPDT|(?<![A-Z])K3-\d|SS-?1[23]|MSK-?1[23]")
+
+
+def pad_names(comp: Component) -> dict[str, str]:
+    """Pad number -> the symbol's pin name (DIN, VDD ...), for compare()."""
+    return {pin.number.strip().upper(): pin.name for pin in comp.pins if pin.name and pin.name != pin.number}
+
+
+_PIN_ALIAS = {"DI": "DIN", "SDI": "DIN", "DO": "DOUT", "SDO": "DOUT", "VSS": "GND", "GROUND": "GND", "VCC": "VDD"}
+
+
+def _same_function(a: str, b: str) -> bool:
+    """KiCad pin name and the part's pin name name the same function (DI = DIN, VSS = GND ...)."""
+    a, b = (re.sub(r"[^A-Z0-9+]", "", name.upper()) for name in (a, b))
+    a, b = _PIN_ALIAS.get(a, a), _PIN_ALIAS.get(b, b)
+    return bool(a) and a == b
+
+
 def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
-            nets: dict[str, str] | None = None, generic_header: bool = False) -> list[Finding]:
+            nets: dict[str, str] | None = None, generic_header: bool = False,
+            names: dict[str, str] | None = None) -> list[Finding]:
     """Findings (at most one) for a footprint whose pads do not fit the real part. With nets (from
     pad_nets) a numbering difference whose swapped pins share a net is not reported; for a
     generic_header (fit3_generic_header) no numbering difference is."""
@@ -347,6 +366,7 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     if len(numbers) == 4 and "" not in pairs and sorted(pairs.values()) == [2, 2]:
         return []
     wrong = []
+    part_names = {pad.number.strip().upper(): pad.name for pad in real.pads}
     for _, _, nearest, _, mirrored in fits:
         swapped = [(fp[i][0], part[j][0]) for i, j in enumerate(nearest)
                    if fp[i][0] != part[j][0] and fp[i][0] in shared and part[j][0] in shared]
@@ -355,8 +375,18 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
                if nets is None or (net(a) and net(b) and (mirrored or net(a) != net(b)))]
         if not bad and (swapped or not mirrored):
             return []
+        # The numbers differ but every pad carries the function the part has at that spot (a symbol with
+        # its own numbering on a footprint drawn by function): the part is wired right.
+        if names and not mirrored and all(_same_function(names.get(fp[i][0].upper(), ""),
+                                                          part_names.get(part[j][0].upper(), ""))
+                                          for i, j in enumerate(nearest)):
+            return []
         wrong.append(bad)
     bad = min(wrong, key=len)
+    # An SPDT slide/toggle switch with its two throws (pins 1 and 3, common 2) swapped only reverses
+    # which position is on; the circuit is the same.
+    if sorted(bad) == [("1", "3"), ("3", "1")] and "2" in numbers and _SWITCH.search(f"{reference} {name}".upper()):
+        return []
     if not bad:
         return finding("fit.pin_order", f"footprint is a mirror image of {name}",
                        "The pads and numbers match the part only when flipped left-to-right, so pin 1 "

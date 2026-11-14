@@ -1,4 +1,4 @@
-"""Signal-mistake checks: crystal load capacitors, swapped USB D+/D-, and two outputs driving one net.
+"""Signal-mistake checks: crystal load capacitors, swapped USB D+/D- and CAN/RS-485 lines, and two outputs driving one net.
 
 Same ground rules as audit_rules: deterministic, local, and silent when the netlist cannot show the
 problem clearly. They run from audit_rules.RULES.
@@ -202,4 +202,61 @@ def check_output_contention(snapshot: DesignSnapshot) -> list[Finding]:
                      "damage the chips or give wrong levels.",
             fix="Drive the net from one output only: separate the nets, put a series resistor or a switch/mux "
                 "between them, or use open-drain/tri-state outputs with a pull-up."))
+    return findings
+
+
+# --- bus.polarity_swapped ---------------------------------------------------------------------
+
+_CAN_SIDE = re.compile(r"(?<![A-Z0-9])CAN\d?[_\-]?(H(?:IGH)?|L(?:OW)?|\+|-)(?![A-Z])")
+_RS485_SIDE = re.compile(r"(?<![A-Z0-9])(?:RS[_\-]?)?485[_\-]?([AB])(?![A-Z0-9]|[_\-][AB](?![A-Z0-9]))")
+# Only the exact pin names A/B count, and only on a part that also has driver/receiver control or data pins.
+_RS485_CONTROL = {"DE", "RE", "NRE", "RO", "DI", "RXD", "TXD"}
+_NOT_A_TRANSCEIVER = re.compile(r"CHOKE|COMMON.?MODE|ACT\d|DLW|SDCW|ESD|TVS|PESD|TPD\d|USBLC", re.IGNORECASE)
+
+
+def _can_side(text: str) -> str:
+    """"H" or "L" when every CAN token in a name says the same side, else ""."""
+    sides = {"H" if token[0] in "H+" else "L" for token in _CAN_SIDE.findall(text)}
+    return sides.pop() if len(sides) == 1 else ""
+
+
+def _rs485_side(text: str) -> str:
+    sides = set(_RS485_SIDE.findall(text))
+    return sides.pop() if len(sides) == 1 else ""
+
+
+def check_bus_polarity_swapped(snapshot: DesignSnapshot) -> list[Finding]:
+    """A net named for one line of a CAN or RS-485 bus that lands on a transceiver pin named for the other."""
+    design = _Design(snapshot)
+    findings = []
+    for ic in design.of_kind("ic"):
+        if ic.dnp or _PROTECTION_VALUE.search(ic.value) or _NOT_A_TRANSCEIVER.search(ic.value):
+            continue
+        names = {_name(pin.name) for pin in ic.pins}
+        buses = (("CAN", lambda pin: _can_side(_name(pin.name)), _can_side),
+                 ("RS-485", lambda pin: _name(pin.name) if _name(pin.name) in {"A", "B"} else "", _rs485_side))
+        for bus, pin_side, net_side in buses:
+            if bus == "RS-485" and not names & _RS485_CONTROL:
+                continue
+            pins = [(pin, pin_side(pin)) for pin in ic.pins if pin.net and not pin.no_connect]
+            pins = [(pin, side) for pin, side in pins if side]
+            hits = [(pin, side) for pin, side in pins
+                    if (wired := net_side(net_label(pin.net))) and wired != side]
+            if not hits:
+                continue
+            # One bad pin next to an unnamed partner net is too thin: the single net name may be the mistake.
+            if len(hits) == 1 and not any(net_label(pin.net) for pin, side in pins if side != hits[0][1]):
+                continue
+            nets = tuple(dict.fromkeys(pin.net for pin, _ in hits))
+            conns = sorted({comp.reference for net in nets for comp, _ in design.nodes[net]
+                            if design.kind[comp.reference] == "connector"})
+            shown = "; ".join(f"{_pin_text(pin)} on {net_label(pin.net)}" for pin, _ in hits)
+            findings.append(Finding(
+                "bus.polarity_swapped", Severity.ERROR,
+                f"{ic.reference} {bus} lines look swapped ({shown})",
+                refs=(ic.reference, *conns), nets=nets,
+                evidence=f"{ic.reference}: {shown}. Each net is named for the opposite {bus} line to the pin it "
+                         "reaches." + (f" Connectors on these nets: {', '.join(conns)}." if conns else ""),
+                fix=f"Swap the two {bus} lines so each net reaches the pin of the same name "
+                    "(check both ends against the datasheets)."))
     return findings

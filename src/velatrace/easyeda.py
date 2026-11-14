@@ -1,7 +1,7 @@
 """EasyEDA/LCSC component data -> the pads of the real part. Input is untrusted network data."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 import re
 
@@ -17,6 +17,7 @@ class RealPad:
     y_mm: float
     through_hole: bool
     area_mm2: float = 0.0   # copper area (bounding box for polygons); 0 when unknown
+    name: str = ""          # the symbol's pin name for this number (DIN, GND ...); "" when unknown
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,20 @@ def _pad(fields: list[str], origin: tuple[float, float]) -> RealPad | None:
                    round(abs(width * height) * _MM_PER_UNIT ** 2, 4))
 
 
+def _pin_names(result: dict) -> dict[str, str]:
+    """Pin number -> pin name from the symbol: "P~show~0~<number>~...^^...^^...^^1~x~y~0~<name>~..."."""
+    names = {}
+    shapes = (result.get("dataStr") or {}).get("shape") if isinstance(result.get("dataStr"), dict) else None
+    for shape in shapes if isinstance(shapes, list) else ():
+        if isinstance(shape, str) and shape.startswith("P~"):
+            parts = shape.split("^^")
+            head = parts[0].split("~")
+            label = parts[3].split("~") if len(parts) > 3 else []
+            if len(head) > 3 and len(label) > 4 and head[3].strip():
+                names[_text(head[3]).strip()] = _text(label[4]).strip()
+    return names
+
+
 def parse_component(data: dict) -> RealPart | None:
     """Pads of an EasyEDA component response, or None when it has no usable pad geometry."""
     try:
@@ -80,6 +95,8 @@ def parse_component(data: dict) -> RealPart | None:
                     return None
     if not pads:
         return None
+    names = _pin_names(result)
+    pads = [replace(pad, name=names.get(pad.number, "")) for pad in pads]
     lcsc = result.get("lcsc")
     return RealPart(_text(lcsc.get("number")) if isinstance(lcsc, dict) else "",
                     _text(result.get("title")), _text(detail.get("title")), tuple(pads))

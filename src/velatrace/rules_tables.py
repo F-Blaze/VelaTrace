@@ -173,6 +173,9 @@ _LDOS = (
     # HT7333 (Holtek HT73xx Rev. 1.50, Jun 2016): 3.3 V type, dropout 90 mV typ at 40 mA, input voltage up to 12 V.
     # The -1/-2 suffix parts are Holtek's 30 V family and are left out.
     _Ldo(re.compile(r"HT7333(?![0-9]|[-_ ]?[12](?![0-9]))"), lambda m: 3.3, lambda vout: 0.09, 12.0),
+    # LD1117, STMicroelectronics LD1117 datasheet: fixed 1.2/1.8/2.5/3.3/5.0 V (LD1117S33 = 3.3 V); dropout 1 V typ at
+    # 800 mA (1.1 V at full load, lower at light load, so 1.0 V is used); absolute maximum input 15 V.
+    _Ldo(re.compile(r"LD1117[A-Z]{1,3}(12|18|25|33|50)(?!\d)"), lambda m: int(m.group(1)) / 10, lambda vout: 1.0, 15.0),
 )
 _LDO_IN = re.compile(r"V?IN|VI")
 _LDO_OUT = re.compile(r"V?OUT|VO")

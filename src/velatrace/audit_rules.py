@@ -57,7 +57,7 @@ _PROTECTION_VALUE = re.compile(r"TVS|ESD|USBLC|PRTR|TPD\d|SMAJ|SMBJ|PESD|SS\d{2}
 # Input protection built into the IC: current-limited USB power switches, load switches, eFuses, ideal
 # diodes and power muxes with reverse blocking or a current limit. A rail entering one is protected.
 _PROTECTING_IC = re.compile(
-    r"CH217|TPS2115|TPS2113|TPS2116|TPS259|TPS2051|TPS2041|AP2141|AP2151|SY6280|RT9742|MIC2005|MIC2009|"
+    r"CH217|TPS2115|TPS2113|TPS2116|TPS212[01]|TPS259|TPS2051|TPS2041|AP2141|AP2151|SY6280|RT9742|MIC2005|MIC2009|"
     r"LM66100|LM66200|MAX40200|IDEAL.?DIODE|LOAD.?SWITCH|E-?FUSE", re.IGNORECASE)
 _EMPTY_VALUES = {"", "~", "?"}
 # Generic KiCad symbol names (R_Small_US, D_Schottky, C_Polarized...) and template text left as a value.
@@ -97,7 +97,7 @@ _NOT_SUPPLY_PIN = re.compile(r"(?:SW|LX|PH|DCC\w*|EN|PG|PGOOD|BOOT|BST)\d*")
 # nodes, enable/shutdown, boot, references, charge-pump and internal-regulator capacitor pins.
 _NOT_SUPPLY_TOKEN = re.compile(
     r"(?:SW|LX|PH|PHASE|DCC\w*|N?EN|PG|PGOOD|BOOT|BST|VCP|CP|CAP|VCAP|CFLY)\d*|SWITCH|N?ENABLE|SHDN|SHUTDOWN|"
-    r"RUN|UVLO|V?REF\w*|V?FB\d*")
+    r"RUN|UVLO|V?REF\w*|V?FB\d*|\w*SENSE\w*|\w*SNS\w*|BATP|BATN")
 _LED_VDD_PIN = re.compile(r"V?DD|VCC|V\+")
 # Op-amp offset-null/trim and compensation pins: left open when unused, per datasheets.
 _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
@@ -383,9 +383,13 @@ def _not_a_rail(design: _Design, ic: Component, net: str, pins: list[Pin]) -> bo
 # Modules and dev boards carry their own decoupling; the caps beside them are bulk/board caps, not pin bypass.
 _BUILT_IN_DECOUPLING = re.compile(
     r"ESP32[\w-]*-(?:MINI|WROOM|WROVER)|ESP-WROOM|ESP8266MOD|(?<![A-Z])PICO(?![A-Z])|RP2040.?ZERO|XIAO|TEENSY|NODEMCU|WEMOS")
+# Display modules (an LCD/TFT board on a header carries its own regulator and caps); IC sockets hold a target chip.
+_DISPLAY_MODULE = re.compile(r"(?<![A-Z])(?:LCD|TFT)(?![A-Z])")
 # Regulator, charger and LDO families whose pins an untyped netlist does not show as power_out.
 _REGULATOR_PART = re.compile(r"(?<!\d)(?:78|79)[LMS]?\d\d(?!\d)|1117|LM317|BQ2\d{4}|TP40\d\d|MCP73\d+|LDO")
 _SOURCE_PIN = re.compile(r"[+-]?(?:V?OUT|VO|V?BAT|SW|LX|SYS)\d*[+-]?")  # output, charger battery or switch node
+# DC-DC converter modules often drawn with a pin-header symbol.
+_DCDC_MODULE = re.compile(r"MP1584|LM2596|LM2577|XL[46]0\d\d|MT3608|MINI.?360|DC.?DC|BUCK|BOOST|STEP.?(?:DOWN|UP)")
 # Single-gate logic and reset supervisors draw microamps; a far bypass cap is harmless (decoupling.missing still applies).
 _LOW_CURRENT_PART = re.compile(
     r"74[A-Z]{0,5}1G\d|NC7S[A-Z]?\d|MAX8(?:09|1[012])(?!\d)|APX80[39]|TPS38\d\d|STM8(?:0\d|1\d)(?!\d)|MCP1\d\d(?!\d)")
@@ -402,7 +406,7 @@ def _is_linear_amp(ic: Component) -> bool:
 
 
 # Parts drawing microamps whatever their pin count: fuel gauges, power-path controllers (not EEPROMs: writes draw mA).
-_MICROAMP_PART = re.compile(r"MAX1704\d|LTC441[12]")
+_MICROAMP_PART = re.compile(r"MAX1704\d|LTC441[12]|TPL50\d\d|BME280|BMP280|BMP3\d\d|AHT[12]\d|SHT[34]\d|HDC10\d\d")
 
 
 def _r6_low_current(ic: Component) -> bool:
@@ -422,6 +426,19 @@ def _is_regulator(ic: Component) -> bool:
         for pin in ic.pins))
 
 
+# Slow, low-current interface parts: RTCs, CAN/RS-485 transceivers, 1-2 gate logic, optocouplers. Their
+# edges are slow and their supply current small, so a bypass cap a centimetre away still works; beyond
+# that (often the only cap is at the regulator) it is reported as for any other part.
+_SLOW_PART = re.compile(
+    r"DS1[23]\d\d|DS32\d\d|PCF85\d\d|PCF2129|RV-?(?:3028|8803|3032)|MCP79\d{3}|M41T\d\d|"
+    r"SN65HVD\d+|MCP25[56]\d|TJA1\d{3}|TCAN\d+|MAX3?485|MAX1348\d|SP3?485|THVD\d+|ADM2?48\d|"
+    r"74[A-Z]{0,5}[12]G\d|NC7S[A-Z]?\d|H11L\d|6N13[5-9]|PC817|TLP\d{3}|MCP230\d\d|PCF857\d|PCA95[3-7]\d|"
+    r"^(?:N?AND|N?OR|XN?OR|INV|NOT|BUF)\d?$")  # a generic single gate
+SLOW_PART_NEAR_MM = 12.0
+# eFuses and load switches (not USB current-limit switches, which want an output capacitor).
+_LOAD_SWITCH = re.compile(r"TPS259\d\d|TPS22\d{3}|MIC94\d{2,3}|SIP32\d{3}|E-?FUSE|LOAD.?SWITCH")
+# Surge stoppers / overvoltage controllers: their datasheets keep capacitors off the raw input on purpose.
+_SURGE_STOPPER = re.compile(r"LTC436[0-9]|LTC4380|LT4363|MAX1690\d|TPS2660\d")
 RAIL_NEAR_MM = 3.0  # "beside the pin" when judging whether a shared rail is well decoupled
 RAIL_BULK_F = Decimal("4.7e-6")
 
@@ -478,15 +495,17 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
         # 1-Wire sensors, references and supervisors in TO-92/SOT-23-3 draw microamps and need no bypass;
         # a 3-pin regulator still does (input/output caps).
         tiny = len(terminals(ic)) <= 3 and not _is_regulator(ic)
-        far_ok = bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or _is_regulator(ic) or _r6_low_current(ic) or _is_linear_amp(ic) or bool(_PAIR_ESD.search(ic.value))
+        far_ok = (bool(_BUILT_IN_DECOUPLING.search(f"{ic.value} {ic.footprint}".upper())) or "SOCKET" in ic.footprint.upper()
+                  or bool(_DISPLAY_MODULE.search(ic.value.upper()))) or _is_regulator(ic) or _r6_low_current(ic) or _is_linear_amp(ic) or bool(_PAIR_ESD.search(ic.value))
         # A capacitor to any of the IC's own power/ground pin nets also decouples: stacked
         # domains (cap to the neighbouring rail), protection ICs on a local ground (DW01 B-).
         returns = base_returns | {pin.net for pin in ic.pins if pin.net and (
             _base_type(pin) in {"power_in", "power_out"} or _GROUND.fullmatch(pin.name.upper()))}
         for net, pins in sorted(supply_pins.items()):
             if not caps.get(net):
-                if tiny:
-                    continue
+                if tiny or _SURGE_STOPPER.search(ic.value.upper()) or (_LOAD_SWITCH.search(ic.value.upper()) and all(
+                        _OUT_PIN.fullmatch(_plain_pin(pin.name)) for pin in pins)):
+                    continue  # an eFuse/load-switch output: the load's capacitors, none required at the switch
                 if not _decoupled(design, net, cap_ends, returns - {net}) and not _not_a_rail(design, ic, net, pins):
                     missing[net].append((ic, pins))
                 continue
@@ -502,9 +521,10 @@ def check_decoupling(snapshot: DesignSnapshot) -> list[Finding]:
                 distances += [(dist(a, b), cap.reference) for a in points for b in cap_points]
             if distances:
                 nearest, ref = min(distances)
+                limit = SLOW_PART_NEAR_MM if _SLOW_PART.search(ic.value.upper()) else DECOUPLING_NEAR_MM
                 if nearest > DECOUPLING_NEAR_MM and _is_addressable(ic):
                     far_leds[net].append((ic, ref, nearest))
-                elif nearest > DECOUPLING_NEAR_MM and not (
+                elif nearest > limit and not (
                         _rc_filtered(design, net) or _well_decoupled_rail(design, net, caps[net])):
                     findings.append(Finding(
                         "decoupling.far", Severity.WARNING,
@@ -594,6 +614,23 @@ def _is_rail(design: _Design, net: str) -> bool:
     return net in design.supplies or (net not in design.grounds and any(
         design.kind[comp.reference] == "ic" and _SUPPLY_PIN.fullmatch(pin.name.upper())
         for comp, pin in design.nodes[net]))
+
+
+def _pair_pullup_rail(design: _Design, net: str, other: str) -> bool:
+    """A resistor from the partner I2C line (SDA for SCL and back) also ends on `other`: two resistors
+    from SDA and SCL to one non-ground net are a pull-up pair, whatever that rail is called (e.g. a
+    sensor supply switched by a transistor)."""
+    line = i2c_line(net)
+    if other in design.grounds or _is_return(design, other):
+        return False
+    for comp, _ in design.nodes[other]:
+        nets = two_terminal_nets(comp) if design.kind[comp.reference] == "resistor" else None
+        ohms = parse_resistance(comp.value) if nets else None
+        if nets and other in nets and ohms is not None and ohms >= 100:  # a 0 Ω link routes, it does not pull up
+            far = nets[1] if nets[0] == other else nets[0]
+            if far != net and i2c_line(far) not in {None, line}:
+                return True
+    return False
 
 
 def _breakout(design: _Design, ref: str) -> bool:
@@ -704,7 +741,7 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
             if not nets or net not in nets:
                 continue
             other = nets[1] if nets[0] == net else nets[0]
-            if _is_rail(design, other):
+            if _is_rail(design, other) or _pair_pullup_rail(design, net, other):
                 pullups.append((comp, other, parse_resistance(comp.value)))
         zero = [row for row in pullups if row[2] == 0]
         for comp, rail, _ in zero:
@@ -1118,6 +1155,10 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
         nets = set(terminals(conn).values())
         if _NOT_POWER_ENTRY.search(f"{conn.value} {conn.footprint}".upper()):
             continue  # card sockets, M.2, SWD/Tag-Connect: loads and programming pads
+        if _DCDC_MODULE.search(conn.value.upper()):
+            continue  # a buck/boost module drawn as a header is a source, not a power entry
+        if {"OUT", "OUTPUT", "LOAD"} & set(re.split(r"[^A-Z0-9]+", conn.value.upper())):
+            continue  # labelled as an output (Battery_conn_out, LOAD): power leaves the board there
         if not any(net in design.grounds or _RETURN.fullmatch(net_label(net)) for net in nets):
             continue
         signals = {n for n in nets if net_label(n) and n not in design.grounds and n not in design.supplies}
@@ -1184,6 +1225,13 @@ def _rail_group(design: _Design, net: str) -> set[str]:
     return group
 
 
+def _selector(design: _Design, comp: Component) -> bool:
+    """A jumper, or a 2-3 pin header with no ground pin: it links or selects rails, it is no entry."""
+    kind = design.kind[comp.reference]
+    return kind == "jumper" or (kind == "connector" and 2 <= len(terminals(comp)) <= 3
+                                and not any(net in design.grounds for net in comp.nets))
+
+
 def _fed_group(design: _Design, group: set[str]) -> set[str]:
     """group plus the supply nets reached through a series resistor (≤100 Ω), ferrite, fuse or diode,
     and supply nets of the same name: a rail that something on the board feeds, however lossy the link."""
@@ -1196,6 +1244,8 @@ def _fed_group(design: _Design, group: set[str]) -> set[str]:
             nets = two_terminal_nets(comp)
             if nets and current in nets and (_series_link(design, comp, 100) or design.kind[comp.reference] == "diode"):
                 near.append(nets[1] if nets[0] == current else nets[0])
+            elif _selector(design, comp):  # a jumper picks which output feeds the rail
+                fed |= {net for net in comp.nets if net not in design.grounds and net != current}
         for other in near:
             if other in design.supplies and other not in fed:
                 fed.add(other)
@@ -1265,7 +1315,8 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
         empty = value in _EMPTY_VALUES
-        if not (empty or _GENERIC_VALUE.fullmatch(value)
+        # A connector's text ("LED", "Crystal") labels what plugs in; generic names only mean "unset" on the part itself.
+        if not (empty or (kind != "connector" and _GENERIC_VALUE.fullmatch(value))
                 or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol
                      and not _PART_NUMBER_SYMBOL.search(symbol))):
             continue
@@ -1379,19 +1430,49 @@ _FULL_SPEED_USB = re.compile(
     r"CH34[0-9]|CH9102|CH55\d|CH32V|CP21\d\d|PCM29\d\d|FT23[012][RXQ]|MCP2221|PIC1[68]F\d*K?5\d|GD32F")
 
 
+_USB_LINE = re.compile(r"USB|D[+-]$|(?<![A-Z])(?:U?D[PMN]|D_?[PN])(?![A-Z])")
+
+
 def _full_speed_usb(snapshot: DesignSnapshot, p: str, n: str) -> bool:
-    """The pair reaches ICs, and every IC on it is a full-speed-only USB device (connectors,
-    ESD parts and series resistors of up to 100 Ω in between do not count)."""
+    """The pair reaches ICs, and every IC on it is a full-speed-only USB device. The signal is
+    followed through series resistors of up to 100 Ω, common-mode chokes and ESD arrays (by name,
+    or any grounded U part of at most 6 pins and 4 signal nets): those are not the chip at the end.
+    Only USB lines qualify: named USB/D+/D-/DP/DM, or reaching a USB connector."""
     nets = {p, n}
-    for comp in snapshot.components:
-        ends = two_terminal_nets(comp)
-        ohms = parse_resistance(comp.value) if comp.reference.upper().startswith("R") else None
-        if ends and ohms is not None and ohms <= 100 and set(ends) & {p, n}:
-            nets |= set(ends)
+    if not (any(_USB_LINE.search(net.rsplit("/", 1)[-1].upper()) for net in nets) or any(
+            part_kind(comp) == "connector" and "USB" in f"{comp.value} {comp.footprint}".upper() and comp.nets & nets
+            for comp in snapshot.components)):
+        return False
+    passed: set[str] = set()
+    for _ in range(3):  # connector -> ESD -> choke -> resistor -> chip at most
+        for comp in snapshot.components:
+            if comp.reference in passed or not comp.nets & nets:
+                continue
+            ends = two_terminal_nets(comp)
+            ohms = parse_resistance(comp.value) if comp.reference.upper().startswith("R") else None
+            signals = {net for net in comp.nets if not (is_ground(net) or is_supply_name(net))}
+            if ends and ohms is not None and ohms <= 100:
+                nets |= set(ends)
+            elif (_PROTECTION_VALUE.search(f"{comp.value} {comp.footprint}".upper()) or _PAIR_ESD.search(comp.value)
+                  or part_kind(comp) in {"inductor", "ferrite"}
+                  or (comp.reference.upper().startswith("U") and len(terminals(comp)) <= 6 and len(signals) <= 4
+                      and any(is_ground(net) for net in comp.nets))):
+                nets |= signals
+            else:
+                continue
+            passed.add(comp.reference)
     chips = [comp for comp in snapshot.components if comp.reference.upper().startswith(("U", "IC"))
-             and any(pin.net in nets for pin in comp.pins)]
-    chips = [comp for comp in chips if not _PROTECTION_VALUE.search(f"{comp.value} {comp.footprint}".upper())]
-    return bool(chips) and all(_FULL_SPEED_USB.search(f"{comp.value} {mpn_of(comp) or ''}".upper()) for comp in chips)
+             and comp.reference not in passed and any(pin.net in nets for pin in comp.pins)]
+    return bool(chips) and all(_FULL_SPEED_USB.search(f"{comp.value} {mpn_of(comp) or ''}".upper())
+                               or _stm32_fs_pins(comp, nets) for comp in chips)
+
+
+def _stm32_fs_pins(comp: Component, nets: set[str]) -> bool:
+    """An STM32 whose pins on the pair are PA11/PA12: the built-in full-speed USB PHY on every STM32
+    (high speed needs an external ULPI PHY, which is its own chip on the pair)."""
+    pins = [pin for pin in comp.pins if pin.net in nets]
+    return "STM32" in comp.value.upper() and bool(pins) and all(
+        set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & {"PA11", "PA12"} for pin in pins)
 
 
 def _vias(count: int) -> str:
@@ -1552,8 +1633,8 @@ def _inside(points, polygon):
     return cross.sum(1) % 2 == 1
 
 
-def _gaps(seg, polygons, holes) -> list[tuple[float, tuple[float, float]]]:
-    """(length, start) of each stretch of ``seg`` longer than GAP_MM with no fill polygon under it.
+def _gaps(seg, polygons, holes, min_mm: float = GAP_MM) -> list[tuple[float, tuple[float, float]]]:
+    """(length, start) of each stretch of ``seg`` longer than min_mm with no fill polygon under it.
 
     ponytail: per segment and along the chord for arcs, so a gap that starts on one track and
     ends on the next is two stretches; chain segments if that misses real crossings."""
@@ -1576,7 +1657,7 @@ def _gaps(seg, polygons, holes) -> list[tuple[float, tuple[float, float]]]:
             start = start if run else tuple(float(v) for v in pts[i])
             run += 1
             continue
-        if run * step > GAP_MM:
+        if run * step > min_mm:
             stretches.append((run * step, start))
         run = 0
     return stretches
@@ -1605,6 +1686,7 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
         holes[via.net].append(via.position)
     lengths: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     gaps: dict[str, list] = defaultdict(list)
+    uncovered: dict[str, float] = defaultdict(float)  # full-speed nets: all unreferenced length, any stretch
     for seg in copper.segments:
         model = copper.models.get(seg.layer)
         if seg.net not in nets or model is None or seg.layer in copper.planes:
@@ -1618,10 +1700,13 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
             refs = _references(copper, seg.layer)
         polygons = [polygon for ref in refs for polygon in fills.get(ref, ())]
         for length, start in _gaps(seg, polygons, holes[seg.net]) if polygons else ():
-            if seg.net not in full_speed or length > FULL_SPEED_GAP_MM:
-                gaps[seg.net].append((seg.layer, refs, length, start))
+            gaps[seg.net].append((seg.layer, refs, length, start))
+        if seg.net in full_speed and polygons:
+            uncovered[seg.net] += sum(length for length, _ in _gaps(seg, polygons, holes[seg.net], 0.0))
     findings = []
     for net, rows in sorted(gaps.items()):
+        if net in full_speed and uncovered[net] <= FULL_SPEED_GAP_MM:
+            continue  # full-speed USB: only a long total stretch without a reference matters
         total = sum(row[2] for row in rows)
         layer, refs, longest, (x, y) = max(rows, key=lambda row: row[2])
         findings.append(Finding(
@@ -1785,10 +1870,25 @@ RULES: dict[str, Check] = {
     "power.rail_voltage_mismatch": lambda snapshot: rules_polarity.check_rail_voltage_mismatch(snapshot),
     "crystal.load_caps_missing": _signal("check_crystal_load_caps"),
     "usb.dp_dn_swapped": _signal("check_usb_dp_dn_swapped"),
+    "bus.polarity_swapped": _signal("check_bus_polarity_swapped"),
     "net.output_contention": _signal("check_output_contention"),
     "power.divider_voltage": _sibling("rules_tables", "check_divider_voltage"),
     "mcu.strap_pins": _sibling("rules_tables", "check_strap_pins"),
     "power.ldo_dropout": _sibling("rules_tables", "check_ldo_dropout"),
+    "part.mpn_value_mismatch": _sibling("rules_parts", "check_mpn_value_mismatch"),
+    "part.footprint_kind_mismatch": _sibling("rules_parts", "check_footprint_kind_mismatch"),
+    "part.polarized_symbol": _sibling("rules_parts", "check_polarized_symbol"),
+    "part.diode_type_mismatch": _sibling("rules_parts", "check_diode_type_mismatch"),
+    "value.nonstandard": _sibling("rules_parts", "check_nonstandard_value"),
+    "cap.voltage_rating": _sibling("rules_ratings", "check_cap_voltage_rating"),
+    "resistor.power_rating": _sibling("rules_ratings", "check_resistor_power_rating"),
+    "usb.vbus_capacitance": _sibling("rules_ratings", "check_vbus_capacitance"),
+    "inductive.flyback_missing": _sibling("rules_ratings", "check_flyback_missing"),
+    "pin.power_unconnected": _sibling("rules_ratings", "check_power_unconnected"),
+    "led.current_high": _sibling("rules_circuit", "check_led_current_high"),
+    "logic.level_mismatch": _sibling("rules_circuit", "check_level_mismatch"),
+    "mosfet.gate_pulldown_missing": _sibling("rules_circuit", "check_gate_pulldown_missing"),
+    "i2c.address_conflict": _sibling("rules_circuit", "check_i2c_address_conflict"),
 }
 
 # Slower checks that need the routed copper (read_board(copper=True)); run on request via run_heavy.

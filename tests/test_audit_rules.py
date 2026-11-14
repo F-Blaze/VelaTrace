@@ -719,6 +719,56 @@ def test_regulator_feedback_pin_is_not_a_supply_input():
     assert rules(design(driver, bulk), "decoupling") == []
 
 
+def test_slow_parts_get_a_centimetre_but_not_more():
+    def chip(value):
+        return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)), ("5", "/CANH", "CANH", "bidirectional"),
+                    ("6", "/CANL", "CANL", "bidirectional"))
+    def at(mm):
+        return cap(a="+3V3", pin_pos=((10.0 + mm, 10.0), (11.0 + mm, 10.0)))
+    for value in ("SN65HVD230", "MAX3485", "DS3231M", "74LVC2G14", "H11L1"):
+        assert rules(design(chip(value), at(9.0)), "decoupling") == [], value
+        assert [f.rule for f in rules(design(chip(value), at(20.0)), "decoupling")] == ["decoupling.far"], value
+    assert [f.rule for f in rules(design(chip("ATtiny85"), at(9.0)), "decoupling")] == ["decoupling.far"]
+
+
+def test_efuse_output_needs_no_cap_but_usb_power_switch_output_does():
+    def switch(value):
+        return part("U1", value, "Package_TO_SOT_SMD:SOT-23-6", ("5", "+5V_IN", "IN", "power_in"),
+                    ("1", "+5V", "OUT", "power_out"), ("2", "GND", "GND", "power_in"), ("3", "/EN", "EN", "input"))
+    load = part("J2", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+5V"), ("2", "GND"))
+    for value, nets in (("TPS259470A", []), ("TPS22918", []), ("CH217K", [("+5V",)])):
+        found = rules(design(switch(value), load, cap(a="+5V_IN")), "decoupling.missing")
+        assert [f.nets for f in found] == nets, value
+
+
+def test_far_cap_quiet_for_sockets_display_modules_microamp_sensors_and_generic_gates():
+    def chip(value, footprint="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", extra=4):
+        return part("U1", value, footprint, ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)),
+                    *[(str(n), f"/S{n}", f"IO{n}", "bidirectional") for n in range(1, extra + 1)])
+    far = cap(a="+3V3", pin_pos=((19.0, 10.0), (20.0, 10.0)))  # 9 mm
+    farther = cap(a="+3V3", pin_pos=((40.0, 10.0), (41.0, 10.0)))  # 30 mm
+    for comp in (chip("PIC_18_PINS", "Package_DIP:DIP-18_W7.62mm_Socket_LongPads"), chip("LCD_ST7735S_1.8"),
+                 chip("BME280"), chip("TPL5010DDC"), chip("NAND", "Package_TO_SOT_SMD:SOT-353", 2), chip("MCP23008-xSO")):
+        assert rules(design(comp, far), "decoupling") == [], comp.value
+    assert [f.rule for f in rules(design(chip("MCP23008-xSO"), farther), "decoupling")] == ["decoupling.far"]
+    assert [f.rule for f in rules(design(chip("ATmega328P"), far), "decoupling")] == ["decoupling.far"]
+
+
+def test_missing_cap_quiet_for_surge_stopper_input_battery_sense_and_mic94xx_output():
+    stopper = part("U2", "LTC4365", "Package_DFN_QFN:DFN-8", ("1", "+12V_RAW", "VIN", "power_in"),
+                   ("2", "GND", "GND", "power_in"), ("3", "/GATE", "GATE", "output"), ("4", "/UV", "UV", "input"))
+    charger = part("U3", "BQ25792", "Package_DFN_QFN:QFN-29", ("1", "+VBAT", "BAT", "power_out"),
+                   ("2", "GND", "GND", "power_in"), ("3", "Net-(U3-BATP)", "BATP", "power_in"), ("4", "/SDA", "SDA", "bidirectional"))
+    sense = res("R8", "Net-(U3-BATP)", "+VBAT", "100")
+    switch = part("U4", "MIC9409C6", "Package_TO_SOT_SMD:SOT-23-6", ("4", "+3V3", "VIN", "power_in"),
+                  ("1", "VSWITCH", "VOUT", "power_in"), ("2", "GND", "GND", "power_in"), ("6", "/CTRL", "EN", "input"))
+    load = part("J3", "Screw", "TerminalBlock:TerminalBlock_1x02", ("1", "VSWITCH"), ("2", "GND"))
+    found = rules(design(stopper, charger, sense, switch, load, cap(a="+3V3"), cap("C2", "+VBAT")), "decoupling.missing")
+    assert found == [], [f.title for f in found]
+
+
 def test_unconnected_supply_pin_needs_no_decoupling():
     module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
                   ("2", "GND", "GND", "power_in"), *exp4_spare())
@@ -744,6 +794,35 @@ def test_qwiic_and_fan_ports_are_not_power_entries():
     found = rules(design(conn("/UART_TX", "/UART_RX"), reg, cap("C2", "+5V")), "connector")
     assert [f.nets for f in found] == [("+5V",)]
 
+
+
+def test_i2c_pullup_pair_to_a_switched_rail_counts():
+    sda_scl = design(ic("U1", ("3", "SDA", "SDA"), ("4", "SCL", "SCL")), ic("U2", ("3", "SDA", "SDA"), ("4", "SCL", "SCL"),
+                     value="SENSOR"), cap(), res("R1", "SDA", "Net-(Q5-D)"), res("R2", "SCL", "Net-(Q5-D)"))
+    assert [f.rule for f in rules(sda_scl, "i2c.pullup.missing")] == []
+    lone = design(ic("U1", ("3", "SDA", "SDA")), ic("U2", ("3", "SDA", "SDA"), value="SENSOR"), cap(),
+                  res("R1", "SDA", "Net-(U1-X)"))  # one resistor to an unknown net is not a pull-up
+    assert [f.rule for f in rules(lone, "i2c.pullup.missing")] == ["i2c.pullup.missing"]
+
+
+def test_rail_selected_by_a_jumper_and_buck_module_headers_are_not_entries():
+    buck = part("U3", "TPS62840", "Package_SON:WSON-6", ("1", "+5V", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", "/Vo_Buck", "VOUT", "power_out"))
+    sel = part("J5", "Conn_01x03_Pin", "", ("1", "/Vo_Buck"), ("2", "/VCC"), ("3", "/Vo_LDO"))
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "/VCC", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    header = part("J6", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "/VCC"), ("2", "GND"))
+    assert rules(design(buck, sel, mcu, header, cap("C1", "/VCC")), "connector") == []
+    assert [f.refs for f in rules(design(mcu, header, cap("C1", "/VCC")), "connector")] == [("J6",)]
+    module = part("M1", "MP1584EN", "Connector_PinHeader_2.54mm:PinHeader_1x04", ("1", "+12V"), ("2", "GND"), ("3", "+5V"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert "M1" not in [ref for f in rules(design(module, load, cap("C1", "+5V")), "connector") for ref in f.refs]
+
+
+def test_connector_labelled_as_an_output_is_not_a_power_entry():
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+BATT", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    for value, quiet in (("Battery_conn_out", True), ("LOAD", True), ("Battery_conn", False)):
+        conn = part("J2", value, "Connector_JST:JST_PH_B2B-PH-K_1x02", ("1", "+BATT"), ("2", "GND"))
+        assert (rules(design(conn, mcu, cap("C1", "+BATT")), "connector") == []) is quiet, value
 
 
 def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():

@@ -279,8 +279,8 @@ def test_rows_a_hair_apart_are_not_a_layout_difference():
     # H015/H016: posts at 3.15 mm next to a pin at 3.0 mm cluster as one row in KiCad, two at LCSC.
     nets = {"1": "Net-(BOOT0-Pad1)", "2": "+3.3V", "3": "Net-(U16-BOOT0)",
             "4": "unconnected-(BOOT0-Pad4)", "5": "unconnected-(BOOT0-Pad5)"}
-    (finding,) = compare("BOOT0", K3_1270, C145857, nets)
-    assert finding.rule == "fit.pin_order" and "(2 of 5 pads)" in finding.title   # pins 1 and 3 do swap
+    # Pins 1 and 3 do swap, but on this SPDT slide switch that only flips the positions: no layout or pin-order finding.
+    assert compare("BOOT0", K3_1270, C145857, nets) == []
     assert rules(row(5, tht=False), C145857) == ["fit.layout"]                     # a real layout difference still is one
 
 
@@ -429,6 +429,29 @@ def test_four_pads_on_two_nets_two_each_are_not_a_pin_order_finding():
     # Distinct nets, or an unconnected pair: the numbering matters.
     assert [f.rule for f in compare("SW1", FIT_TACT, FIT_TACT_PART, {"1": "A", "2": "B", "3": "C", "4": "D"})] == ["fit.pin_order"]
     assert [f.rule for f in compare("SW1", FIT_TACT, FIT_TACT_PART, {"1": "A", "2": "A", "3": "B", "4": "C"})] == ["fit.pin_order"]
+
+
+def test_spdt_switch_with_its_throws_swapped_is_not_a_pin_order_finding():
+    pads = [("1", -2.0, 0.0, False), ("2", 0.0, 0.0, False), ("3", 2.0, 0.0, False), ("4", -3.5, 1.6, False)]
+    part = fit_part(("1", 2.0, 0.0, 0.7), ("2", 0.0, 0.0, 0.7), ("3", -2.0, 0.0, 0.7), ("4", -3.5, 1.6, 0.7))
+    nets = {"1": "/BAT", "2": "/VSYS", "3": "/OFF", "4": "GND"}
+    assert compare("PWR1", pads, part, nets) == []
+    assert [f.rule for f in compare("J3", pads, part, nets)] == ["fit.pin_order"]  # not a switch: numbering matters
+
+
+def test_numbering_differs_but_every_pad_has_the_right_function_is_not_a_pin_order_finding():
+    # WS2812B-2020 (LCSC C52917434: 1 DO, 2 GND, 3 DI, 4 VDD) on a footprint numbered like the
+    # 5050 symbol (1 VDD, 2 DOUT, 3 VSS, 4 DIN) and drawn by function, as on a real board.
+    part = real("C52917434")
+    assert [(p.number, p.name) for p in sorted(part.pads, key=lambda p: p.number)] == [
+        ("1", "DO"), ("2", "GND"), ("3", "DI"), ("4", "VDD")]
+    pads = [("1", 0.745, -0.66, False), ("2", 2.575, -0.66, False), ("3", 2.575, -1.76, False), ("4", 0.745, -1.76, False)]
+    nets = {"1": "+5V", "2": "/D1", "3": "GND", "4": "/D0"}
+    assert [f.rule for f in compare("D1", pads, part, nets)] == ["fit.pin_order"]          # no names: numbers only
+    names = {"1": "VDD", "2": "DOUT", "3": "VSS", "4": "DIN"}
+    assert compare("D1", pads, part, nets, names=names) == []
+    swapped = {"1": "VDD", "2": "DIN", "3": "VSS", "4": "DOUT"}                              # data in/out reversed
+    assert [f.rule for f in compare("D1", pads, part, nets, names=swapped)] == ["fit.pin_order"]
 
 
 # ---- IPC offsets ----
