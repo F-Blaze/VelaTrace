@@ -57,7 +57,7 @@ _PROTECTION_VALUE = re.compile(r"TVS|ESD|USBLC|PRTR|TPD\d|SMAJ|SMBJ|PESD|SS\d{2}
 # Input protection built into the IC: current-limited USB power switches, load switches, eFuses, ideal
 # diodes and power muxes with reverse blocking or a current limit. A rail entering one is protected.
 _PROTECTING_IC = re.compile(
-    r"CH217|TPS2115|TPS2113|TPS2116|TPS259|TPS2051|TPS2041|AP2141|AP2151|SY6280|RT9742|MIC2005|MIC2009|"
+    r"CH217|TPS2115|TPS2113|TPS2116|TPS212[01]|TPS259|TPS2051|TPS2041|AP2141|AP2151|SY6280|RT9742|MIC2005|MIC2009|"
     r"LM66100|LM66200|MAX40200|IDEAL.?DIODE|LOAD.?SWITCH|E-?FUSE", re.IGNORECASE)
 _EMPTY_VALUES = {"", "~", "?"}
 # Generic KiCad symbol names (R_Small_US, D_Schottky, C_Polarized...) and template text left as a value.
@@ -1461,7 +1461,16 @@ def _full_speed_usb(snapshot: DesignSnapshot, p: str, n: str) -> bool:
             passed.add(comp.reference)
     chips = [comp for comp in snapshot.components if comp.reference.upper().startswith(("U", "IC"))
              and comp.reference not in passed and any(pin.net in nets for pin in comp.pins)]
-    return bool(chips) and all(_FULL_SPEED_USB.search(f"{comp.value} {mpn_of(comp) or ''}".upper()) for comp in chips)
+    return bool(chips) and all(_FULL_SPEED_USB.search(f"{comp.value} {mpn_of(comp) or ''}".upper())
+                               or _stm32_fs_pins(comp, nets) for comp in chips)
+
+
+def _stm32_fs_pins(comp: Component, nets: set[str]) -> bool:
+    """An STM32 whose pins on the pair are PA11/PA12: the built-in full-speed USB PHY on every STM32
+    (high speed needs an external ULPI PHY, which is its own chip on the pair)."""
+    pins = [pin for pin in comp.pins if pin.net in nets]
+    return "STM32" in comp.value.upper() and bool(pins) and all(
+        set(re.split(r"[^A-Z0-9]+", pin.name.upper())) & {"PA11", "PA12"} for pin in pins)
 
 
 def _vias(count: int) -> str:

@@ -140,3 +140,15 @@ def test_seeded_bench_boards():
     for case in json.loads((BENCH / "seeded" / "KEY_hs_pairs.json").read_text(encoding="utf-8")):
         snapshot = replace(DesignSnapshot((), "bench"), copper=read_copper_file(BENCH / case["board"]))
         assert ids(snapshot) == sorted(case["expected_rules"]), case["id"]
+
+
+def test_stm32_on_its_pa11_pa12_full_speed_phy_is_quiet():
+    connector = hs_part("J3", "USB_C", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
+    mcu = Component("U1", "STM32H743ZIT6", "Package_QFP:LQFP-144",
+                    (Pin("103", "USB_D-", "PA11"), Pin("104", "USB_D+", "PA12")))
+    board_ = replace(board(track("USB_D+", 30), track("USB_D-", 5, y=1), via("USB_D+"), via("USB_D+", 1)),
+                     components=(connector, mcu))
+    assert ids(board_) == []
+    hs = Component("U1", "STM32H743ZIT6", "Package_QFP:LQFP-144",
+                   (Pin("103", "USB_D-", "PB14"), Pin("104", "USB_D+", "PB15")))
+    assert ids(replace(board_, components=(connector, hs))) != []   # not the PA11/PA12 FS pins: not judged FS
