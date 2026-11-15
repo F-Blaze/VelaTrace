@@ -99,6 +99,9 @@ class BoardCopper:
     # LayerModel.assumed marks layers whose stackup came from the generic FR-4 default.
     models: Mapping[str, LayerModel]
     net_classes: Mapping[str, NetClassInfo]   # net name -> its (effective) net class; may be empty
+    # Nets of zones saved with no fill at all (the board was saved before Fill All Zones): where
+    # their copper ends up is unknown.
+    unfilled_nets: frozenset[str] = frozenset()
 
 
 # ---------------------------------------------------------------- reading
@@ -186,10 +189,12 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
             vias.append(Via(_net_name(node, codes), xy(node, "at"), span))
         except (TypeError, ValueError, IndexError):
             continue
-    zones = []
+    zones, unfilled = [], set()
     for parent in [root, *children(root, "footprint")]:
         for node in children(parent, "zone"):
             net = _net_name(node, codes)
+            if net and not children(node, "filled_polygon") and not _first(node, "keepout"):
+                unfilled.add(net)
             for fill in children(node, "filled_polygon"):
                 layer = str((_first(fill, "layer") or ["", ""])[1])
                 points = tuple((float(p[1]), float(p[2])) for p in children(_first(fill, "pts") or [], "xy"))
@@ -205,7 +210,7 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
     except (ValidationError, ValueError, ZeroDivisionError, IndexError):   # 1-layer or odd stackup
         models = {}
     return BoardCopper(layers, thickness_mm, tuple(segments), tuple(vias), tuple(zones), planes, models,
-                       dict(net_classes or {}))
+                       dict(net_classes or {}), frozenset(unfilled))
 
 
 def _project_classes(project: Path, nets: Iterable[str]) -> dict[str, NetClassInfo]:

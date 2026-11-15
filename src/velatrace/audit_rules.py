@@ -1279,7 +1279,9 @@ def _drives(design: _Design, group: set[str]) -> bool:
                 continue
             other = nets[1] if nets[0] == net else nets[0]
             for chip, chip_pin in design.nodes.get(other, ()):
-                switch = _NOT_SUPPLY_PIN.fullmatch(chip_pin.name.upper()) or _base_type(chip_pin) == "power_out"
+                switch = (_NOT_SUPPLY_PIN.fullmatch(chip_pin.name.upper()) or _base_type(chip_pin) == "power_out"
+                          # LM2596-style bucks name the switch pin OUT
+                          or (_OUT_PIN.fullmatch(_plain_pin(chip_pin.name)) and bool(_DCDC_MODULE.search(chip.value.upper()))))
                 fed_here = any(p.net in group and (_base_type(p) == "power_in" or _VIN_PIN.fullmatch(p.name.upper()))
                                for p in chip.pins)
                 if design.kind[chip.reference] == "ic" and switch and not fed_here:
@@ -1678,6 +1680,8 @@ def check_return_plane(snapshot: DesignSnapshot) -> list[Finding]:
     copper = snapshot.copper
     if copper is None or not copper.models:
         return []
+    if any(is_ground(net) or is_supply_name(net) for net in copper.unfilled_nets):
+        return []  # a ground/supply zone was saved unfilled: where the planes reach is unknown
     antennas = _antenna_nets(snapshot)
     nets = {net: guess for net, guess in _fast_nets(snapshot).items() if net not in antennas}
     full_speed = {net for net in nets if _full_speed_usb(snapshot, net, net)}

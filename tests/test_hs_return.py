@@ -120,6 +120,15 @@ class PlaneGapTests(unittest.TestCase):   # issue #62
     def test_plane_by_layer_type_without_fill_is_trusted(self):
         self.assertEqual(check_return_plane(snap(usb_over())), [])
 
+    def test_a_ground_zone_saved_unfilled_makes_plane_coverage_unknown(self):
+        from dataclasses import replace as _replace
+        gap = usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))))
+        connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})
+        base = snap(gap, connector)
+        self.assertEqual(len(check_return_plane(base)), 2)
+        stale = _replace(base, copper=_replace(base.copper, unfilled_nets=frozenset({"GND"})))
+        self.assertEqual(check_return_plane(stale), [])
+
     def test_charger_only_pair_is_not_a_data_pair(self):
         gap = usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))))
         connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})

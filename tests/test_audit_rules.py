@@ -881,3 +881,12 @@ def test_mains_inputs_of_an_ac_dc_module_need_no_bypass_cap():
                   ("2", "/AC/N", "AC", "power_in"), ("3", "GND", "-Vo", "power_out"), ("4", "+5V", "+Vo", "power_out"))
     load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
     assert [f.nets for f in rules(design(module, load, cap(a="+5V")), "decoupling.missing")] == []
+
+
+def test_lm2596_out_pin_through_its_inductor_drives_the_rail():
+    buck = part("U1", "LM2596S-5.0", "Package_TO_SOT_SMD:TO-263-5", ("1", "+24V", "VIN", "power_in"),
+                ("2", "/SW", "OUT", "output"), ("3", "GND", "GND", "power_in"), ("4", "+5V", "FB", "input"))
+    coil = part("L1", "33uH", "Inductor_SMD:L_12x12mm", ("1", "/SW"), ("2", "+5V"))
+    load = part("J4", "Conn_01x05", "Connector_PinHeader_2.54mm:PinHeader_1x05", ("1", "+5V"), ("2", "GND"))
+    mcu = part("U2", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert "J4" not in [ref for f in rules(design(buck, coil, load, mcu, cap("C1", "+5V")), "connector") for ref in f.refs]
