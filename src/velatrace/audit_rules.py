@@ -65,14 +65,18 @@ _GENERIC_VALUE = re.compile(
     r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
     r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*|"
     r"tvs[a-z]?|esd|zener|schottky|diode|transistor|npn|pnp|nmos|pmos|mosfet", re.IGNORECASE)
-# An unfilled part-number template (1.5KExxA, ESD5Zxx, MCP6002-xSN) or TBD: lowercase only, so 0x3C, 1x10 and
-# LMx58 stay real values. It must contain a digit.
-_PLACEHOLDER_VALUE = re.compile(r"(?<=[A-Z0-9])xx(?![a-z])|(?<=-)x(?=[A-Z])")
+def _is_placeholder(value: str, kind: str = "") -> bool:
+    """TBD-style values, or a template whose open digits set the part's rating: a TVS/zener/ESD voltage
+    (1.5KExxA, ESD5Zxx, SMBJxxA). Templates that leave only a grade or revision open (MCP23008-xSO,
+    CP2102N-Axx-xQFN20) are bought fine as drawn, so they are not reported."""
+    if value.upper() in {"TBD", "TBA", "TBC", "???"}:
+        return True
+    return ((kind in {"diode", "tvs"} or bool(_RATED_DIODE.search(value.upper())))
+            and bool(re.search(r"(?<=[A-Z0-9])xx", value)))
 
 
-def _is_placeholder(value: str) -> bool:
-    return value.upper() in {"TBD", "TBA", "TBC", "???"} or (
-        any(char.isdigit() for char in value) and bool(_PLACEHOLDER_VALUE.search(value)))
+# Diode families whose part number carries the voltage or configuration (1.5KE18A, ESD5Z5.0, BAT54S).
+_RATED_DIODE = re.compile(r"1\.5KE|P[46]KE|SM[ABC]J|SMF|BZ[XT]|MMSZ|ZMM|ESD|TVS|PESD|BAT\d")
 
 
 # A symbol name that is itself a part number (ASMB-MTB0-0A3A2, WS2812B, 1N4148W): a letters+digits run of
@@ -1332,7 +1336,7 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
         empty = value in _EMPTY_VALUES
-        placeholder = _is_placeholder(value)
+        placeholder = not comp.dnp and _is_placeholder(value, kind)
         # A connector's text ("LED", "Crystal") labels what plugs in; generic names only mean "unset" on the part itself.
         if not (empty or placeholder or (kind != "connector" and _GENERIC_VALUE.fullmatch(value))
                 or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol

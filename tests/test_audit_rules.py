@@ -892,13 +892,14 @@ def test_lm2596_out_pin_through_its_inductor_drives_the_rail():
     assert "J4" not in [ref for f in rules(design(buck, coil, load, mcu, cap("C1", "+5V")), "connector") for ref in f.refs]
 
 
-@pytest.mark.parametrize("value", ["1.5KExxA", "MCP6002-xSN", "ESD5Zxx", "TBD", "tba", "TBC", "???", "BAT54xx"])
+@pytest.mark.parametrize("value", ["1.5KExxA", "ESD5Zxx", "SMBJxxA", "TBD", "tba", "TBC", "???", "BAT54xx"])
 def test_value_missing_flags_placeholder_values(value):
     assert values_missing(part("U2", value, "Package_SO:SOIC-8", ("1", "A"))) == [(Severity.INFO, ("U2",))]
 
 
 @pytest.mark.parametrize("value", ["0x3C", "PinHeader_1x10", "2x2.5mm", "4x4mm", "STM32F103C8T6", "LMx58",
-                                   "1.5KE18A", "ESD5ZXX", "TBDX", "MCP6002-ISN"])
+                                   "1.5KE18A", "ESD5ZXX", "TBDX", "MCP6002-ISN",
+                                   "MCP6002-xSN", "MCP23008-xSO", "CP2102N-Axx-xQFN20", "24Cxx"])
 def test_value_missing_placeholder_quiet_near_misses(value):
     assert values_missing(part("U2", value, "Package_SO:SOIC-8", ("1", "A"))) == []
 
@@ -913,6 +914,9 @@ def test_value_missing_placeholder_with_an_mpn_is_quiet_and_groups_refs():
 def test_placeholder_template_with_a_jlc_order_code_is_identified():
     ic = part("U2", "nRF52810-QFxx", "Package_DFN_QFN:QFN-48", ("1", "+3V3", "VDD"), fields={"JLCPN": "C141828"})
     assert rules(design(ic, cap()), "value.missing") == []
-    bare = part("U2", "nRF52810-QFxx", "Package_DFN_QFN:QFN-48", ("1", "+3V3", "VDD"))
-    assert [f.rule for f in rules(design(bare, cap()), "value.missing")] == ["value.missing"]
+    tvs = part("D2", "1.5KExxA", "Diode_SMD:D_SMC", ("1", "+12V"), ("2", "GND"))
+    assert [f.rule for f in rules(design(tvs, cap()), "value.missing")] == ["value.missing"]
+    assert rules(design(tvs, cap()), "value.missing") != [] and rules(design(
+        part("D2", "1.5KExxA", "Diode_SMD:D_SMC", ("1", "+12V"), ("2", "GND"), fields={"JLCPN": "C8678"}), cap()),
+        "value.missing") == []
 
