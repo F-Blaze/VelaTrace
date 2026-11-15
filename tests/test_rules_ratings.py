@@ -399,3 +399,14 @@ def test_power_rating_fires_for_an_rgb_channel_behind_a_low_side_mosfet():
     assert found("resistor.power_rating", rgb(), sized("R22", "LR", "LD", "330"), bss138("LD")) == []
     assert found("resistor.power_rating", rgb(names=("A", "K1", "K2", "K3")), sized("R22", "LR", "LD", "5.1"),
                  bss138("LD")) == []
+
+
+def test_vbus_quiet_on_a_power_only_usb_input():
+    def port(dp, dn):
+        return part("J1", "USB_C_Receptacle", "Connector_USB:USB_C_Receptacle_GCT_USB4105",
+                    ("A4", "VBUS", "VBUS", "passive"), ("A1", "GND", "GND", "passive"),
+                    ("A6", dp, "D+", "bidirectional"), ("A7", dn, "D-", "bidirectional"))
+    bulk = vcap("C1", "VBUS", "GND", "47uF")
+    assert found("usb.vbus_capacitance", port("unconnected-(J1-D+-PadA6)", "unconnected-(J1-D--PadA7)"), bulk) == []
+    mcu = part("U1", "ESP32-C3", "Package_DFN_QFN:QFN-32", ("1", "/D+", "USB_D+"), ("2", "/D-", "USB_D-"))
+    assert found("usb.vbus_capacitance", port("/D+", "/D-"), mcu, bulk) != []      # a data port: limit applies

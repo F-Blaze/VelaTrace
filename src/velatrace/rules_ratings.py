@@ -213,6 +213,16 @@ def _driven(design: _Design, net: str) -> bool:
                for comp, pin in design.nodes[net])
 
 
+def _power_only(design: _Design, conn: Component) -> bool:
+    """A power-only USB input: its D+/D- pins are open or reach only not-fitted parts. Bulk capacitance
+    on a dedicated supply input (a Raspberry Pi carrier, a power-only USB-C sink) is intended."""
+    data = [pin for pin in conn.pins if re.fullmatch(r"D[+-]\d?|DP\d?|DN\d?|DM\d?", _name(pin))]
+    if not data:
+        return False
+    return all(not pin.net or pin.net.startswith("unconnected-(") or all(
+        comp is conn or comp.dnp for comp, _ in design.nodes[pin.net]) for pin in data)
+
+
 def _source_port(design: _Design, conn: Component) -> bool:
     """A CC pin pulled up by a resistor to a non-ground net (Rp): the board supplies power on this port."""
     for pin in conn.pins:
@@ -282,7 +292,7 @@ def check_vbus_capacitance(snapshot: DesignSnapshot) -> list[Finding]:
             refs = [*caps, *(ref for found in behind.values() for ref in found)]
             every = {**caps, **{ref: farad for found in behind.values() for ref, farad in found.items()}}
             effective = sum((every[ref] * _bias_factor(design.parts[ref]) for ref in refs), Decimal(0))
-            if effective <= _USB_EFFECTIVE_MAX_F or _source_port(design, conn):
+            if effective <= _USB_EFFECTIVE_MAX_F or _source_port(design, conn) or _power_only(design, conn):
                 continue
             parts = [f"{', '.join(sorted(caps))} directly on the {conn.reference} VBUS net"] if caps else []
             parts += [f"{', '.join(sorted(found))} behind {part} ({design.parts[part].value})"
