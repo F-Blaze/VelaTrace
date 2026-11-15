@@ -111,7 +111,7 @@ _NOT_SUPPLY_PIN = re.compile(r"(?:SW|LX|PH|DCC\w*|EN|PG|PGOOD|BOOT|BST)\d*")
 # nodes, enable/shutdown, boot, references, charge-pump and internal-regulator capacitor pins.
 _NOT_SUPPLY_TOKEN = re.compile(
     r"(?:SW|LX|PH|PHASE|DCC\w*|N?EN|PG|PGOOD|BOOT|BST|VCP|CP|CAP|VCAP|CFLY)\d*|SWITCH|N?ENABLE|SHDN|SHUTDOWN|"
-    r"RUN|UVLO|V?REF\w*|V?FB\d*|\w*SENSE\w*|\w*SNS\w*|BATP|BATN")
+    r"RUN|UVLO|V?REF\w*|V?FB\d*|\w*SENSE\w*|\w*SNS\w*|BATP|BATN|HV|VSTART")
 _LED_VDD_PIN = re.compile(r"V?DD|VCC|V\+")
 # Op-amp offset-null/trim and compensation pins: left open when unused, per datasheets.
 _TRIM_PIN = re.compile(r"VOS|NULL|BAL|TRIM|OFFSET|COMP")
@@ -151,7 +151,7 @@ _THREE_V3 = re.compile(r"3V3|3\.3V")
 SIGNAL_INTERFACE_MIN = 12  # a connector with this many signal nets is a board interface, not a power entry
 # Return nets not named like ground: isolated-converter input minus, RTN, battery B-.
 _RETURN = re.compile(r".*(?:MINUS|RTN|RETURN)|B-|V-|VIN-|-VIN")
-_OUT_PIN = re.compile(r"[+-]?V?OUT\d*[+-]?|[+-]?VO\d*[+-]?")  # also DC/DC-module spellings: +Vo, Vo+, +VOUT, VOUT+
+_OUT_PIN = re.compile(r"[+-]?V?OUT(?:PUT)?\d*[+-]?|[+-]?VO\d*[+-]?")  # also DC/DC-module spellings: +Vo, Vo+, +VOUT, VOUT+
 def _plain_pin(name: str) -> str:
     """Pin name without KiCad text markup and duplicate-name suffix: "V_{BAT}" -> "VBAT",
     "~{RESET}" -> "RESET", "VOUT_2" (second VOUT pin) -> "VOUT"."""

@@ -920,3 +920,14 @@ def test_placeholder_template_with_a_jlc_order_code_is_identified():
         part("D2", "1.5KExxA", "Diode_SMD:D_SMC", ("1", "+12V"), ("2", "GND"), fields={"JLCPN": "C8678"}), cap()),
         "value.missing") == []
 
+
+def test_ldo_pins_named_output_drive_and_hv_startup_pin_is_not_a_supply():
+    ldo = part("IC1", "NCP1117LPST33T3G", "Package_TO_SOT_SMD:SOT-223", ("2", "/VCC_3V3", "OUTPUT_1", "passive"),
+               ("3", "/VCC_5V", "INPUT", "passive"), ("1", "GND", "ADJUST/GROUND", "passive"))
+    header = part("J1", "Conn_02x10", "Connector_PinHeader_2.54mm:PinHeader_2x10", ("1", "/VCC_3V3"), ("2", "GND"))
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "/VCC_3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert "J1" not in [r for f in rules(design(ldo, header, mcu, cap("C1", "/VCC_3V3")), "connector") for r in f.refs]
+    ctrl = part("U1", "UCC256610", "Package_SO:SOIC-14", ("1", "/HV", "HV", "power_in"), ("2", "+12V", "VCCP", "power_in"),
+                ("3", "GND", "GND", "power_in"), ("4", "/X", "LO", "output"))
+    feed = res("R1", "/HV", "+400V", "1M")
+    assert [f.nets for f in rules(design(ctrl, feed, cap("C1", "+12V")), "decoupling.missing")] == []

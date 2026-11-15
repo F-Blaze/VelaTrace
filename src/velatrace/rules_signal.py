@@ -264,6 +264,8 @@ _FLAG_PIN = re.compile(r"\d*(?:N?INT\d*|N?IRQ\d*|N?ALERT|SMBALERT|N?FAULT|N?FLT|
                        r"N?OD|N?WAKE|N?RESET|N?RST|N?SYSRST|N?OVF|N?ERR|N?ERROR|N?ACT|N?OC)\d*")
 
 
+# Emitter/collector/source/drain pins of transistor arrays that symbols type "output" (BC847BDW auto-reset pair).
+_TRANSISTOR_PIN = re.compile(r"(?:E|EMITTER|C|COLLECTOR|S|SOURCE|D|DRAIN)\d*")
 # Serial data outputs that are high-impedance unless their chip is selected (SPI SDO/MISO, JTAG TDO).
 _TRISTATE_PIN = re.compile(r"SDO\d*|MISO\d*|CIPO|SO|DO|DOUT|TDO|SPI\d*_?MISO")
 
@@ -275,7 +277,8 @@ def check_output_contention(snapshot: DesignSnapshot) -> list[Finding]:
     for net, nodes in design.nodes.items():
         if net in design.grounds or net in design.supplies:
             continue
-        drivers = [(comp, pin) for comp, pin in nodes if _base_type(pin) == "output" and not comp.dnp]
+        drivers = [(comp, pin) for comp, pin in nodes if _base_type(pin) == "output" and not comp.dnp
+                   and not _TRANSISTOR_PIN.fullmatch(_name(pin.name))]  # a transistor terminal is not push-pull
         refs = sorted({comp.reference for comp, _ in drivers})
         if len(refs) < 2:
             continue

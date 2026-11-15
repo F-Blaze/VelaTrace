@@ -501,3 +501,11 @@ def test_dsub_can_correct_or_unlabelled_is_quiet(p2, p7):
 def test_dsub_can_quiet_for_other_connectors():
     assert bus_found(db9("/CAN_H", "/CAN_L", value="DB15", footprint="Connector_Dsub:DSUB-15_Female", count=15)) == []
     assert bus_found(db9("/CAN_H", "/CAN_L", value="Conn", footprint="Connector_PinHeader_2.54mm:PinHeader_1x09")) == []
+
+
+def test_transistor_array_terminals_typed_output_are_not_contention():
+    from test_audit_rules import design, part, rules
+    bridge = part("U3", "CP2102N", "Package_DFN_QFN:QFN-24", ("1", "/DTR", "DTR", "output"))
+    pair = part("U6", "LBC847BDW1T1G", "Package_TO_SOT_SMD:SOT-363", ("1", "/DTR", "E1", "output"),
+                ("2", "/EN", "C1", "output"))
+    assert rules(design(bridge, pair), "net.output_contention") == []
