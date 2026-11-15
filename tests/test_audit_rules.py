@@ -726,10 +726,11 @@ def test_slow_parts_get_a_centimetre_but_not_more():
                     ("6", "/CANL", "CANL", "bidirectional"))
     def at(mm):
         return cap(a="+3V3", pin_pos=((10.0 + mm, 10.0), (11.0 + mm, 10.0)))
-    for value in ("SN65HVD230", "MAX3485", "DS3231M", "74LVC2G14", "H11L1"):
+    for value in ("DS3231M", "74LVC2G14", "H11L1"):
         assert rules(design(chip(value), at(9.0)), "decoupling") == [], value
         assert [f.rule for f in rules(design(chip(value), at(20.0)), "decoupling")] == ["decoupling.far"], value
-    assert [f.rule for f in rules(design(chip("ATtiny85"), at(9.0)), "decoupling")] == ["decoupling.far"]
+    for value in ("ATtiny85", "TJA1042T/3", "SN65HVD230"):  # bus transceivers switch tens of mA: 5 mm as usual
+        assert [f.rule for f in rules(design(chip(value), at(9.0)), "decoupling")] == ["decoupling.far"], value
 
 
 def test_efuse_output_needs_no_cap_but_usb_power_switch_output_does():

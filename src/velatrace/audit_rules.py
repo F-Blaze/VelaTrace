@@ -426,12 +426,12 @@ def _is_regulator(ic: Component) -> bool:
         for pin in ic.pins))
 
 
-# Slow, low-current interface parts: RTCs, CAN/RS-485 transceivers, 1-2 gate logic, optocouplers. Their
+# Slow, low-current parts: RTCs, 1-2 gate logic, optocouplers, I/O expanders. Their
 # edges are slow and their supply current small, so a bypass cap a centimetre away still works; beyond
 # that (often the only cap is at the regulator) it is reported as for any other part.
 _SLOW_PART = re.compile(
+    # Not CAN/RS-485 transceivers: their drivers switch tens of mA onto the bus with fast edges.
     r"DS1[23]\d\d|DS32\d\d|PCF85\d\d|PCF2129|RV-?(?:3028|8803|3032)|MCP79\d{3}|M41T\d\d|"
-    r"SN65HVD\d+|MCP25[56]\d|TJA1\d{3}|TCAN\d+|MAX3?485|MAX1348\d|SP3?485|THVD\d+|ADM2?48\d|"
     r"74[A-Z]{0,5}[12]G\d|NC7S[A-Z]?\d|H11L\d|6N13[5-9]|PC817|TLP\d{3}|MCP230\d\d|PCF857\d|PCA95[3-7]\d|"
     r"^(?:N?AND|N?OR|XN?OR|INV|NOT|BUF)\d?$")  # a generic single gate
 SLOW_PART_NEAR_MM = 12.0
