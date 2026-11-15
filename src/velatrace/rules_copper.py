@@ -13,9 +13,7 @@ from .models import DesignSnapshot
 
 # --- pcb.exposed_pad_open ----------------------------------------------------------------------
 
-# Makers that allow the centre pad to stay open: Winbond/GigaDevice/... SPI flash (no internal
-# connection), Sensirion sensors (die pad optional).
-_EP_MAY_FLOAT = re.compile(r"(?i)W25Q|W25X|GD25|AT25|MX25|IS25|SST26|SGP\d|SHT\d|SHTC|STS\d")
+from .footprint_fit import EP_MAY_FLOAT as _EP_MAY_FLOAT
 
 
 def _open(net: str) -> bool:

@@ -208,6 +208,33 @@ def _alignments(fp: Sequence[tuple[float, float]], real: Sequence[tuple[float, f
         yield excess, sum(d for _, d in near), index, [d for _, d in near], mirrored
 
 
+# Makers that allow the centre pad to stay unsoldered: SPI flash (no internal connection), Sensirion sensors.
+EP_MAY_FLOAT = re.compile(r"(?i)W25Q|W25X|GD25|AT25|MX25|IS25|SST26|SGP\d|SHT\d|SHTC|STS\d")
+_SUBSET_MM = 0.3
+
+
+def _subset(fp: Sequence[Group], part: Sequence[Group]) -> list[int] | None:
+    """Indexes of the part pads no footprint pad lands on, when each footprint pad lands (within _SUBSET_MM)
+    on a part pad of its own under some rotation/mirror and shift: the footprint uses only some of the part's
+    pads (7 pins cut from a 40-pin strip, a module's unused bottom pads). None when they do not.
+    ponytail: O(8 x part x fp x part); skipped above 64 part pads."""
+    if not fp or len(fp) >= len(part) or len(part) > 64:
+        return None
+    points = [(pad[1], pad[2]) for pad in fp]
+    for moved, _ in _moves([(pad[1], pad[2]) for pad in part]):
+        for anchor in moved:
+            dx, dy = anchor[0] - points[0][0], anchor[1] - points[0][1]
+            used: list[int] = []
+            for x, y in points:
+                j = min(range(len(moved)), key=lambda k: math.dist((x + dx, y + dy), moved[k]))
+                if j in used or math.dist((x + dx, y + dy), moved[j]) > _SUBSET_MM:
+                    break
+                used.append(j)
+            else:
+                return [k for k in range(len(part)) if k not in used]
+    return None
+
+
 def _served(fp: Sequence[Group], part: Sequence[Group]) -> list[tuple]:
     """Alignments (shaped like _alignments, without offsets) in which every part pad's centre lies
     inside the copper of some footprint pad and every footprint pad serves one. Needs the sizes of
@@ -266,10 +293,15 @@ _PIN_ALIAS = {"DI": "DIN", "SDI": "DIN", "DO": "DOUT", "SDO": "DOUT", "VSS": "GN
 
 
 def _same_function(a: str, b: str) -> bool:
-    """KiCad pin name and the part's pin name name the same function (DI = DIN, VSS = GND ...)."""
-    a, b = (re.sub(r"[^A-Z0-9+]", "", name.upper()) for name in (a, b))
-    a, b = _PIN_ALIAS.get(a, a), _PIN_ALIAS.get(b, b)
-    return bool(a) and a == b
+    """KiCad pin name and the part's pin name name the same function (DI = DIN, VSS = GND, GPIO3/RXD = RXD0 ...)."""
+    def names(name: str) -> set[str]:
+        out = set()
+        for item in name.upper().split("/"):
+            item = re.sub(r"[^A-Z0-9+]", "", item)
+            item = _PIN_ALIAS.get(item, item)
+            out |= {item, (item[:-1] if item in ("RXD0", "TXD0") else item)} if item else set()
+        return out
+    return bool(names(a) & names(b))
 
 
 def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
@@ -308,6 +340,16 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
         return [Finding(rule, severity, f"{reference} {title}", (reference,), (), evidence + blind, fix)]
 
     if len(fp) != part_count and not merged:
+        # The footprint uses some of the part's pads: a pin header cut from a long break-away strip (sold as
+        # 20 to 80 pins), or a sensor/flash whose maker lets the exposed die pad stay unsoldered.
+        unused = _subset(fp, part) if part else None
+        if unused is not None:
+            kept = [pad for k, pad in enumerate(part) if k not in unused]
+            centre = all(min(p[1] for p in kept) < part[k][1] < max(p[1] for p in kept)
+                         and min(p[2] for p in kept) < part[k][2] < max(p[2] for p in kept) for k in unused)
+            strip = part_count >= 20 and re.search(r"HEADER|PIN ?STRIP|BREAK", name.upper())
+            if strip or (EP_MAY_FLOAT.search(name) and centre):
+                return []
         extra = f" (and {len(mech)} mounting pad(s))" if mech else ""
         return finding("fit.pad_count", f"footprint has {len(fp)} pads but {name} has {part_count}",
                        f"The footprint has {len(fp)} pads{extra}; the part's data lists {part_count}.",

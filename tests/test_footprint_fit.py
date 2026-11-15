@@ -624,3 +624,24 @@ def test_usb_c_with_shared_wide_pads_fits_the_per_contact_part():
     part = fit_part(*[(n, x, -2.474, 0.39) for n, x in contacts],
                     ("0", -4.325, -1.706, 2.4), ("3", -4.325, 2.474, 2.2), ("1", 4.325, -1.706, 2.4), ("2", 4.325, 2.474, 2.2))
     assert rules(pads, part) == []
+
+
+def test_cut_header_strip_and_optional_die_pad_are_not_pad_count_findings():
+    """Round 12 (seen): 7 pins cut from a 40-pin break-away strip; an SHT40 footprint without the optional die pad."""
+    strip = fit_part(*[(str(i + 1), i * 2.54, 0.0, 1.0) for i in range(40)])
+    strip = replace(strip, title="Header-Male-2.54_1x40")
+    seven = fit_sized([(str(i + 1), i * 2.54, 0.0, True) for i in range(7)], (1.7, 1.7))
+    assert rules(seven, strip) == []
+    sht40 = RealPart("C2848306", "SHT40-AD1B-R3", "DFN-4", tuple(RealPad(n, x, y, False, a, nm) for n, x, y, a, nm in (
+        ("1", -0.6774, -0.4, 0.2121, "SDA"), ("2", -0.6774, 0.4, 0.2121, "SCL"), ("3", 0.6774, 0.4, 0.2121, "VDD"),
+        ("4", 0.6774, -0.4, 0.2121, "VSS"), ("5", 0.0, 0.0, 0.44, "EP"))), "easyeda")
+    four = [("1", -0.7, -0.4, False, (0.5, 0.3)), ("2", -0.7, 0.4, False, (0.5, 0.3)),
+            ("3", 0.7, 0.4, False, (0.5, 0.3)), ("4", 0.7, -0.4, False, (0.5, 0.3))]
+    assert compare("U5", four, sht40) == []
+    assert [f.rule for f in compare("U5", four, replace(sht40, title="LIS3DH"))] == ["fit.pad_count"]
+
+
+def test_pin_names_with_alternatives_and_uart_index_match():
+    from velatrace.footprint_fit import _same_function
+    assert _same_function("GPIO3/RXD", "RXD0") and _same_function("~{RST}", "RST")
+    assert not _same_function("GPIO1/TXD", "RXD0") and not _same_function("TXD", "RXD")

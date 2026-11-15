@@ -1195,8 +1195,15 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
                 group = _rail_group(design, net)
                 parts = [design.parts[ref] for n in group for ref in design.refs_on(n)
                          if design.kind[ref] != "connector"]
+                # Fed through a jumper or series part from a rail that another connector brings in: that
+                # connector is the entry and is judged itself; this one only passes the rail on.
+                here = {ref for n in group for ref in design.refs_on(n)}
+                upstream = any(design.kind[ref] == "connector" and ref not in here
+                               for n in _fed_group(design, group) - group if n in design.supplies
+                               for ref in design.refs_on(n))
                 verdict[net] = (
-                    any(_powers_ic(design, n) for n in group)
+                    not upstream
+                    and any(_powers_ic(design, n) for n in group)
                     # Battery terminals take power in even where a charger also drives them.
                     and ("BAT" in net_label(net) or not _drives(design, _fed_group(design, group)))
                     # An IC/module battery pin (charger BAT, module VBAT/VBACKUP) manages the cell it meets.
