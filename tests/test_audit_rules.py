@@ -635,10 +635,10 @@ def gate_board():
 
 def test_gate_experimental_rules_are_the_light_beta_rules():
     assert audit_rules.EXPERIMENTAL_RULES == audit_rules.BETA_RULES - {
-        rule for rule in audit_rules.BETA_RULES if rule.startswith(("hs.", "fit."))}
+        rule for rule in audit_rules.BETA_RULES if rule.startswith(("hs.", "fit.", "pcb."))}
     assert {"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating"} \
         <= audit_rules.EXPERIMENTAL_RULES
-    assert not any(rule.startswith(("hs.", "fit.")) for rule in audit_rules.EXPERIMENTAL_RULES)
+    assert not any(rule.startswith(("hs.", "fit.", "pcb.")) for rule in audit_rules.EXPERIMENTAL_RULES)
 
 
 def test_gate_run_rules_shows_experimental_by_default_and_can_hide_and_count_them():

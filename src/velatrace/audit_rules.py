@@ -1941,6 +1941,8 @@ HEAVY_RULES: dict[str, Check] = {
     "hs.pair.vias": check_pair_vias,
     "hs.return.no_plane": check_return_plane,
     "hs.return.via": check_return_vias,
+    "pcb.exposed_pad_open": _sibling("rules_copper", "check_exposed_pad_open"),
+    "pcb.mains_spacing": _sibling("rules_copper", "check_mains_spacing"),
 }
 
 # Extra check providers: callables (snapshot) -> list[Finding], run after RULES.
@@ -1979,6 +1981,8 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         # Footprint-fit checks: starting tolerances, not yet measured.
                         "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order",
                         "fit.unverified",
+                        # PCB copper checks (2026-11): not yet measured on unseen boards.
+                        "pcb.exposed_pad_open", "pcb.mains_spacing",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged
@@ -1987,7 +1991,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
 
 # The light BETA rules: right 2 of 9 times on fresh boards, so they show as Info notes
 # that run_rules can leave out when asked (include_experimental=False). The heavy hs.*/fit.* rules are opt-in already and keep their note behaviour.
-EXPERIMENTAL_RULES = frozenset(rule for rule in BETA_RULES if not rule.startswith(("hs.", "fit.")))
+EXPERIMENTAL_RULES = frozenset(rule for rule in BETA_RULES if not rule.startswith(("hs.", "fit.", "pcb.")))
 
 
 def experimental_note(count: int) -> str:

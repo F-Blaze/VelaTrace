@@ -26,7 +26,7 @@ from .candidate import read_board
 from .errors import ValidationError
 from .sexpr import children, parse
 from .stackup import homogeneous_delay_ps
-from .vela_board import _GRAPHICS, _first, _outline
+from .vela_board import _GRAPHICS, _first, _outline, _rot
 from .vela_board import _net_name as _raw_net_name
 
 # KiCad escapes these characters in board-file net names; netlists and the IPC API use the plain text.
@@ -77,6 +77,18 @@ class FilledZone:
 
 
 @dataclass(frozen=True)
+class CopperPad:
+    """One footprint pad with copper. ``position`` is absolute; ``size`` is the pad's own (w, h)."""
+    ref: str
+    number: str
+    net: str                     # "" when the pad has no net on the board
+    position: tuple[float, float]
+    size: tuple[float, float]
+    layers: tuple[str, ...]      # copper layers it is on
+    kind: str                    # KiCad pad type: smd, thru_hole, np_thru_hole, connect
+
+
+@dataclass(frozen=True)
 class NetClassInfo:
     name: str
     diff_pair_width_mm: float | None = None
@@ -102,6 +114,9 @@ class BoardCopper:
     # Nets of zones saved with no fill at all (the board was saved before Fill All Zones): where
     # their copper ends up is unknown.
     unfilled_nets: frozenset[str] = frozenset()
+    pads: tuple[CopperPad, ...] = ()
+    # Board outline and cutouts (Edge.Cuts, footprint slots included) as straight pieces.
+    edges: tuple[tuple[tuple[float, float], tuple[float, float]], ...] = ()
 
 
 # ---------------------------------------------------------------- reading
@@ -203,6 +218,44 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
     edges = [p for kind in _GRAPHICS for node in children(root, "gr_" + kind)
              if (_first(node, "layer") or ["", ""])[1] == "Edge.Cuts"
              for p in _outline(node, lambda x, y: (x, y))]
+    pads, cuts = [], []
+
+    def cut(points):
+        cuts.extend((a, b) for a, b in zip(points, points[1:]) if a != b)
+
+    for kind in _GRAPHICS:
+        for node in children(root, "gr_" + kind):
+            if (_first(node, "layer") or ["", ""])[1] == "Edge.Cuts":
+                cut(_outline(node, lambda x, y: (x, y)))
+    for fp in children(root, "footprint"):
+        try:
+            at = _first(fp, "at")
+            fx, fy, turn = float(at[1]), float(at[2]), float(at[3]) if len(at) > 3 else 0.0
+        except (TypeError, ValueError, IndexError):
+            continue
+        ref = next((str(p[2]) for p in children(fp, "property") if len(p) > 2 and p[1] == "Reference"), "") or             next((str(t[2]) for t in children(fp, "fp_text") if len(t) > 2 and t[1] == "reference"), "")
+
+        def place(x, y, fx=fx, fy=fy, turn=turn):
+            dx, dy = _rot(x, y, turn)
+            return fx + dx, fy + dy
+
+        for kind in _GRAPHICS:
+            for node in children(fp, "fp_" + kind):
+                if (_first(node, "layer") or ["", ""])[1] == "Edge.Cuts":
+                    cut(_outline(node, place))
+        for node in children(fp, "pad"):
+            try:
+                names = [str(n) for n in (_first(node, "layers") or [])[1:]]
+                on = layers if "*.Cu" in names else tuple(
+                    n for n in layers if n in names or ("F&B.Cu" in names and n in (layers[0], layers[-1])))
+                pat, size = _first(node, "at"), _first(node, "size")
+                if not on or pat is None or size is None:
+                    continue
+                w = float(size[1])
+                pads.append(CopperPad(ref, str(node[1]), _net_name(node, codes), place(float(pat[1]), float(pat[2])),
+                                      (w, float(size[2]) if len(size) > 2 else w), on, str(node[2])))
+            except (TypeError, ValueError, IndexError):
+                continue
     planes = _planes(layers, kinds, zones, edges)
     try:
         built = layer_models(layers, thickness_mm, text, {layers.index(name) for name in planes})
@@ -210,7 +263,7 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
     except (ValidationError, ValueError, ZeroDivisionError, IndexError):   # 1-layer or odd stackup
         models = {}
     return BoardCopper(layers, thickness_mm, tuple(segments), tuple(vias), tuple(zones), planes, models,
-                       dict(net_classes or {}), frozenset(unfilled))
+                       dict(net_classes or {}), frozenset(unfilled), tuple(pads), tuple(cuts))
 
 
 def _project_classes(project: Path, nets: Iterable[str]) -> dict[str, NetClassInfo]:
