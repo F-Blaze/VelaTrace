@@ -328,7 +328,9 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     fits = [option for option in options if option[0] <= 0]
     if not fits:   # the centres differ, but part pads still land inside the footprint's pads
         fits = _served(fp, part)
-    if not fits and sorted(rows_cols) != sorted(part_rows_cols):
+    # Three pads (SOT-23, SOT-89, DPAK with its tab) read as 2 x 2 or 2 x 1 depending on offsets alone: rows and
+    # columns say nothing there (mount type and pitch still apply).
+    if not fits and sorted(rows_cols) != sorted(part_rows_cols) and not (count == 3 and part_count == 3):
         return finding("fit.layout", f"pad layout differs from {name} (footprint "
                        f"{_label(*rows_cols)}, part {_label(*part_rows_cols)})",
                        f"The footprint's {count} pads form {rows_cols[0]} row(s) × {rows_cols[1]} column(s); "

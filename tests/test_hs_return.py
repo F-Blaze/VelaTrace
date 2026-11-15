@@ -129,6 +129,13 @@ class PlaneGapTests(unittest.TestCase):   # issue #62
         stale = _replace(base, copper=_replace(base.copper, unfilled_nets=frozenset({"GND"})))
         self.assertEqual(check_return_plane(stale), [])
 
+    def test_usb_cc_and_ethernet_centre_taps_are_not_fast_lines(self):
+        from velatrace.audit_rules import _SLOW_LINE
+        for name in ("USBCC1", "CC2", "USB_CC1", "SBU1", "ETH_CT_RD", "ETH_CT"):
+            self.assertTrue(_SLOW_LINE.search(name), name)
+        for name in ("USB_D+", "ETH_TX+", "VCC", "CTRL", "SD_CLK"):
+            self.assertFalse(_SLOW_LINE.search(name), name)
+
     def test_charger_only_pair_is_not_a_data_pair(self):
         gap = usb_over(FilledZone("GND", "In1.Cu", ((-1, 0), (10, 0), (10, 10), (-1, 10))))
         connector = hs_part("J1", "USB4105", "Connector_USB:USB_C", {"A6": "USB_D+", "A7": "USB_D-"})

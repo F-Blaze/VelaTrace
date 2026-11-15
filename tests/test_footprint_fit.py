@@ -199,7 +199,7 @@ def test_tab_pad_is_left_out_of_layout_and_positions():
     assert rules(TO252_2, real("C116325")) == []
     # SOT-23 pads (1 and 2 on one side, 3 opposite) are still not a SOT-89.
     sot23 = [("1", -0.9375, -0.95, False), ("2", -0.9375, 0.95, False), ("3", 0.9375, 0.0, False)]
-    assert rules(sot23, real("C16106")) == ["fit.layout"]
+    assert rules(sot23, real("C16106")) == ["fit.pitch"]     # three pads: caught by position, not row count
     # The tab still counts: a SOT-89 footprint without it has too few pads.
     assert rules(SOT89_3[::2], real("C16106")) == ["fit.pad_count"]
 

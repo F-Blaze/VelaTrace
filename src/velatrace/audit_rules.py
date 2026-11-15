@@ -1642,9 +1642,11 @@ def _fast_nets(snapshot: DesignSnapshot) -> dict[str, str]:
     nets = ({net: "USB data" for net in _usb_pin_nets(snapshot)}
             | {net: "differential pair" for pair in found.pairs for net in pair} | guesses)
     return {net: guess for net, guess in nets.items() if not _CRYSTAL.search(net_label(net)) and net not in adapter
-            and not _CHIP_SELECT.search(net_label(net))}
+            and not _CHIP_SELECT.search(net_label(net)) and not _SLOW_LINE.search(net_label(net))}
 
 
+# USB-C configuration/sideband lines and Ethernet centre taps (common-mode termination) carry no fast data.
+_SLOW_LINE = re.compile(r"(?<![A-Z])(?:USB_?)?CC\d?$|SBU\d?$|(?:^|_)CT(?:_|$)")
 # Chip selects toggle once per transfer, so their return path is not what limits a link.
 _CHIP_SELECT = re.compile(r"(?<![A-Z0-9])(?:N?CS\d?N?|N?SS|NSS|CE\d?)(?![A-Z0-9])")
 
