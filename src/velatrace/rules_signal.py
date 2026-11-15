@@ -9,7 +9,7 @@ from collections import defaultdict
 import re
 
 from .audit_rules import (_Design, _PROTECTION_VALUE, _base_type, _is_return, _pin_text, net_label,
-                          terminals, two_terminal_nets)
+                          parse_resistance, terminals, two_terminal_nets)
 from .bom import mpn_of
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
@@ -135,14 +135,46 @@ def _polarity(text: str) -> str:
     return found.pop() if len(found) == 1 else ""
 
 
+# Flow-through ESD arrays: each pin pair is one internal line, so the nets on both pins are the same signal.
+_FLOW_THROUGH = re.compile(r"USBLC6-2")
+_FLOW_PAIRS = (("1", "6"), ("3", "4"))
+
+
+def _line_groups(design: _Design) -> list[list[str]]:
+    """Nets grouped across flow-through ESD arrays; every other net is a group of its own."""
+    parent: dict[str, str] = {}
+
+    def find(net: str) -> str:
+        while parent.get(net, net) != net:
+            net = parent[net]
+        return net
+
+    for comp in design.snapshot.components:
+        if comp.dnp or not _FLOW_THROUGH.search(comp.value.upper()):
+            continue
+        pads = terminals(comp)
+        for first, second in _FLOW_PAIRS:
+            na, nb = pads.get(first, ""), pads.get(second, "")
+            if na and nb and na != nb and not {na, nb} & (design.grounds | design.supplies):
+                parent[find(na)] = find(nb)
+    groups: dict[str, list[str]] = defaultdict(list)
+    for net in design.nodes:
+        groups[find(net)].append(net)
+    return list(groups.values())
+
+
 def check_usb_dp_dn_swapped(snapshot: DesignSnapshot) -> list[Finding]:
-    """A net named D+ that reaches a D- pin of an IC or connector, or the reverse; or a D+ and a D- pin sharing a net."""
+    """A net named D+ that reaches a D- pin of an IC or connector, or the reverse; or a D+ and a D- pin sharing a net.
+
+    Nets on the two sides of a flow-through ESD array (USBLC6-2) count as one line."""
     design = _Design(snapshot)
     findings = []
-    for net, nodes in design.nodes.items():
-        label = _polarity(net_label(net))
+    for nets in _line_groups(design):
+        net, joined = nets[0], len(nets) > 1
+        labels = {_polarity(net_label(n)) for n in nets} - {""}
+        label = labels.pop() if len(labels) == 1 else ""
         polar: dict[str, list[tuple[Component, Pin]]] = {"+": [], "-": []}
-        for comp, pin in nodes:
+        for comp, pin in (node for n in nets for node in design.nodes[n]):
             if design.kind[comp.reference] in {"ic", "connector"} and not _PROTECTION_VALUE.search(comp.value) \
                     and (sign := _polarity(pin.name)):
                 polar[sign].append((comp, pin))
@@ -159,11 +191,16 @@ def check_usb_dp_dn_swapped(snapshot: DesignSnapshot) -> list[Finding]:
         if not hits:
             continue
         shown = ", ".join(f"{comp.reference} {_pin_text(pin)}" for comp, pin in hits)
-        title = (f"USB net {net_label(net) or net} is named D{label} but reaches a D{other} pin ({shown})"
-                 if label else f"USB D+ and D- pins share net {net_label(net) or net}")
+        if label:
+            title = f"USB net {net_label(net) or net} is named D{label} but reaches a D{other} pin ({shown})"
+        elif joined:
+            title = f"USB D+ and D- pins are on one line through an ESD array ({shown})"
+            text = "D+ and D- pins are joined through a flow-through ESD array (same internal line): "
+        else:
+            title = f"USB D+ and D- pins share net {net_label(net) or net}"
         findings.append(Finding(
             "usb.dp_dn_swapped", Severity.WARNING, title,
-            refs=tuple(sorted({comp.reference for comp, _ in hits})), nets=(net,),
+            refs=tuple(sorted({comp.reference for comp, _ in hits})), nets=tuple(nets),
             evidence=text + (f"{shown} is named D{other}." if label else shown + "."),
             fix="Swap the two data lines so D+ goes to D+ and D- to D- (check both ends against the datasheets)."))
     return findings
@@ -266,4 +303,77 @@ def check_bus_polarity_swapped(snapshot: DesignSnapshot) -> list[Finding]:
                          "reaches." + (f" Connectors on these nets: {', '.join(conns)}." if conns else ""),
                 fix=f"Swap the two {bus} lines so each net reaches the pin of the same name "
                     "(check both ends against the datasheets)."))
+    return findings
+
+
+# --- uart.tx_to_tx ----------------------------------------------------------------------------
+
+_UART_TX = re.compile(r"TXD\d?|TX\d?|U\dTXD|UART\d*_?TXD?|USART\d*_?TX")
+_UART_RX = re.compile(r"RXD\d?|RX\d?|U\dRXD|UART\d*_?RXD?|USART\d*_?RX")
+_UART_OTHER = re.compile(r"CTS|RTS|DTR|DSR|DCD")
+# Transceivers whose TXD/RXD pins are not UART lines, or that translate between lines.
+_NOT_UART_PART = re.compile(r"TJA1|MCP25[56]|SN65HVD|TCAN|MAX3051|ISO1050|MAX3485|MAX485|SP3485|THVD|ADM2|"
+                            r"MAX232|MAX3232|SP3232|SN75176")
+_PASSIVE_KINDS = {"resistor", "capacitor", "testpoint"}
+
+
+def _uart_dir(pin: Pin) -> str:
+    """"TX" or "RX" when the pin name is a UART line of one direction (and nothing else TX/RX-like), else ""."""
+    found = set()
+    for token in (t for t in re.split(_TOKENS, _name(pin.name)) if t):
+        if _UART_OTHER.fullmatch(token):
+            return ""
+        if _UART_TX.fullmatch(token):
+            found.add("TX")
+        elif _UART_RX.fullmatch(token):
+            found.add("RX")
+        elif "TX" in token or "RX" in token:  # TX_EN, TXCAN, RXD_A ...
+            return ""
+    return found.pop() if len(found) == 1 else ""
+
+
+def check_uart_tx_to_tx(snapshot: DesignSnapshot) -> list[Finding]:
+    """UART TX wired to TX (or RX to RX) of another IC, directly or through one series resistor up to 1 kOhm."""
+    design = _Design(snapshot)
+    fixed = design.grounds | design.supplies
+    groups: list[tuple[tuple[str, ...], Component | None]] = [((net,), None) for net in design.nodes
+                                                              if net not in fixed]
+    for comp in design.of_kind("resistor"):
+        ends, ohms = two_terminal_nets(comp), parse_resistance(comp.value)
+        if ends and ends[0] != ends[1] and ohms is not None and ohms <= 1000 and not comp.dnp \
+                and not set(ends) & fixed:
+            groups.append((ends, comp))
+    findings, reported = [], []
+    for nets, resistor in groups:
+        if any("CAN" in net_label(net) for net in nets):
+            continue
+        nodes = [node for net in nets for node in design.nodes[net]]
+        for direction in ("TX", "RX"):
+            pins = [(comp, pin) for comp, pin in nodes
+                    if design.kind[comp.reference] in {"ic", "module"} and not comp.dnp
+                    and _uart_dir(pin) == direction]
+            if len({comp.reference for comp, _ in pins}) < 2 \
+                    or any(_NOT_UART_PART.search(comp.value.upper()) for comp, _ in pins):
+                continue
+            # Two receivers on one transmitter are normal: only call RX-RX when nothing else could drive the net.
+            if direction == "RX" and any(
+                    design.kind[comp.reference] not in _PASSIVE_KINDS and (comp, pin) not in pins
+                    for comp, pin in nodes):
+                continue
+            key = {(comp.reference, pin.number) for comp, pin in pins}
+            if any(key <= done for done in reported):
+                continue
+            reported.append(key)
+            refs = tuple(sorted({comp.reference for comp, _ in pins}))
+            shown = ", ".join(f"{comp.reference} {_pin_text(pin)}" for comp, pin in pins)
+            via = f" through {resistor.reference}" if resistor else ""
+            findings.append(Finding(
+                "uart.tx_to_tx", Severity.ERROR,
+                f"UART {direction} pins are wired together{via} ({', '.join(refs)})",
+                refs=refs, nets=tuple(nets),
+                evidence=f"{shown} are all UART {'transmit' if direction == 'TX' else 'receive'} pins on "
+                         f"{' / '.join(net_label(n) or n for n in nets)}{via}. "
+                         + ("Two transmitters would fight over the line." if direction == "TX"
+                            else "Nothing on the net transmits."),
+                fix="Cross the UART: connect each chip's TX to the other chip's RX."))
     return findings

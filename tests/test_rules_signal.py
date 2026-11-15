@@ -349,3 +349,79 @@ def test_shared_spi_miso_is_not_contention():
     c = part("U7", "74HC04", "Package_SO:SOIC-14", ("2", "/X", "Y1", "output"))
     d = part("U9", "74HC04", "Package_SO:SOIC-14", ("2", "/X", "Y1", "output"))
     assert [f.rule for f in rules(design(c, d), "net.output_contention")] == ["net.output_contention"]
+
+
+# --- usb.dp_dn_swapped through a flow-through ESD array -------------------------------------------
+
+def usblc(l1, l6, l3, l4, value="USBLC6-2SC6"):
+    return part("U9", value, "Package_TO_SOT_SMD:SOT-23-6", ("1", l1, "I/O1"), ("2", "GND", "GND"),
+                ("3", l3, "I/O2"), ("4", l4, "I/O2"), ("5", "VBUS", "VBUS"), ("6", l6, "I/O1"))
+
+
+def test_swap_through_usblc6_fires():
+    conn = usb_conn("A_DP", "A_DM")
+    chip = usb_ic("C_DP", "C_DM")  # the array crosses the lines: D+ lands on the chip's DM pin
+    esd = usblc("A_DP", "C_DM", "A_DM", "C_DP")
+    assert sorted(usb_found(conn, esd, chip)) == [(("J1", "U1"), ("A_DM", "C_DP")), (("J1", "U1"), ("A_DP", "C_DM"))]
+
+
+def test_straight_through_usblc6_is_quiet():
+    conn = usb_conn("A_DP", "A_DM")
+    assert usb_found(conn, usblc("A_DP", "C_DP", "A_DM", "C_DM"), usb_ic("C_DP", "C_DM")) == []
+
+
+def test_non_flow_through_esd_array_does_not_join_nets():
+    srv = part("U9", "SRV05-4", "Package_TO_SOT_SMD:SOT-23-6", ("1", "A_DP", "IO1"), ("6", "C_DM", "IO4"),
+               ("3", "A_DM", "IO2"), ("4", "C_DP", "IO3"), ("2", "GND", "GND"))
+    assert usb_found(usb_conn("A_DP", "A_DM"), srv, usb_ic("C_DM", "C_DP")) == []
+
+
+# --- uart.tx_to_tx ------------------------------------------------------------------------------
+
+def uart_chip(ref, net, pin, value="CH340K", extra=()):
+    return part(ref, value, "Package_SO:SOIC-16", ("1", net, pin), ("2", "GND", "GND"), *extra, *exp4_spare())
+
+
+def uart_found(*parts):
+    return [(f.refs, f.nets) for f in rules(design(*parts), "uart.tx_to_tx")]
+
+
+@pytest.mark.parametrize("a,b", [("TXD", "U0TXD"), ("TX", "TXD0"), ("UART1_TX", "PA9/USART1_TX"),
+                                 ("RXD", "U0RXD"), ("RX", "UART0_RX")])
+def test_same_direction_uart_pins_fire(a, b):
+    assert uart_found(uart_chip("U1", "N", a), uart_chip("U2", "N", b, "ESP32-C3")) == [(("U1", "U2"), ("N",))]
+
+
+def test_tx_to_tx_through_a_1k_series_resistor_fires():
+    found = uart_found(uart_chip("U1", "A", "TXD", "CP2104"), res("R4", "A", "B", "1k"),
+                       uart_chip("U2", "B", "TXD0", "ESP32"))
+    assert found == [(("U1", "U2"), ("A", "B"))]
+
+
+def test_crossed_uart_is_quiet():
+    assert uart_found(uart_chip("U1", "A", "TXD"), uart_chip("U2", "A", "RXD", "ESP32"),
+                      uart_chip("U3", "B", "RXD"), uart_chip("U4", "B", "TXD0", "ESP32")) == []
+
+
+def test_uart_tx_quiet_cases():
+    mcu = uart_chip("U2", "N", "TXD0", "ESP32")
+    assert uart_found(uart_chip("U1", "N", "TXD", "TJA1050"), mcu) == []  # CAN transceiver
+    assert uart_found(uart_chip("U1", "N", "TXD", "THVD1450"), mcu) == []  # RS-485
+    assert uart_found(uart_chip("U1", "CAN_TX", "TXD"), uart_chip("U2", "CAN_TX", "TXD0", "ESP32")) == []
+    assert uart_found(uart_chip("U1", "A", "TXD"), res("R1", "A", "B", "10k"), uart_chip("U2", "B", "TXD0")) == []
+    assert uart_found(uart_chip("U1", "N", "TX_EN"), uart_chip("U2", "N", "TXEN", "ESP32")) == []
+    assert uart_found(uart_chip("U1", "N", "RTS/TX"), mcu) == []
+    conn = part("J2", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "N", "TXD"), ("2", "GND", "GND"))
+    assert uart_found(uart_chip("U1", "N", "TXD"), conn) == []  # connectors are not judged
+
+
+def test_two_receivers_on_one_transmitter_or_connector_are_quiet():
+    tx = uart_chip("U1", "N", "TXD")
+    assert uart_found(tx, uart_chip("U2", "N", "RXD", "ESP32"), uart_chip("U3", "N", "RX", "STM32")) == []
+    conn = part("J2", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "N", "TXD"), ("2", "GND", "GND"))
+    assert uart_found(conn, uart_chip("U2", "N", "RXD"), uart_chip("U3", "N", "RX", "STM32")) == []
+
+
+def test_unfed_receivers_on_one_net_fire():
+    assert uart_found(uart_chip("U1", "N", "RXD"), uart_chip("U2", "N", "RX", "STM32"),
+                      res("R1", "N", "+3V3", "10k")) == [(("U1", "U2"), ("N",))]

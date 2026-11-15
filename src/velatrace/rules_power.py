@@ -293,9 +293,41 @@ def check_exposed_pad_floating(snapshot: DesignSnapshot) -> list[Finding]:
     return findings
 
 
+# --- rtc.vbat_unconnected ---------------------------------------------------------------------
+
+_RTC_FAMILY = re.compile(r"(?<![A-Z0-9])(?:DS3231|DS3232|DS1307|DS1338|PCF8563|PCF85063|PCF85263|RV-?3028|RV-?8803|"
+                         r"MCP7940N|MCP79410|M41T62|BQ32000|ISL1208)")
+_RTC_BACKUP_PIN = re.compile(r"VBAT|VBACKUP|VBACK|VB|BAT")
+_RTC_GROUND_IF_UNUSED = re.compile(r"DS3231|DS3232|DS1307|DS1338")
+
+
+def check_rtc_vbat_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
+    """A real-time-clock IC whose backup supply pin is open (no net, unconnected net or no-connect flag)."""
+    design = _Design(snapshot)
+    findings = []
+    for ic in design.of_kind("ic"):
+        match = _RTC_FAMILY.search(ic.value.upper())
+        if ic.dnp or not match:
+            continue
+        pins = [pin for pin in ic.pins if _RTC_BACKUP_PIN.fullmatch(_name(pin))]
+        if not pins or any(pin.net and not pin.net.startswith("unconnected-(") and not pin.no_connect
+                           for pin in pins):
+            continue
+        pin = pins[0]
+        advice = ("ground (the datasheet says to ground VBAT when no battery is used)"
+                  if _RTC_GROUND_IF_UNUSED.search(match.group()) else "the supply if no backup is wanted")
+        findings.append(Finding(
+            "rtc.vbat_unconnected", Severity.WARNING,
+            f"{ic.reference} ({ic.value}) backup supply pin {_name(pin)} is not connected", (ic.reference,), (),
+            f"{ic.reference} {_pin_text(pin)} is the RTC's battery backup input and is left open.",
+            f"Connect it to a backup battery or supercap, or to {advice}."))
+    return findings
+
+
 POWER_RULES: dict[str, Check] = {
     "power.vcap_missing": check_vcap_missing,
     "power.reg_out_cap_missing": check_reg_out_cap_missing,
     "power.bootstrap_cap_missing": check_bootstrap_cap_missing,
     "power.exposed_pad_floating": check_exposed_pad_floating,
+    "rtc.vbat_unconnected": check_rtc_vbat_unconnected,
 }
