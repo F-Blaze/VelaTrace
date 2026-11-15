@@ -110,3 +110,17 @@ def test_parse_copper_reads_pads_and_footprint_slots():
     assert abs(one.position[0] - 10) < 1e-9 and abs(one.position[1] - 19) < 1e-9   # turned 90 degrees
     assert two.net == "" and two.layers == ("F.Cu", "B.Cu")
     assert len(copper.edges) == 2
+
+
+def test_charger_exposed_pad_without_vias():
+    from velatrace.copper import Via
+    from velatrace.rules_copper import check_thermal_vias_missing
+    found = check_thermal_vias_missing(board(qfn("GND"), values={"U1": "TP4056"}))
+    assert [f.rule for f in found] == ["pcb.thermal_vias_missing"]
+    assert not check_thermal_vias_missing(board(qfn("GND"), values={"U1": "CP2102N"}))   # low power: no claim
+    via_pad = [pad("U1", "9", "GND", 0.5, 0.5, 0.5, 0.5, "thru_hole", TWO)]
+    assert not check_thermal_vias_missing(board(qfn("GND", extra=via_pad), values={"U1": "TP4056"}))
+    snap = board(qfn("GND"), values={"U1": "DRV8833"})
+    snap = snap.__class__(snap.components, snap.source, copper=snap.copper.__class__(
+        **{**snap.copper.__dict__, "vias": (Via("GND", (0.3, -0.3), TWO),)}))
+    assert not check_thermal_vias_missing(snap)

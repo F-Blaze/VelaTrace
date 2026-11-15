@@ -1943,6 +1943,7 @@ HEAVY_RULES: dict[str, Check] = {
     "hs.return.via": check_return_vias,
     "pcb.exposed_pad_open": _sibling("rules_copper", "check_exposed_pad_open"),
     "pcb.mains_spacing": _sibling("rules_copper", "check_mains_spacing"),
+    "pcb.thermal_vias_missing": _sibling("rules_copper", "check_thermal_vias_missing"),
 }
 
 # Extra check providers: callables (snapshot) -> list[Finding], run after RULES.
@@ -1982,7 +1983,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order",
                         "fit.unverified",
                         # PCB copper checks (2026-11): not yet measured on unseen boards.
-                        "pcb.exposed_pad_open", "pcb.mains_spacing",
+                        "pcb.exposed_pad_open", "pcb.mains_spacing", "pcb.thermal_vias_missing",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged

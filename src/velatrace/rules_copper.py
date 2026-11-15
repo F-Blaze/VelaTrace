@@ -2,6 +2,7 @@
 not what the schematic meant.
 
   pcb.exposed_pad_open  an IC's centre exposed pad, or the thermal vias inside it, has no net on the PCB
+  pcb.thermal_vias_missing  a charger, motor driver or class-D amp's exposed pad has no via to the other layers
   pcb.mains_spacing     mains copper closer than 2.5 mm to neutral, earth or low-voltage copper
 """
 import math
@@ -21,6 +22,28 @@ def _open(net: str) -> bool:
     return not net or net.startswith("unconnected-")
 
 
+def _exposed_pads(copper):
+    """(ref, centre pad, pads inside it, all its pads) for every footprint whose largest pad is an SMD pad in the
+    middle of the others with at least 4 times their area: an exposed (thermal) pad."""
+    by_ref: dict[str, list] = {}
+    for pad in copper.pads:
+        if pad.ref:
+            by_ref.setdefault(pad.ref, []).append(pad)
+    for ref, pads in sorted(by_ref.items()):
+        big = max(pads, key=lambda p: p.size[0] * p.size[1])
+        if big.kind != "smd":
+            continue
+        reach = max(big.size) / 2
+        inside = [p for p in pads if p is not big
+                  and abs(p.position[0] - big.position[0]) <= reach and abs(p.position[1] - big.position[1]) <= reach]
+        outer = [p for p in pads if p is not big and p not in inside]
+        if len(outer) < 4 or big.size[0] * big.size[1] < 4 * max(p.size[0] * p.size[1] for p in outer):
+            continue
+        xs, ys = [p.position[0] for p in outer], [p.position[1] for p in outer]
+        if min(xs) < big.position[0] < max(xs) and min(ys) < big.position[1] < max(ys):
+            yield ref, big, inside, pads
+
+
 def check_exposed_pad_open(snapshot: DesignSnapshot) -> list[Finding]:
     """The largest SMD pad sits in the middle of the other pads (an exposed pad) and has no net,
     or the small through-hole pads inside it (thermal vias) have none while the pad does."""
@@ -28,25 +51,9 @@ def check_exposed_pad_open(snapshot: DesignSnapshot) -> list[Finding]:
     if copper is None or not copper.pads:
         return []
     values = {c.reference: c.value for c in snapshot.components}
-    by_ref: dict[str, list] = {}
-    for pad in copper.pads:
-        if pad.ref:
-            by_ref.setdefault(pad.ref, []).append(pad)
     findings = []
-    for ref, pads in sorted(by_ref.items()):
+    for ref, big, inside, pads in _exposed_pads(copper):
         if _EP_MAY_FLOAT.search(values.get(ref, "")):
-            continue
-        big = max(pads, key=lambda p: p.size[0] * p.size[1])
-        if big.kind != "smd":
-            continue
-        reach = max(big.size) / 2
-        inside = [p for p in pads if p is not big and math.dist(p.position, big.position) <= reach * math.sqrt(2)
-                  and abs(p.position[0] - big.position[0]) <= reach and abs(p.position[1] - big.position[1]) <= reach]
-        outer = [p for p in pads if p is not big and p not in inside]
-        if len(outer) < 4 or big.size[0] * big.size[1] < 4 * max(p.size[0] * p.size[1] for p in outer):
-            continue
-        xs, ys = [p.position[0] for p in outer], [p.position[1] for p in outer]
-        if not (min(xs) < big.position[0] < max(xs) and min(ys) < big.position[1] < max(ys)):
             continue
         name = f"pad {big.number}" if big.number else "the unnumbered centre pad"
         if _open(big.net) and not any(p.number == big.number and not _open(p.net) for p in pads if big.number):
@@ -65,6 +72,40 @@ def check_exposed_pad_open(snapshot: DesignSnapshot) -> list[Finding]:
                 "the plane is cleared around them and they carry no heat or current to it.",
                 f"Give the thermal-via pads the exposed pad's net ({big.net}) in the footprint (same pad number), "
                 "then update the PCB and refill the zones."))
+    return findings
+
+
+# --- pcb.thermal_vias_missing ------------------------------------------------------------------
+
+# Parts that turn watts into heat through their exposed pad: linear Li-ion chargers, motor drivers,
+# class-D audio amplifiers. Their datasheets' layouts all put a via array in the pad.
+_HOT_PART = re.compile(r"(?i)TP405[67]|MCP738\d\d|BQ240[5-7]\d|BQ241\d\d|BQ25\d{3}|LTC40[5-9]\d|IP53\d\d|"
+                       r"DRV8\d{3}|TMC[256]\d{3}|A49\d\d|MP6\d{3}|TPA3\d{3}|TPA2\d{3}|PAM8\d{3}|MAX9835\d|MAX9836\d")
+
+
+def check_thermal_vias_missing(snapshot: DesignSnapshot) -> list[Finding]:
+    """A charger, motor driver or class-D amp whose connected exposed pad has no via (or through-hole
+    pad) under it, so its heat has no path to the other layers."""
+    copper = snapshot.copper
+    if copper is None or not copper.pads or len(copper.layers) < 2:
+        return []
+    values = {c.reference: c.value for c in snapshot.components}
+    findings = []
+    for ref, big, inside, _ in _exposed_pads(copper):
+        value = values.get(ref, "")
+        if _open(big.net) or not _HOT_PART.search(value) or any(p.kind == "thru_hole" for p in inside):
+            continue
+        reach = max(big.size) / 2
+        if any(abs(v.position[0] - big.position[0]) <= reach and abs(v.position[1] - big.position[1]) <= reach
+               for v in copper.vias):
+            continue
+        findings.append(Finding(
+            "pcb.thermal_vias_missing", Severity.WARNING, f"{ref} ({value}) exposed pad has no thermal vias",
+            (ref,), (big.net,), f"{ref} {value} exposed pad {big.number} ({big.size[0]:.2f} x {big.size[1]:.2f} mm, "
+            f"{big.net}) has no via under it on this {len(copper.layers)}-layer board, so the part's heat leaves only "
+            "through its pins and the top copper.",
+            "Put a grid of vias (about 0.3 mm drill, 1 to 1.2 mm pitch) in the exposed pad to the ground plane, as the "
+            "datasheet's layout example does."))
     return findings
 
 
