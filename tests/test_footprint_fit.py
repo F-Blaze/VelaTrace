@@ -197,6 +197,13 @@ def test_row_spacing_may_differ_but_pin_pitch_may_not():
 def test_tab_pad_is_left_out_of_layout_and_positions():
     assert rules(SOT89_3, real("C16106")) == []     # KiCad anchors the tab by the pins, LCSC mid-tab
     assert rules(TO252_2, real("C116325")) == []
+    # A DPAK footprint that numbers its tab 3 (leads 1, 2) against a part whose tab is 2: the leads are compared
+    # as leads, not a lead against the tab (round 11, HSU30N20 C42376812 on TO-252-3).
+    part = RealPart("C42376812", "HSU30N20", "TO-252-2", (RealPad("2", -3.424, 0.0, False, 35.96, "D"),
+                    RealPad("3", 3.424, -2.286, False, 4.2, "S"), RealPad("1", 3.424, 2.286, False, 4.2, "G")), "easyeda")
+    dpak = [("1", -4.05, -2.286, False, (2.6, 1.06)), ("2", -4.05, 2.286, False, (2.6, 1.06)),
+            ("3", 2.5, 0.0, False, (5.7, 5.632))]
+    assert compare("Q1", dpak, part) == []
     # SOT-23 pads (1 and 2 on one side, 3 opposite) are still not a SOT-89.
     sot23 = [("1", -0.9375, -0.95, False), ("2", -0.9375, 0.95, False), ("3", 0.9375, 0.0, False)]
     assert rules(sot23, real("C16106")) == ["fit.pitch"]     # three pads: caught by position, not row count

@@ -292,6 +292,12 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     merged = _served(fp, part) if len(fp) < len(part) else []   # several part pads on one footprint pad
     large = _large_pads(part)
     tab = next((number for number in large if number in used), None) if len(part) > 2 and not merged else None
+    fp_tab = part_tab = tab
+    own = _large_pads([(*pad[:4], pad[4] or sum(w * h for *_, w, h in pad[5])) for pad in fp])
+    if len(part) > 2 and not merged and large and own and own[0] != tab:
+        # The two number the tab differently (KiCad DPAK tab pad 3, EasyEDA pad 2): each side's own tab is set
+        # aside. ponytail: the tab's number itself is then not compared; leads still are.
+        fp_tab, part_tab = own[0], large[0]
     part_count = len(part) or real.pin_count
     if not fp or not part_count:
         return []
@@ -314,7 +320,7 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
                        f"The footprint's pads are {mount[here]}; the part's pads are {mount[there]}.",
                        "Use a footprint with the same mounting type as the part.")
     count = len(fp)
-    fp, part = [pad for pad in fp if pad[0] != tab], [pad for pad in part if pad[0] != tab]
+    fp, part = [pad for pad in fp if pad[0] != fp_tab], [pad for pad in part if pad[0] != part_tab]
     rows_cols = _rows_cols(fp)
     if part:
         part_rows_cols = _rows_cols(part)
