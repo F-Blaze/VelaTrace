@@ -908,3 +908,11 @@ def test_value_missing_placeholder_with_an_mpn_is_quiet_and_groups_refs():
     assert values_missing(part("U2", "TBD", "Package_SO:SOIC-8", ("1", "A")),
                           part("U3", "ESD5Zxx", "Package_SO:SOIC-8", ("1", "B"))) == [
         (Severity.INFO, ("U2", "U3"))]
+
+
+def test_placeholder_template_with_a_jlc_order_code_is_identified():
+    ic = part("U2", "nRF52810-QFxx", "Package_DFN_QFN:QFN-48", ("1", "+3V3", "VDD"), fields={"JLCPN": "C141828"})
+    assert rules(design(ic, cap()), "value.missing") == []
+    bare = part("U2", "nRF52810-QFxx", "Package_DFN_QFN:QFN-48", ("1", "+3V3", "VDD"))
+    assert [f.rule for f in rules(design(bare, cap()), "value.missing")] == ["value.missing"]
+

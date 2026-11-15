@@ -1345,8 +1345,10 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             continue  # a part-specific symbol named by its value ("20p_0402_C0G_50V") does carry the value
         code = lcsc_code(comp) or next((text.strip() for name, text in comp.fields.items()
                                         if name.strip().casefold() in _ORDER_FIELDS and text.strip()), "")
-        if placeholder and not code:
-            placeholders.append(comp.reference)
+        if placeholder:
+            # An order code (LCSC or a JLC part field) fixes the variant the template leaves open (nRF52810-QFxx).
+            if not (code or any("JLC" in name.upper() and text.strip() for name, text in comp.fields.items())):
+                placeholders.append(comp.reference)
         elif code and not mpn_of(comp):
             if kind not in {"led", "diode"}:  # "LED" plus an order code is normal; a passive needs its value
                 order_only[comp.reference] = code
