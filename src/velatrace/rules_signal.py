@@ -10,7 +10,7 @@ import re
 
 from .audit_rules import (_Design, _PROTECTION_VALUE, _base_type, _is_return, _pin_text, net_label,
                           parse_resistance, terminals, two_terminal_nets)
-from .bom import mpn_of
+from .bom import mpn_of, parse_value
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
 
@@ -65,13 +65,10 @@ def _has_ground_cap(design: _Design, net: str) -> bool:
     return False
 
 
-def check_crystal_load_caps(snapshot: DesignSnapshot) -> list[Finding]:
-    """A passive crystal whose two signal nets reach the IC's oscillator pins needs a capacitor to ground on each."""
-    design = _Design(snapshot)
-    if not design.grounds:
-        return []
-    findings = []
-    for comp in snapshot.components:
+def _crystals(design: _Design):
+    """(crystal, text, its two signal nets, oscillator-pin hits per net) for each passive crystal on an IC's
+    oscillator pins, skipping chips with built-in load capacitors."""
+    for comp in design.snapshot.components:
         if not _is_crystal(comp, design.kind[comp.reference]) or comp.dnp:
             continue
         text = f"{comp.value} {comp.footprint}".upper()
@@ -98,21 +95,75 @@ def check_crystal_load_caps(snapshot: DesignSnapshot) -> list[Finding]:
             if any(_INTERNAL_CAPS.search(chip) or (_WATCH_CRYSTAL.search(text) and _RTC_CHIP.search(chip))
                    for chip in chips):
                 continue
-            missing = [net for net in signal if not _has_ground_cap(design, net)]
-            if not missing:
+            yield comp, text, signal, ics
+
+
+def check_crystal_load_caps(snapshot: DesignSnapshot) -> list[Finding]:
+    """A passive crystal whose two signal nets reach the IC's oscillator pins needs a capacitor to ground on each."""
+    design = _Design(snapshot)
+    if not design.grounds:
+        return []
+    findings = []
+    for comp, _, signal, ics in _crystals(design):
+        missing = [net for net in signal if not _has_ground_cap(design, net)]
+        if not missing:
+            continue
+        chip, pin = ics[0][0]
+        findings.append(Finding(
+            "crystal.load_caps_missing", Severity.WARNING,
+            f"Crystal {comp.reference} has no load capacitor to ground on " + " and ".join(missing),
+            refs=(comp.reference, chip.reference), nets=tuple(missing),
+            evidence=(f"{comp.reference} ({comp.value or 'crystal'}) connects {signal[0]} and {signal[1]} to "
+                      f"{chip.reference} oscillator pins ({_pin_text(pin)}), and "
+                      + ("neither net has" if len(missing) == 2 else f"{missing[0]} has no")
+                      + " a capacitor to ground."),
+            fix=("Add a capacitor from each crystal pin to ground, sized from the crystal's load capacitance "
+                 "(roughly 2 x CL minus the board's stray capacitance, often 12-22 pF), unless the chip's "
+                 "datasheet says it has them built in.")))
+    return findings
+
+
+# --- crystal.load_caps_value ------------------------------------------------------------------
+
+_KHZ = re.compile(r"(\d+(?:[.,]\d+)?)\s*KHZ")
+
+
+def check_crystal_load_caps_value(snapshot: DesignSnapshot) -> list[Finding]:
+    """The single load capacitor on each crystal pin is far outside the usual 6-33 pF (above 47 pF or below 4 pF)."""
+    design = _Design(snapshot)
+    if not design.grounds:
+        return []
+    findings = []
+    for comp, text, signal, ics in _crystals(design):
+        # Low-frequency crystals (other than 32.768 kHz watch crystals) legitimately use larger capacitors.
+        if any(not 32.7 <= float(m.replace(",", ".")) <= 32.8 for m in _KHZ.findall(text)):
+            continue
+        caps = []
+        for net in signal:
+            on_net = [other for other, _ in design.nodes[net]
+                      if design.kind[other.reference] == "capacitor" and (ends := two_terminal_nets(other))
+                      and net in ends and any(_is_return(design, end) for end in ends if end != net)]
+            if len(on_net) != 1 or on_net[0].dnp:
+                break
+            caps.append(on_net[0])
+        else:
+            parsed = [parse_value(cap.value, "capacitor") for cap in caps]
+            if any(value is None or value.value <= 0 for value in parsed):
                 continue
-            chip, pin = ics[0][0]
+            picofarads = [value.value * 10**12 for value in parsed]
+            bad = [cap for cap, pf in zip(caps, picofarads) if pf > 47 or pf < 4]
+            if not bad:
+                continue
+            shown = ", ".join(f"{cap.reference} {cap.value}" for cap in bad)
             findings.append(Finding(
-                "crystal.load_caps_missing", Severity.WARNING,
-                f"Crystal {comp.reference} has no load capacitor to ground on " + " and ".join(missing),
-                refs=(comp.reference, chip.reference), nets=tuple(missing),
-                evidence=(f"{comp.reference} ({comp.value or 'crystal'}) connects {signal[0]} and {signal[1]} to "
-                          f"{chip.reference} oscillator pins ({_pin_text(pin)}), and "
-                          + ("neither net has" if len(missing) == 2 else f"{missing[0]} has no")
-                          + " a capacitor to ground."),
-                fix=("Add a capacitor from each crystal pin to ground, sized from the crystal's load capacitance "
-                     "(roughly 2 x CL minus the board's stray capacitance, often 12-22 pF), unless the chip's "
-                     "datasheet says it has them built in.")))
+                "crystal.load_caps_value", Severity.WARNING,
+                f"Crystal {comp.reference} load capacitor value looks wrong ({shown})",
+                refs=(comp.reference, *(cap.reference for cap in bad)), nets=tuple(signal),
+                evidence=(f"{comp.reference} ({comp.value or 'crystal'}) has {caps[0].reference} ({caps[0].value}) "
+                          f"and {caps[1].reference} ({caps[1].value}) as load capacitors. Typical values are "
+                          "6-33 pF; above about 47 pF most crystals fail to start, below 4 pF the load is too light."),
+                fix="Size each load capacitor from the crystal's load capacitance: roughly 2 x CL minus the "
+                    "board's stray capacitance (about 3-5 pF), often 12-22 pF."))
     return findings
 
 
@@ -269,10 +320,36 @@ def _rs485_side(text: str) -> str:
     return sides.pop() if len(sides) == 1 else ""
 
 
+# CiA 303-1 D-sub 9 pinout: pin 7 is CAN_H and pin 2 is CAN_L.
+_DSUB9 = re.compile(r"(?<![A-Z0-9])(?:DB-?9|DE-?9|D-?SUB[_\- ]*(?:D[BE]-?)?9)(?![0-9])")
+
+
+def _dsub_can_findings(design: _Design) -> list[Finding]:
+    findings = []
+    for conn in design.of_kind("connector"):
+        pads = terminals(conn)
+        numbers = {number for number in pads if number.isdigit()}
+        if (conn.dnp or not _DSUB9.search(f"{conn.value} {conn.footprint}".upper())
+                or not {str(n) for n in range(1, 10)} <= numbers or any(int(n) > 9 for n in numbers)):
+            continue
+        low, high = pads["2"], pads["7"]
+        if _can_side(net_label(low)) != "H" or _can_side(net_label(high)) != "L":
+            continue
+        findings.append(Finding(
+            "bus.polarity_swapped", Severity.ERROR,
+            f"{conn.reference} D-sub CAN lines look swapped (pin 2 on {net_label(low)}, pin 7 on {net_label(high)})",
+            refs=(conn.reference,), nets=(low, high),
+            evidence=f"{conn.reference}: pin 2 carries {net_label(low)} and pin 7 carries {net_label(high)}, but the "
+                     "CiA 303-1 D-sub 9 pinout is pin 7 = CAN_H and pin 2 = CAN_L.",
+            fix="Swap the two lines on the connector (or check the cable and the other end against the "
+                "device's datasheet)."))
+    return findings
+
+
 def check_bus_polarity_swapped(snapshot: DesignSnapshot) -> list[Finding]:
     """A net named for one line of a CAN or RS-485 bus that lands on a transceiver pin named for the other."""
     design = _Design(snapshot)
-    findings = []
+    findings = _dsub_can_findings(design)
     for ic in design.of_kind("ic"):
         if ic.dnp or _PROTECTION_VALUE.search(ic.value) or _NOT_A_TRANSCEIVER.search(ic.value):
             continue

@@ -425,3 +425,79 @@ def test_two_receivers_on_one_transmitter_or_connector_are_quiet():
 def test_unfed_receivers_on_one_net_fire():
     assert uart_found(uart_chip("U1", "N", "RXD"), uart_chip("U2", "N", "RX", "STM32"),
                       res("R1", "N", "+3V3", "10k")) == [(("U1", "U2"), ("N",))]
+
+
+# --- crystal.load_caps_value --------------------------------------------------------------------
+
+def value_found(*parts):
+    return [(f.severity, f.refs) for f in rules(design(*parts), "crystal.load_caps_value")]
+
+
+def caps2(a="12pF", b="12pF"):
+    return [cap("C1", "XI", "GND", a), cap("C2", "XO", "GND", b)]
+
+
+@pytest.mark.parametrize("a,b,bad", [("100pF", "100pF", ("C1", "C2")), ("2.2pF", "2.2pF", ("C1", "C2")),
+                                     ("22pF", "100pF", ("C2",)), ("0.1uF", "22pF", ("C1",)), ("47.1pF", "22pF", ("C1",))])
+@pytest.mark.parametrize("crystal", [xtal2, xtal4])
+def test_crystal_load_cap_value_fires(crystal, a, b, bad):
+    assert value_found(mcu(), crystal(), *caps2(a, b)) == [(Severity.WARNING, ("Y1", *bad))]
+
+
+@pytest.mark.parametrize("a,b", [("22pF", "22pF"), ("6pF", "33pF"), ("47pF", "47pF"), ("4pF", "4pF"), ("12pF", "15pF")])
+def test_crystal_load_cap_value_quiet_in_range(a, b):
+    assert value_found(mcu(), xtal2(), *caps2(a, b)) == []
+
+
+def test_crystal_load_cap_value_quiet_for_oscillators_and_unclear_caps():
+    osc = part("Y1", "OSC 8MHz", "Oscillator:Oscillator_SMD_3225-4Pin", ("1", "+3V3", "OE"), ("2", "GND", "GND"),
+               ("3", "XI", "OUT", "output"), ("4", "+3V3", "VDD", "power_in"))
+    assert value_found(mcu(), osc, *caps2("100pF", "100pF")) == []
+    assert value_found(mcu(), part("Y1", "8MHz", XTAL_FP, ("1", "XI", "OUT", "output"), ("2", "GND"),
+                                   ("3", "XO"), ("4", "+3V3", "VDD", "power_in")), *caps2("100pF", "100pF")) == []
+    # not to ground, only one side, DNP, unparsable, or two capacitors on a pin
+    assert value_found(mcu(), xtal2(), cap("C1", "XI", "XO", "100pF"), cap("C2", "XO", "XI", "100pF")) == []
+    assert value_found(mcu(), xtal2(), cap("C1", "XI", "GND", "100pF")) == []
+    dnp = cap("C1", "XI", "GND", "100pF")
+    dnp = type(dnp)(dnp.reference, dnp.value, dnp.footprint, dnp.pins, dnp.fields, dnp=True)
+    assert value_found(mcu(), xtal2(), dnp, cap("C2", "XO", "GND", "100pF")) == []
+    assert value_found(mcu(), xtal2(), *caps2("~", "100pF")) == []
+    assert value_found(mcu(), xtal2(), *caps2("100pF", "100pF"), cap("C3", "XI", "GND", "10pF")) == []
+
+
+def test_crystal_load_cap_value_low_frequency_crystals():
+    assert value_found(mcu(), xtal2(value="455kHz"), *caps2("100pF", "100pF")) == []
+    assert len(value_found(mcu(), xtal2(value="32.768kHz"), *caps2("100pF", "100pF"))) == 1
+
+
+# --- bus.polarity_swapped on a D-sub 9 CAN connector --------------------------------------------
+
+DSUB_FP = "Connector_Dsub:DSUB-9_Male_Horizontal_P2.77x2.84mm_EdgePinOffset9.90mm_Housed_MountingHolesOffset11.32mm"
+
+
+def db9(p2, p7, value="DB9", footprint=DSUB_FP, count=9):
+    nets = {"2": p2, "7": p7, "3": "GND"}
+    return part("J4", value, footprint, *[(str(n), nets.get(str(n), "")) for n in range(1, count + 1)])
+
+
+@pytest.mark.parametrize("p2,p7", [("/CAN_H", "/CAN_L"), ("CANH", "CANL"), ("CAN1_H", "CAN1_L")])
+def test_dsub_can_swapped_fires(p2, p7):
+    hits = rules(design(db9(p2, p7)), "bus.polarity_swapped")
+    assert [(f.severity, f.refs) for f in hits] == [(Severity.ERROR, ("J4",))]
+
+
+@pytest.mark.parametrize("value,fp", [("DE9", "Connector:X"), ("Conn", "Connector_Dsub:DSUB-9_Female_Horizontal"),
+                                      ("D-Sub DE-9", "Connector:X")])
+def test_dsub_can_swapped_fires_for_each_spelling(value, fp):
+    assert len(bus_found(db9("/CAN_H", "/CAN_L", value=value, footprint=fp))) == 1
+
+
+@pytest.mark.parametrize("p2,p7", [("/CAN_L", "/CAN_H"), ("/CAN_L", ""), ("", "/CAN_L"), ("/CAN_H", "/GPIO"),
+                                   ("/CAN_H", "/CAN_H"), ("/CAN_H", "/CAN_L_CAN_H"), ("/TX", "/RX"), ("", "")])
+def test_dsub_can_correct_or_unlabelled_is_quiet(p2, p7):
+    assert bus_found(db9(p2, p7)) == []
+
+
+def test_dsub_can_quiet_for_other_connectors():
+    assert bus_found(db9("/CAN_H", "/CAN_L", value="DB15", footprint="Connector_Dsub:DSUB-15_Female", count=15)) == []
+    assert bus_found(db9("/CAN_H", "/CAN_L", value="Conn", footprint="Connector_PinHeader_2.54mm:PinHeader_1x09")) == []

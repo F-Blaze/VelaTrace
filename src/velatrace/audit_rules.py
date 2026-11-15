@@ -65,6 +65,16 @@ _GENERIC_VALUE = re.compile(
     r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
     r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)\w*)*|"
     r"tvs[a-z]?|esd|zener|schottky|diode|transistor|npn|pnp|nmos|pmos|mosfet", re.IGNORECASE)
+# An unfilled part-number template (1.5KExxA, ESD5Zxx, MCP6002-xSN) or TBD: lowercase only, so 0x3C, 1x10 and
+# LMx58 stay real values. It must contain a digit.
+_PLACEHOLDER_VALUE = re.compile(r"(?<=[A-Z0-9])xx(?![a-z])|(?<=-)x(?=[A-Z])")
+
+
+def _is_placeholder(value: str) -> bool:
+    return value.upper() in {"TBD", "TBA", "TBC", "???"} or (
+        any(char.isdigit() for char in value) and bool(_PLACEHOLDER_VALUE.search(value)))
+
+
 # A symbol name that is itself a part number (ASMB-MTB0-0A3A2, WS2812B, 1N4148W): a letters+digits run of
 # 5+ characters, not a KiCad generic like R_Pack04. Its value equal to the symbol name is the real value.
 _PART_NUMBER_SYMBOL = re.compile(r"(?<![a-z0-9-])(?!(?:pack|network)\d)(?=[a-z0-9-]*[a-z])(?=[a-z0-9-]*\d)[a-z0-9-]{5,}",
@@ -1314,7 +1324,7 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
                 (supply[0], ground[0]),
                 f"{res.reference} value '{res.value}' connects {supply[0]} directly to {ground[0]}.",
                 f"Give {res.reference} its intended value, or remove it if it is a leftover jumper."))
-    unset, order_only = [], {}
+    unset, order_only, placeholders = [], {}, []
     for comp in snapshot.components:
         value, kind = comp.value.strip(), design.kind[comp.reference]
         if (kind in {"testpoint", "mounting"} or _NOT_A_PART.search(comp.footprint)
@@ -1322,8 +1332,9 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             continue
         symbol = comp.fields.get("lib_id", "").rsplit(":", 1)[-1].strip().casefold()
         empty = value in _EMPTY_VALUES
+        placeholder = _is_placeholder(value)
         # A connector's text ("LED", "Crystal") labels what plugs in; generic names only mean "unset" on the part itself.
-        if not (empty or (kind != "connector" and _GENERIC_VALUE.fullmatch(value))
+        if not (empty or placeholder or (kind != "connector" and _GENERIC_VALUE.fullmatch(value))
                 or (kind in _GENERIC_SYMBOL_KINDS and symbol and value.casefold() == symbol
                      and not _PART_NUMBER_SYMBOL.search(symbol))):
             continue
@@ -1334,7 +1345,9 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             continue  # a part-specific symbol named by its value ("20p_0402_C0G_50V") does carry the value
         code = lcsc_code(comp) or next((text.strip() for name, text in comp.fields.items()
                                         if name.strip().casefold() in _ORDER_FIELDS and text.strip()), "")
-        if code and not mpn_of(comp):
+        if placeholder and not code:
+            placeholders.append(comp.reference)
+        elif code and not mpn_of(comp):
             if kind not in {"led", "diode"}:  # "LED" plus an order code is normal; a passive needs its value
                 order_only[comp.reference] = code
         else:
@@ -1349,6 +1362,16 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
             tuple(unset), (),
             f"Values still show the symbol default: {shown}" + (" …" if len(unset) > 8 else "") + ".",
             "Set each value (e.g. 100nF, 10k) so the BOM can be ordered without guessing."))
+    placeholders.sort()
+    if placeholders:
+        shown = ", ".join(f"{ref} '{design.parts[ref].value}'" for ref in placeholders[:8])
+        findings.append(Finding(
+            "value.missing", Severity.WARNING,
+            f"{len(placeholders)} part{'s have' if len(placeholders) > 1 else ' has'} a placeholder value "
+            f"({', '.join(placeholders[:6])}" + (", …)" if len(placeholders) > 6 else ")"),
+            tuple(placeholders), (),
+            f"Value is an unfilled template or TBD: {shown}" + (" …" if len(placeholders) > 8 else "") + ".",
+            "Replace each placeholder with the real part number or value before ordering."))
     if order_only:
         refs = sorted(order_only)
         shown = ", ".join(f"{ref} '{design.parts[ref].value}' (only {order_only[ref]})" for ref in refs[:8])
@@ -1879,6 +1902,7 @@ RULES: dict[str, Check] = {
     "power.mounting_hole_rail": lambda snapshot: rules_polarity.check_mounting_hole_rail(snapshot),
     "power.rail_voltage_mismatch": lambda snapshot: rules_polarity.check_rail_voltage_mismatch(snapshot),
     "crystal.load_caps_missing": _signal("check_crystal_load_caps"),
+    "crystal.load_caps_value": _signal("check_crystal_load_caps_value"),
     "usb.dp_dn_swapped": _signal("check_usb_dp_dn_swapped"),
     "bus.polarity_swapped": _signal("check_bus_polarity_swapped"),
     "net.output_contention": _signal("check_output_contention"),
@@ -1895,6 +1919,7 @@ RULES: dict[str, Check] = {
     "resistor.power_rating": _sibling("rules_ratings", "check_resistor_power_rating"),
     "usb.vbus_capacitance": _sibling("rules_ratings", "check_vbus_capacitance"),
     "inductive.flyback_missing": _sibling("rules_ratings", "check_flyback_missing"),
+    "relay.coil_voltage": _sibling("rules_ratings", "check_relay_coil_voltage"),
     "pin.power_unconnected": _sibling("rules_ratings", "check_power_unconnected"),
     "led.current_high": _sibling("rules_circuit", "check_led_current_high"),
     "logic.level_mismatch": _sibling("rules_circuit", "check_level_mismatch"),

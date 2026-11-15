@@ -890,3 +890,21 @@ def test_lm2596_out_pin_through_its_inductor_drives_the_rail():
     load = part("J4", "Conn_01x05", "Connector_PinHeader_2.54mm:PinHeader_1x05", ("1", "+5V"), ("2", "GND"))
     mcu = part("U2", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
     assert "J4" not in [ref for f in rules(design(buck, coil, load, mcu, cap("C1", "+5V")), "connector") for ref in f.refs]
+
+
+@pytest.mark.parametrize("value", ["1.5KExxA", "MCP6002-xSN", "ESD5Zxx", "TBD", "tba", "TBC", "???", "BAT54xx"])
+def test_value_missing_flags_placeholder_values(value):
+    assert values_missing(part("U2", value, "Package_SO:SOIC-8", ("1", "A"))) == [(Severity.INFO, ("U2",))]
+
+
+@pytest.mark.parametrize("value", ["0x3C", "PinHeader_1x10", "2x2.5mm", "4x4mm", "STM32F103C8T6", "LMx58",
+                                   "1.5KE18A", "ESD5ZXX", "TBDX", "MCP6002-ISN"])
+def test_value_missing_placeholder_quiet_near_misses(value):
+    assert values_missing(part("U2", value, "Package_SO:SOIC-8", ("1", "A"))) == []
+
+
+def test_value_missing_placeholder_with_an_mpn_is_quiet_and_groups_refs():
+    assert values_missing(part("U2", "TBD", "Package_SO:SOIC-8", ("1", "A"), fields={"MPN": "LM358"})) == []
+    assert values_missing(part("U2", "TBD", "Package_SO:SOIC-8", ("1", "A")),
+                          part("U3", "ESD5Zxx", "Package_SO:SOIC-8", ("1", "B"))) == [
+        (Severity.INFO, ("U2", "U3"))]

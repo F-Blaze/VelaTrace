@@ -410,3 +410,56 @@ def test_vbus_quiet_on_a_power_only_usb_input():
     assert found("usb.vbus_capacitance", port("unconnected-(J1-D+-PadA6)", "unconnected-(J1-D--PadA7)"), bulk) == []
     mcu = part("U1", "ESP32-C3", "Package_DFN_QFN:QFN-32", ("1", "/D+", "USB_D+"), ("2", "/D-", "USB_D-"))
     assert found("usb.vbus_capacitance", port("/D+", "/D-"), mcu, bulk) != []      # a data port: limit applies
+
+
+# --- relay.coil_voltage -----------------------------------------------------------------------
+
+def coil(value, rail, **kw):
+    return found("relay.coil_voltage", relay(value=value, nets=(rail, "SW"), **kw), nmos())
+
+
+@pytest.mark.parametrize("value,rail", [
+    ("SRD-05VDC-SL-C", "+12V"), ("G5LE-1-12VDC", "+5V"), ("G5LE-1 DC12", "+24V"), ("HF46F/024-HS1", "+12V"),
+    ("JQC-3FF-S-Z 12V", "+5V"), ("FINDER 40.52.9.024", "+12V"), ("G6K-2F-Y DC3", "+12V"),
+    ("G6K-2F-Y DC4.5", "+12V"), ("G2R-1 DC24", "+12V"), ("SRD-05VDC-SL-C", "+3V3"), ("G5LE-1 DC3", "VBUS")])
+def test_relay_coil_voltage_fires(value, rail):
+    assert coil(value, rail) == [("relay.coil_voltage", ("K1",))]
+
+
+def test_relay_coil_voltage_reads_the_mpn_field_and_reports_error():
+    k = relay(value="Relay", nets=("+5V", "SW"))
+    k = type(k)(k.reference, k.value, k.footprint, k.pins, {"MPN": "G5LE-1-24VDC"})
+    hits = rules(design(k, nmos()), "relay.coil_voltage")
+    assert [(f.severity, f.refs, f.nets) for f in hits] == [(Severity.ERROR, ("K1",), ("+5V", "SW"))]
+
+
+@pytest.mark.parametrize("value,rail", [
+    ("SRD-05VDC-SL-C", "+5V"), ("G5LE-1-12VDC", "+12V"), ("G5LE-1-12VDC", "+9V"), ("SRD-05VDC-SL-C", "+6V"),
+    ("G5LE-1 DC4.5", "+5V"), ("G2R-1 DC24", "+24V"),
+    ("SRD-05VDC-SL-C", "VSW"), ("SRD-05VDC-SL-C", "12V_RELAY"),       # rail voltage unknown
+    ("G5LE-1", "+12V"), ("Relay_SPDT", "+12V"),                       # coil rating unknown
+    ("SRD-05VDC 10A 24VDC", "+24V"), ("SRD-05VDC 10A 24VDC", "+12V"),  # two voltages: not one coil rating
+    ("G5LE-1 AC24", "+5V"), ("G2RK-2 24VAC", "+5V"), ("G5LE-1 250VAC", "+5V"),
+    ("SRD-05VDC-SL-C LATCHING", "+12V")])
+def test_relay_coil_voltage_quiet(value, rail):
+    assert coil(value, rail) == []
+
+
+def test_relay_coil_voltage_quiet_with_a_dropping_resistor_on_either_side():
+    low = [relay(value="SRD-05VDC-SL-C", nets=("+12V", "DROP")), res("R1", "DROP", "SW", "100"), nmos()]
+    assert found("relay.coil_voltage", *low) == []
+    high = [relay(value="SRD-05VDC-SL-C", nets=("COILH", "SW")), res("R1", "+12V", "COILH", "100"), nmos()]
+    assert found("relay.coil_voltage", *high) == []
+
+
+def test_relay_coil_voltage_quiet_without_a_switch_for_ssr_modules_and_dnp():
+    k = relay(value="SRD-05VDC-SL-C", nets=("+12V", "SW"))
+    assert found("relay.coil_voltage", k) == []
+    assert found("relay.coil_voltage", k, part("J1", "Conn", "Connector:Conn_01x01", ("1", "SW"))) == []
+    for value in ("SSR 5VDC", "AQY212 5V", "G3MB-202P DC5", "Relay module 5V", "TLP3547 5V"):
+        assert coil(value, "+12V") == []
+    gone = relay(value="SRD-05VDC-SL-C", nets=("+12V", "SW"))
+    gone = type(gone)(gone.reference, gone.value, gone.footprint, gone.pins, gone.fields, dnp=True)
+    assert found("relay.coil_voltage", gone, nmos()) == []
+    # both coil nets are rails
+    assert found("relay.coil_voltage", relay(value="SRD-05VDC-SL-C", nets=("+12V", "+5V")), nmos()) == []

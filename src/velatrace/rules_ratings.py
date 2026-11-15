@@ -15,7 +15,7 @@ import re
 
 from .audit_rules import (_BUILT_IN_DECOUPLING, _NOT_SUPPLY_TOKEN, _Design, _base_type, _is_return, _pin_text,
                           _series_link, is_ground, is_supply_name, parse_resistance, two_terminal_nets)
-from .bom import package_of, parse_value, rail_voltage
+from .bom import mpn_of, package_of, parse_value, rail_voltage
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
 from .rules_power import _VCAP
@@ -352,13 +352,17 @@ def _clamped(design: _Design, relay: Component, switched: str, other: str) -> bo
     return False
 
 
+def _is_coil_relay(design: _Design, relay: Component) -> bool:
+    text = f"{relay.value} {relay.footprint}"
+    return not (relay.dnp or not (_RELAY_REF.fullmatch(relay.reference) or "RELAY" in text.upper())
+                or _NOT_COIL_RELAY.search(text) or design.kind[relay.reference] in {"resistor", "capacitor", "ic"})
+
+
 def check_flyback_missing(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
     findings = []
     for relay in snapshot.components:
-        text = f"{relay.value} {relay.footprint}"
-        if (relay.dnp or not (_RELAY_REF.fullmatch(relay.reference) or "RELAY" in text.upper())
-                or _NOT_COIL_RELAY.search(text) or design.kind[relay.reference] in {"resistor", "capacitor", "ic"}):
+        if not _is_coil_relay(design, relay):
             continue
         coil = _coil_nets(relay)
         if coil is None:
@@ -379,6 +383,71 @@ def check_flyback_missing(snapshot: DesignSnapshot) -> list[Finding]:
                 "connects the two coil nets, so the voltage spike when the coil turns off can destroy the transistor.",
                 "Add a diode (e.g. 1N4148 or 1N4007) across the coil, cathode to the supply side, close to the relay."))
             break
+    return findings
+
+
+# --- relay.coil_voltage -----------------------------------------------------------------------
+
+# Standard coil voltages only: a contact rating such as 250V or 30VDC in the same text is never read as a coil.
+_COIL_VOLTS = {Decimal(v) for v in ("3", "3.3", "4.5", "5", "6", "9", "12", "15", "18", "24", "48")}
+_COIL_RATING = (
+    re.compile(r"(?<![A-Z0-9.])(\d+(?:\.\d+)?)\s*V(?:DC)?(?![A-Z0-9])"),   # 05VDC, 12V
+    re.compile(r"(?<![A-Z0-9])DC\s*(\d+(?:\.\d+)?)V?(?![A-Z0-9.])"),        # DC12, DC4.5
+    re.compile(r"HF\w{1,5}/(\d{3})-"),                                       # Hongfa HF46F/024-HS1
+    re.compile(r"(?<![\d.])[34]\d\.\d\d\.9\.(\d{3})(?!\d)"),                # Finder 40.52.9.024
+)
+_NOT_PLAIN_COIL = re.compile(r"LATCH|BISTABLE|DUAL|(?<![A-Z])AC\s*\d")
+
+
+def _coil_rating(relay: Component) -> Decimal | None:
+    """The one standard coil voltage the value and MPN state; None when absent or ambiguous."""
+    found = set()
+    for text in (relay.value, mpn_of(relay) or ""):
+        text = text.upper()
+        if _NOT_PLAIN_COIL.search(text):
+            return None
+        found.update(Decimal(m) for pattern in _COIL_RATING for m in pattern.findall(text))
+    found = {volts for volts in found if volts in _COIL_VOLTS}
+    return found.pop() if len(found) == 1 else None
+
+
+def check_relay_coil_voltage(snapshot: DesignSnapshot) -> list[Finding]:
+    """A relay whose stated coil voltage is far from the named supply rail on its coil's high side."""
+    design = _Design(snapshot)
+    findings = []
+    for relay in snapshot.components:
+        coil = _coil_nets(relay) if _is_coil_relay(design, relay) else None
+        rated = _coil_rating(relay) if coil else None
+        if rated is None:
+            continue
+        known = [(net, rail_voltage(net)) for net in coil if net in design.supplies and rail_voltage(net) is not None]
+        if len(known) != 1:
+            continue
+        (rail, volts), = known
+        low = coil[1] if coil[0] == rail else coil[0]
+        if low in design.supplies or low in design.grounds:
+            continue
+        # The low side must reach only a switch (transistor/driver IC), clamp diode or snubber: a resistor
+        # there is a deliberate series dropper, and anything else is not a plain coil drive.
+        others = [(comp, pin) for comp, pin in design.nodes[low] if comp is not relay]
+        kinds = {design.kind[comp.reference] for comp, _ in others}
+        if kinds - {"transistor", "diode", "ic", "capacitor"} or not any(
+                design.kind[comp.reference] == "ic" or _SWITCH_PIN.fullmatch(_name(pin))
+                for comp, pin in others if design.kind[comp.reference] in {"transistor", "ic"}):
+            continue
+        if volts > rated * Decimal("1.5"):
+            effect = "overdriven, so the coil overheats"
+        elif volts < rated * Decimal("0.75"):
+            effect = "underdriven, so the relay will not pull in reliably"
+        else:
+            continue
+        findings.append(Finding(
+            "relay.coil_voltage", Severity.ERROR,
+            f"Relay {relay.reference} has a {_volts(rated)} coil on the {_volts(volts)} rail {rail}",
+            (relay.reference,), (rail, low),
+            f"{relay.reference} ({relay.value}) is rated for a {_volts(rated)} coil, but its coil connects {rail} "
+            f"({_volts(volts)}) to {low}: {effect}.",
+            f"Use a relay with a {_volts(volts)} coil, or supply the coil from a {_volts(rated)} rail."))
     return findings
 
 
