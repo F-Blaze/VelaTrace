@@ -339,3 +339,13 @@ def test_rs485_a_b_pins_without_transceiver_control_pins_are_quiet():
     mux = part("U5", "74HC157", "Package_SO:SOIC-16", ("1", "RS485_B", "A"), ("2", "RS485_A", "B"),
                ("8", "GND", "GND"), ("16", "+5V", "VCC"))
     assert bus_found(mux) == []
+
+
+def test_shared_spi_miso_is_not_contention():
+    from test_audit_rules import design, part, rules
+    a = part("U7", "MCP2518FD", "Package_SO:SOIC-14", ("1", "/SPI_MISO", "SDO", "output"), ("2", "/CS1", "~{CS}", "input"))
+    b = part("U9", "MCP2518FD", "Package_SO:SOIC-14", ("1", "/SPI_MISO", "SDO", "output"), ("2", "/CS2", "~{CS}", "input"))
+    assert rules(design(a, b), "net.output_contention") == []
+    c = part("U7", "74HC04", "Package_SO:SOIC-14", ("2", "/X", "Y1", "output"))
+    d = part("U9", "74HC04", "Package_SO:SOIC-14", ("2", "/X", "Y1", "output"))
+    assert [f.rule for f in rules(design(c, d), "net.output_contention")] == ["net.output_contention"]

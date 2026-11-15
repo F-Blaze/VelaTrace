@@ -67,12 +67,18 @@ def _decode_mpn(text: str, kind: str) -> Decimal | None:
     return None
 
 
+_RES_UNIT = re.compile(r"(?i)\d+(?:[.,]\d+)?(?:[RKMΩ]\d*|OHMS?|K?Ω)")
+_CAP_UNIT = re.compile(r"(?i)\d+(?:[.,]\d+)?(?:[PNUµμ]F?\d*|F)")
+
+
 def _described(comp: Component, kind: str) -> list[tuple[str, str, Decimal]]:
     """Values a plain description spells out, e.g. 'Resistor 1K 1% 0402' (the kind word must match the part)."""
     found = []
     for name, text in _text_fields(comp, _DESCRIPTION_FIELDS):
-        match = re.match(r"(?i)(res(?:istor)?|cap(?:acitor)?)[\s,:]+(\d.*)", text)
-        if match and match.group(1)[:3].lower() == kind[:3]:
+        match = re.match(r"(?i)(res(?:istor)?|cap(?:acitor)?)[\s,:]+(\S+)", text)
+        unit = _RES_UNIT if kind == "resistor" else _CAP_UNIT
+        # Only a first token with its own unit is a value: "1 %" is a tolerance, "25V" a rating.
+        if match and match.group(1)[:3].lower() == kind[:3] and unit.fullmatch(match.group(2)):
             parsed = bom.parse_value(match.group(2), kind)
             if parsed is not None:
                 found.append((name, text, parsed.value))

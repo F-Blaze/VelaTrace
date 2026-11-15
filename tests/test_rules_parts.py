@@ -263,3 +263,12 @@ def test_nonstandard_quiet_for_dnp_non_resistors_and_orderable_mpn():
     assert found(NONSTD, c(value="2.73k")) == []
     assert found(NONSTD, r("R1", value="2.5k", MPN="RK73H1ETTP2501F")) == []  # orderable as given
     assert found(NONSTD, r("R1", value="2.5k", MPN="RK73H1ETTP1001F")) == [(NONSTD, ("R1",))]
+
+
+def test_description_tolerance_is_not_a_value():
+    r = part("R1", "10k", "Resistor_SMD:R_0603_1608Metric", ("1", "A"), ("2", "B"),
+             fields={"MPN": "ERJ-3EKF1002V", "Description": "Resistor 1 %, 0603"})
+    assert rules(design(r), "part.mpn_value_mismatch") == []
+    wrong = part("R1", "2k2", "Resistor_SMD:R_0603_1608Metric", ("1", "A"), ("2", "B"),
+                 fields={"Description": "Resistor 1K 1% 0603"})
+    assert [f.rule for f in rules(design(wrong), "part.mpn_value_mismatch")] == ["part.mpn_value_mismatch"]

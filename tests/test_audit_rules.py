@@ -874,3 +874,10 @@ def test_regulator_by_part_number_and_marked_up_battery_pin_drive_their_rails():
     found = rules(design(charger, load, battery, cap("C2", "/VBAT")), "connector")
     assert [f.nets for f in found] == [("/VBAT",)]  # a battery input stays flagged, without claiming nothing drives it
     assert "nothing on the board drives" not in found[0].evidence and "reversed cell" in found[0].evidence
+
+
+def test_mains_inputs_of_an_ac_dc_module_need_no_bypass_cap():
+    module = part("U3", "HLK-PM01", "Converter_ACDC:HLK-PM01", ("1", "/AC/L", "AC", "power_in"),
+                  ("2", "/AC/N", "AC", "power_in"), ("3", "GND", "-Vo", "power_out"), ("4", "+5V", "+Vo", "power_out"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert [f.nets for f in rules(design(module, load, cap(a="+5V")), "decoupling.missing")] == []

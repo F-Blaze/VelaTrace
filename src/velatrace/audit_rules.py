@@ -302,6 +302,10 @@ def _is_return(design: _Design, net: str) -> bool:
     return net in design.grounds or bool(_RETURN.fullmatch(net_label(net)))
 
 
+# AC mains nets: a capacitor from mains to the low-voltage ground would break isolation (AC-DC modules).
+_MAINS = frozenset({"AC", "MAINS", "VAC", "LINE", "NEUTRAL", "110V", "115V", "120V", "220V", "230V", "240V"})
+
+
 def _supply_pins(design: _Design, ic: Component) -> dict[str, list[Pin]]:
     """Pins of an IC that need decoupling, by net.
 
@@ -316,6 +320,7 @@ def _supply_pins(design: _Design, ic: Component) -> dict[str, list[Pin]]:
     for pin in ic.pins:
         name = re.sub(r"[~{}]", "", pin.name.upper())
         if (not pin.net or pin.net.startswith("unconnected-(") or _is_return(design, pin.net) or pin.no_connect
+                or _MAINS.intersection(re.split(r"[^A-Z0-9]+", pin.net.upper()))
                 or _GROUND.fullmatch(name)
                 or any(_NOT_SUPPLY_TOKEN.fullmatch(token) for token in re.split(r"[^A-Z0-9]+", name))):
             continue

@@ -176,6 +176,10 @@ _FLAG_PIN = re.compile(r"\d*(?:N?INT\d*|N?IRQ\d*|N?ALERT|SMBALERT|N?FAULT|N?FLT|
                        r"N?OD|N?WAKE|N?RESET|N?RST|N?SYSRST|N?OVF|N?ERR|N?ERROR|N?ACT|N?OC)\d*")
 
 
+# Serial data outputs that are high-impedance unless their chip is selected (SPI SDO/MISO, JTAG TDO).
+_TRISTATE_PIN = re.compile(r"SDO\d*|MISO\d*|CIPO|SO|DO|DOUT|TDO|SPI\d*_?MISO")
+
+
 def check_output_contention(snapshot: DesignSnapshot) -> list[Finding]:
     """Two or more push-pull output pins from different parts on one net."""
     design = _Design(snapshot)
@@ -193,6 +197,9 @@ def check_output_contention(snapshot: DesignSnapshot) -> list[Finding]:
         if any(_FLAG_PIN.fullmatch(token) for _, pin in drivers
                for token in re.split(_TOKENS, _name(pin.name)) if token):
             continue
+        if all(any(_TRISTATE_PIN.fullmatch(token) for token in re.split(_TOKENS, _name(pin.name)) if token)
+               for _, pin in drivers):
+            continue  # SPI/JTAG data outputs are tri-stated while their chip is not selected: a shared MISO is normal
         shown = ", ".join(f"{comp.reference} {_pin_text(pin)}" for comp, pin in drivers)
         findings.append(Finding(
             "net.output_contention", Severity.WARNING,
