@@ -152,3 +152,10 @@ def test_stm32_on_its_pa11_pa12_full_speed_phy_is_quiet():
     hs = Component("U1", "STM32H743ZIT6", "Package_QFP:LQFP-144",
                    (Pin("103", "USB_D-", "PB14"), Pin("104", "USB_D+", "PB15")))
     assert ids(replace(board_, components=(connector, hs))) != []   # not the PA11/PA12 FS pins: not judged FS
+
+
+def test_ethernet_pair_via_mismatch_is_not_reported():
+    # 10/100 and gigabit line pairs run at 125 MBd through magnetics: a via's skew never matters (round 11, W5500).
+    snapshot = board(track("ETH_TXP", 10), track("ETH_TXP", 2, "B.Cu"), via("ETH_TXP"), via("ETH_TXP", 1),
+                     track("ETH_TXN", 12, y=1))
+    assert check_pair_vias(snapshot) == []

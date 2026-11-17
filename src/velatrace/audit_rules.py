@@ -1556,6 +1556,9 @@ def check_pair_vias(snapshot: DesignSnapshot) -> list[Finding]:
     for p, n, a, b, guess in _routed_pairs(snapshot):
         if abs(a.vias - b.vias) < PAIR_VIA_DIFF and a.layers == b.layers:
             continue
+        # Ethernet line pairs run at 125 MBd (8 ns symbols) through magnetics: a via's ~10 ps never matters.
+        if guess == "ethernet":
+            continue
         findings.append(Finding(
             "hs.pair.vias", Severity.WARNING,
             f"Pair {p} / {n}: the two lines change layers differently", (), (p, n),
