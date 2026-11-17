@@ -263,3 +263,82 @@ def check_mains_spacing(snapshot: DesignSnapshot) -> list[Finding]:
             "Widen the gap (move or narrow the track, pull the pour back with a larger zone clearance) or mill a "
             "slot between the two coppers; a user-touchable low-voltage side needs about twice this (reinforced)."))
     return findings
+
+
+# --- pcb.schematic_mismatch --------------------------------------------------------------------
+
+def schematic_sync(schematic: DesignSnapshot):
+    """A heavy check comparing the board's own pads and values with ``schematic`` (the saved schematic's
+    netlist): pads joined differently from the schematic, and resistor/capacitor/inductor values that differ."""
+    def check_schematic_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
+        return _schematic_mismatch(schematic, snapshot.copper)
+    return check_schematic_mismatch
+
+
+def _schematic_mismatch(schematic: DesignSnapshot, copper) -> list[Finding]:
+    from collections import Counter
+    from .audit_rules import part_kind
+    from .bom import parse_value
+    if copper is None or not copper.pads or not schematic.components:
+        return []
+    sch = {(c.reference, p.number): p.net for c in schematic.components for p in c.pins}
+    pcb: dict[tuple[str, str], str] = {}
+    for pad in copper.pads:
+        key = (pad.ref, pad.number)
+        if pad.ref and pad.number and (key not in pcb or _open(pcb[key])):
+            pcb[key] = pad.net
+    # Connections are compared by grouping, not by name: KiCad renames auto-named nets between versions.
+    # Open pads on either side are left out (pcb.exposed_pad_open covers a centre pad left without a net).
+    pairs = [(key, sch[key], pcb[key]) for key in sorted(sch) if key in pcb and not _open(sch[key]) and not _open(pcb[key])]
+    by_sch, by_pcb = Counter(), Counter()
+    for _, s, q in pairs:
+        by_sch[s, q] += 1
+        by_pcb[q, s] += 1
+    main_q = {s: q for (s, q), _ in sorted(by_sch.items(), key=lambda kv: kv[1])}   # most pads win
+    main_s = {q: s for (q, s), _ in sorted(by_pcb.items(), key=lambda kv: kv[1])}
+    odd = [(key, s, q) for key, s, q in pairs if main_q[s] != q or main_s[q] != s]
+    # A resistor, inductor or non-polar capacitor turned end for end is the same circuit.
+    parts = {c.reference: c for c in schematic.components}
+    def symmetric(ref: str) -> bool:
+        comp = parts.get(ref)
+        if comp is None or len(comp.pins) != 2:
+            return False
+        kind = part_kind(comp)
+        return kind in ("resistor", "inductor", "ferrite") or (
+            kind == "capacitor" and not re.search(r"(?i)CP_|ELEC|TANT|POLAR", comp.footprint))
+    swapped = Counter(key[0] for key, s, q in odd)
+    odd = [row for row in odd if not (swapped[row[0][0]] == 2 and symmetric(row[0][0]))]
+    findings = []
+    if odd:
+        refs = tuple(sorted({key[0] for key, _, _ in odd}))
+        # Pads whose net names differ say most; a pad on a same-named net only shows the other side of a swap.
+        leaf = lambda net: net.rsplit("/", 1)[-1].upper()
+        rows = sorted(odd, key=lambda row: leaf(row[1]) == leaf(row[2]))
+        shown = "; ".join(f"{ref} pad {num} is on {q} (schematic: {s})" for (ref, num), s, q in rows[:4])
+        findings.append(Finding(
+            "pcb.schematic_mismatch", Severity.WARNING,
+            f"The PCB connects {len(odd)} pad{'s' if len(odd) != 1 else ''} differently from the schematic",
+            refs[:8], tuple(dict.fromkeys(n for _, s, q in odd for n in (s, q)))[:8],
+            f"Compared with the saved schematic, these pads join other pads than the schematic says: {shown}"
+            f"{'; ...' if len(odd) > 4 else ''}. The board will be built as the PCB is drawn.",
+            "Run Update PCB from Schematic (F8) and check the ratsnest, or fix the schematic if the PCB is right; "
+            "KiCad's DRC with 'Test for parity between PCB and schematic' lists every difference."))
+    board_values = dict(copper.values)
+    changed = []
+    for comp in schematic.components:
+        kind = part_kind(comp)
+        if kind not in ("resistor", "capacitor", "inductor") or comp.reference not in board_values:
+            continue
+        here, there = parse_value(comp.value, kind), parse_value(board_values[comp.reference], kind)
+        if here and there and abs(here.value - there.value) > here.value / 200:
+            changed.append((comp.reference, comp.value, board_values[comp.reference]))
+    if changed:
+        shown = "; ".join(f"{ref} {a} in the schematic, {b} on the PCB" for ref, a, b in changed[:5])
+        findings.append(Finding(
+            "pcb.schematic_mismatch", Severity.WARNING,
+            f"{len(changed)} part value{'s differ' if len(changed) != 1 else ' differs'} between schematic and PCB",
+            tuple(ref for ref, _, _ in changed)[:8], (),
+            f"{shown}{'; ...' if len(changed) > 5 else ''}. The assembly files come from the PCB, so the PCB value "
+            "is the one that gets fitted.",
+            "Decide which value is right, then Update PCB from Schematic (F8) so both agree before ordering."))
+    return findings

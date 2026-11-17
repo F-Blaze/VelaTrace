@@ -124,3 +124,27 @@ def test_charger_exposed_pad_without_vias():
     snap = snap.__class__(snap.components, snap.source, copper=snap.copper.__class__(
         **{**snap.copper.__dict__, "vias": (Via("GND", (0.3, -0.3), TWO),)}))
     assert not check_thermal_vias_missing(snap)
+
+
+def test_schematic_mismatch_reports_rewired_pads_and_changed_values_not_renames_or_end_swaps():
+    from velatrace.rules_copper import schematic_sync
+    sch = DesignSnapshot((Component("U1", "MCU", "", (Pin("1", "/SDA"), Pin("2", "/SCL"), Pin("3", "GND"))),
+                          Component("R1", "4k7", "Resistor_SMD:R_0603", (Pin("1", "/SDA"), Pin("2", "+3V3"))),
+                          Component("R2", "4k7", "Resistor_SMD:R_0603", (Pin("1", "/SCL"), Pin("2", "+3V3"))),
+                          Component("J1", "Conn", "", (Pin("1", "/SDA"), Pin("2", "/SCL"), Pin("3", "GND")))), "sch")
+    def pcb(swap_j1=False, swap_r1=False, r2="4k7", rename=False):
+        n = (lambda x: "Net-" + x) if rename else (lambda x: x)
+        pads = [pad("U1", "1", n("/SDA"), 0, 0), pad("U1", "2", n("/SCL"), 0, 1), pad("U1", "3", "GND", 0, 2),
+                pad("R1", "1", "+3V3" if swap_r1 else n("/SDA"), 1, 0), pad("R1", "2", n("/SDA") if swap_r1 else "+3V3", 1, 1),
+                pad("R2", "1", n("/SCL"), 2, 0), pad("R2", "2", "+3V3", 2, 1),
+                pad("J1", "1", n("/SCL") if swap_j1 else n("/SDA"), 3, 0), pad("J1", "2", n("/SDA") if swap_j1 else n("/SCL"), 3, 1),
+                pad("J1", "3", "GND", 3, 2)]
+        copper = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads),
+                             values=(("R1", "4k7"), ("R2", r2)))
+        return DesignSnapshot((), "pcb", copper=copper)
+    check = schematic_sync(sch)
+    assert check(pcb()) == [] and check(pcb(rename=True)) == [] and check(pcb(swap_r1=True)) == []
+    (found,) = check(pcb(swap_j1=True))
+    assert found.rule == "pcb.schematic_mismatch" and "J1" in found.refs
+    (value,) = check(pcb(r2="10k"))
+    assert "R2 4k7 in the schematic, 10k on the PCB" in value.evidence

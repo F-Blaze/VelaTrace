@@ -117,6 +117,7 @@ class BoardCopper:
     pads: tuple[CopperPad, ...] = ()
     # Board outline and cutouts (Edge.Cuts, footprint slots included) as straight pieces.
     edges: tuple[tuple[tuple[float, float], tuple[float, float]], ...] = ()
+    values: tuple[tuple[str, str], ...] = ()   # (reference, value) of each footprint as the board has it
 
 
 # ---------------------------------------------------------------- reading
@@ -218,7 +219,7 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
     edges = [p for kind in _GRAPHICS for node in children(root, "gr_" + kind)
              if (_first(node, "layer") or ["", ""])[1] == "Edge.Cuts"
              for p in _outline(node, lambda x, y: (x, y))]
-    pads, cuts = [], []
+    pads, cuts, values = [], [], []
 
     def cut(points):
         cuts.extend((a, b) for a, b in zip(points, points[1:]) if a != b)
@@ -234,6 +235,9 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
         except (TypeError, ValueError, IndexError):
             continue
         ref = next((str(p[2]) for p in children(fp, "property") if len(p) > 2 and p[1] == "Reference"), "") or             next((str(t[2]) for t in children(fp, "fp_text") if len(t) > 2 and t[1] == "reference"), "")
+        value = next((str(p[2]) for p in children(fp, "property") if len(p) > 2 and p[1] == "Value"), "") or             next((str(t[2]) for t in children(fp, "fp_text") if len(t) > 2 and t[1] == "value"), "")
+        if ref:
+            values.append((ref, value))
 
         def place(x, y, fx=fx, fy=fy, turn=turn):
             dx, dy = _rot(x, y, turn)
@@ -263,7 +267,8 @@ def parse_copper(text: str, net_classes: Mapping[str, NetClassInfo] | None = Non
     except (ValidationError, ValueError, ZeroDivisionError, IndexError):   # 1-layer or odd stackup
         models = {}
     return BoardCopper(layers, thickness_mm, tuple(segments), tuple(vias), tuple(zones), planes, models,
-                       dict(net_classes or {}), frozenset(unfilled), tuple(pads), tuple(cuts))
+                       dict(net_classes or {}), frozenset(unfilled), tuple(pads), tuple(cuts),
+                       tuple(values))
 
 
 def _project_classes(project: Path, nets: Iterable[str]) -> dict[str, NetClassInfo]:

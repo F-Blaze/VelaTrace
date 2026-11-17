@@ -1993,7 +1993,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "fit.pad_count", "fit.mount_type", "fit.layout", "fit.pitch", "fit.pin_order",
                         "fit.unverified",
                         # PCB copper checks (2026-11): not yet measured on unseen boards.
-                        "pcb.exposed_pad_open", "pcb.mains_spacing", "pcb.thermal_vias_missing",
+                        "pcb.exposed_pad_open", "pcb.mains_spacing", "pcb.thermal_vias_missing", "pcb.schematic_mismatch",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged
