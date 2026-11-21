@@ -87,7 +87,7 @@ _LCSC_FIELDS = frozenset({
 _MPN_FIELDS = frozenset({  # "mp": the field SnapEDA symbols use
     "mpn", "mpn1", "mp", "manufacturer part", "manufacturer part number", "manufacturer part no",
     "manufacturer partno", "manufacturer pn", "mfr part", "mfr part number", "mfr part no",
-    "mfr pn", "mfg part number", "mfg pn", "part number", "partno", "part no", "pn", "p n"})
+    "mfr pn", "mfg part number", "mfg pn", "part number", "partno", "part no", "pn", "p n", "manf"})  # manf#: KiCad stock field
 _IGNORED_VALUE_WORDS = frozenset({"RES", "RESISTOR", "CAP", "CAPACITOR", "SMD", "MLCC", "CHIP",
                                   "CERAMIC"}) | frozenset(_PACKAGES)
 _E24 = frozenset(Decimal(x) for x in (
@@ -487,6 +487,8 @@ def _normalise_findings(ctx: _Context) -> list[Finding]:
                  - {None} for rated in (True, False)]
         if not same_part and all(rails) and rails[0] != rails[1]:
             continue
+        if same_part and len(ratings) > 1:
+            continue  # one part number on all; the texts differ only by a rating note the part already meets
         canonical = max(texts, key=lambda text: (
             # Never suggest a spelling that drops or lowers a stated voltage rating.
             same_part or not volts or parse_value(text, kind).voltage == max(volts),

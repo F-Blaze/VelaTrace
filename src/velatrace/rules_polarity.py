@@ -221,6 +221,18 @@ def _net_volts(net: str) -> set[Decimal]:
     return volts
 
 
+def _regulated_volts(snapshot: DesignSnapshot, net: str) -> Decimal | None:
+    """The output voltage of a known fixed regulator whose output pin is on the net: the rail's real
+    voltage, whatever its label says (a 3.3 V LDO feeding a net labelled +3V0)."""
+    from .rules_tables import _LDO_OUT, _ldo_of
+    for comp in snapshot.components:
+        if any(pin.net == net and _LDO_OUT.fullmatch(re.sub(r"[^A-Z]", "", pin.name.upper())) for pin in comp.pins):
+            found = _ldo_of(comp)
+            if found:
+                return Decimal(str(found[0]))
+    return None
+
+
 def check_rail_voltage_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
     """A pin named for one voltage (3V3, VDD3P3, 1V8 ...) sitting on a net named for a different one."""
     findings = []
@@ -232,7 +244,7 @@ def check_rail_voltage_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
             if not pin.net or not pin.number:
                 continue
             want, have = _pin_volts(comp, pin), _net_volts(pin.net)
-            if len(want) == 1 and len(have) == 1 and want != have:
+            if len(want) == 1 and len(have) == 1 and want != have and _regulated_volts(snapshot, pin.net) not in want:
                 seen.setdefault((pin.net, next(iter(want))), []).append(pin)
         for (net, volts), pins in seen.items():
             names = ", ".join(sorted({pin.name for pin in pins}))

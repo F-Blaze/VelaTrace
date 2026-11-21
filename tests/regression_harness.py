@@ -65,7 +65,7 @@ def answer_key(slug):
     gt = json.loads((DIR / "answers" / f"{slug}.json").read_text(encoding="utf-8"))
     for name in ("issues", "acceptable_designs"):  # heavy rules are not run here: out of scope
         for it in gt.get(name, []):
-            if it["rule"].startswith(("hs.", "fit.")):
+            if it["rule"].startswith(("hs.", "fit.", "pcb.")):
                 it["rule"] = "other:" + it["rule"]
     return gt
 

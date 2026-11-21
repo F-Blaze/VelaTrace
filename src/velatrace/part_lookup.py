@@ -24,7 +24,7 @@ from .bom import _ref_key, lcsc_code, mpn_of
 from .easyeda import RealPad, RealPart, _text, parse_component
 from .errors import VelaTraceError
 from .findings import Finding, Severity
-from .footprint_fit import compare, fit3_generic_header, fit_candidates, kicad_pads, pad_nets
+from .footprint_fit import compare, fit3_generic_header, fit_candidates, kicad_pads, pad_names, pad_nets
 from .jlc_http import JlcNetError, request
 from .models import DesignSnapshot
 from .parts_db import _atomic_write
@@ -112,9 +112,10 @@ def _load_cache(config_dir: Path) -> dict[str, dict]:
 
 def _from_row(code: str, row: dict) -> RealPart | None:
     try:
-        # Rows saved before pad areas were kept have 4 fields; their area is unknown (0).
-        pads = tuple(RealPad(str(n)[:16], float(x), float(y), bool(t), float(area[0]) if area else 0.0)
-                     for n, x, y, t, *area in row["pads"])
+        # Rows saved before pad areas (or pin names) were kept have 4 (or 5) fields: unknown.
+        pads = tuple(RealPad(str(n)[:16], float(x), float(y), bool(t), float(rest[0]) if rest else 0.0,
+                             str(rest[1])[:32] if len(rest) > 1 else "")
+                     for n, x, y, t, *rest in row["pads"])
         return RealPart(code, str(row["title"]), str(row["package"]), pads) if pads else None
     except (KeyError, TypeError, ValueError):
         return None
@@ -124,7 +125,7 @@ def _row(part: RealPart | None, at: str) -> dict:
     if part is None:
         return {"at": at, "none": True}
     return {"at": at, "title": part.title, "package": part.package,
-            "pads": [[p.number, p.x_mm, p.y_mm, p.through_hole, p.area_mm2] for p in part.pads]}
+            "pads": [[p.number, p.x_mm, p.y_mm, p.through_hole, p.area_mm2, p.name] for p in part.pads]}
 
 
 # ---- DigiKey -----------------------------------------------------------------------------------
@@ -460,7 +461,7 @@ class PartLookup:
             for ref, part in self.parts.items():
                 if ref in by_ref:
                     for item in compare(ref, kicad_pads(by_ref[ref]), part, pad_nets(by_ref[ref]),
-                                        fit3_generic_header(by_ref[ref])):
+                                        fit3_generic_header(by_ref[ref]), pad_names(by_ref[ref])):
                         found.append(replace(item, evidence=item.evidence + " Source: DigiKey.")
                                      if part.source == "digikey" else item)
             if self.unchecked:
