@@ -931,3 +931,9 @@ def test_ldo_pins_named_output_drive_and_hv_startup_pin_is_not_a_supply():
                 ("3", "GND", "GND", "power_in"), ("4", "/X", "LO", "output"))
     feed = res("R1", "/HV", "+400V", "1M")
     assert [f.nets for f in rules(design(ctrl, feed, cap("C1", "+12V")), "decoupling.missing")] == []
+
+
+def test_generic_symbol_name_with_a_value_is_not_missing():
+    from velatrace.audit_rules import _GENERIC_VALUE
+    assert _GENERIC_VALUE.fullmatch("R_Small_US") and _GENERIC_VALUE.fullmatch("C_Polarized_Small")
+    assert not _GENERIC_VALUE.fullmatch("R_Poti_1K")   # round 13 (seen): a 1k pot named by its value
