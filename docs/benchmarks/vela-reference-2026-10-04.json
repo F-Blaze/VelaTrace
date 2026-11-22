@@ -1,0 +1,2342 @@
+{
+  "schema": 2,
+  "router_name": "Vela-routing",
+  "corpus": "authored-reference-notch-v1",
+  "repeats": 3,
+  "kicad_version": [
+    10,
+    0,
+    4
+  ],
+  "router_version": "2.1.0",
+  "router_sha256": "2c07d58f75dac03782664081e7a58b41c25400d871a9fcf166a2ea6fe60d5def",
+  "kicad_cli_sha256": "e2fa37ddc9119a4b3c40cd61f5282c70ffc02c0190670d2fdb46dc11f3c95a93",
+  "java_sha256": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55",
+  "requirements": [
+    {
+      "net": "N1",
+      "signal_layer": "F.Cu",
+      "reference_layer": "In1.Cu",
+      "reference_net": "GND",
+      "edge_margin_mm": 0.05
+    }
+  ],
+  "cases": [
+    {
+      "layers": 4,
+      "trial": 1,
+      "input_sha256": {
+        "reference.kicad_pcb": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "bad74db6a5e39136813efaa75badaee707b12b329ed55eedc1c436c2efd28405"
+      },
+      "preparation_seconds": 3.60999999998603,
+      "source_fill": {
+        "source_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "filled_board_digest": "5bea43d59ff1e5ac606f26a2d0e89c5d1780df56e0d540d66144fb98dacf4766",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 11.01500000001397,
+          "total_seconds": 14.625,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 7.640999999945052,
+            "drc_seconds": 1.7349999999860302,
+            "refill_seconds": 1.312000000034459,
+            "coverage_seconds": 0.26500000001396984
+          }
+        },
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "52520aa59740a67dde0b17eaa589bff50e9c9dde5cc30903b8ab35b9eca85e32",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "52520aa59740a67dde0b17eaa589bff50e9c9dde5cc30903b8ab35b9eca85e32",
+            "stackup_digest": "3c44564185254e90209d2ebb5c866fa976c621096d2b6b8981b3c68f8cd2b15d",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 400.24079023694196,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 15.23499999998603,
+          "total_seconds": 18.84499999997206,
+          "stages": {
+            "projection_seconds": 0.2660000000614673,
+            "routing_seconds": 9.202999999979511,
+            "drc_seconds": 2.890999999945052,
+            "refill_seconds": 2.6709999999729916,
+            "coverage_seconds": 0.015999999945051968
+          }
+        },
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "filled_board_digest": "8930be68f09890ddfcdbd915f4bb751c531b1b8cb18ccdda91dc142d292d1af0",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "8930be68f09890ddfcdbd915f4bb751c531b1b8cb18ccdda91dc142d292d1af0",
+            "stackup_digest": "3c44564185254e90209d2ebb5c866fa976c621096d2b6b8981b3c68f8cd2b15d",
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.56387640595833,
+            "estimated_delay_ps": 400.4116792034955,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.56387640595831,
+            "via_count": 0
+          },
+          "wall_seconds": 16.28200000000652,
+          "total_seconds": 19.89199999999255,
+          "stages": {
+            "projection_seconds": 0.9070000000065193,
+            "routing_seconds": 10.625,
+            "drc_seconds": 1.9059999999590218,
+            "refill_seconds": 2.64000000001397,
+            "coverage_seconds": 0.045999999972991645
+          }
+        }
+      },
+      "solver_order": [
+        "baseline",
+        "reference-triangles",
+        "vela-routing"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 4,
+      "trial": 2,
+      "input_sha256": {
+        "reference.kicad_pcb": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "bad74db6a5e39136813efaa75badaee707b12b329ed55eedc1c436c2efd28405"
+      },
+      "preparation_seconds": 2.797000000020489,
+      "source_fill": {
+        "source_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "1ee90f23821ee9eb11a5baa72ff17fa1198a98c68a07adb830475c2f13ad7860",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "1ee90f23821ee9eb11a5baa72ff17fa1198a98c68a07adb830475c2f13ad7860",
+            "stackup_digest": "3c44564185254e90209d2ebb5c866fa976c621096d2b6b8981b3c68f8cd2b15d",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 400.24079023694196,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 21.95299999997951,
+          "total_seconds": 24.75,
+          "stages": {
+            "projection_seconds": 0.4529999999795109,
+            "routing_seconds": 10.608999999938533,
+            "drc_seconds": 3.109000000054948,
+            "refill_seconds": 7.5,
+            "coverage_seconds": 0.03100000007543713
+          }
+        },
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "filled_board_digest": "63534c0f5f0c97c8a61d38a9943ff728434a335106fb89ff107bdde116841252",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "63534c0f5f0c97c8a61d38a9943ff728434a335106fb89ff107bdde116841252",
+            "stackup_digest": "3c44564185254e90209d2ebb5c866fa976c621096d2b6b8981b3c68f8cd2b15d",
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.56387640595833,
+            "estimated_delay_ps": 400.4116792034955,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.56387640595831,
+            "via_count": 0
+          },
+          "wall_seconds": 13.312999999965541,
+          "total_seconds": 16.10999999998603,
+          "stages": {
+            "projection_seconds": 0.7660000000614673,
+            "routing_seconds": 8.780999999959022,
+            "drc_seconds": 1.937999999965541,
+            "refill_seconds": 1.702999999979511,
+            "coverage_seconds": 0.015000000013969839
+          }
+        },
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "filled_board_digest": "f0b6b102327a07994266f16d21a6a156106472a7f06675855369f00e8c3a20b5",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 11.297000000020489,
+          "total_seconds": 14.094000000040978,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 7.73499999998603,
+            "drc_seconds": 1.922000000020489,
+            "refill_seconds": 1.5469999999040738,
+            "coverage_seconds": 0.030999999959021807
+          }
+        }
+      },
+      "solver_order": [
+        "reference-triangles",
+        "vela-routing",
+        "baseline"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 4,
+      "trial": 3,
+      "input_sha256": {
+        "reference.kicad_pcb": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "bad74db6a5e39136813efaa75badaee707b12b329ed55eedc1c436c2efd28405"
+      },
+      "preparation_seconds": 1.0940000000409782,
+      "source_fill": {
+        "source_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "filled_board_digest": "feea7695365d0adb615be519314c486d2b1d670b2ad465851c410062f846bb48",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "feea7695365d0adb615be519314c486d2b1d670b2ad465851c410062f846bb48",
+            "stackup_digest": "3c44564185254e90209d2ebb5c866fa976c621096d2b6b8981b3c68f8cd2b15d",
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.55281610292029,
+            "estimated_delay_ps": 400.3497949857257,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.55281610292027,
+            "via_count": 0
+          },
+          "wall_seconds": 11.265999999945052,
+          "total_seconds": 12.35999999998603,
+          "stages": {
+            "projection_seconds": 0.375,
+            "routing_seconds": 7.937000000034459,
+            "drc_seconds": 1.5310000000754371,
+            "refill_seconds": 1.297000000020489,
+            "coverage_seconds": 0.03100000007543713
+          }
+        },
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "filled_board_digest": "f4b922bfdfab9f1b51b7b755a8202a1bd2fe872f4cf93cb4e76aaa863450eac2",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 9.76500000001397,
+          "total_seconds": 10.859000000054948,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 6.531000000075437,
+            "drc_seconds": 1.9209999999729916,
+            "refill_seconds": 1.2189999999245629,
+            "coverage_seconds": 0.015000000013969839
+          }
+        },
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "cfeea35dee9623aca3b6c3ec4e8676c9d16346d3201939249becf02417ae2ff5",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "cfeea35dee9623aca3b6c3ec4e8676c9d16346d3201939249becf02417ae2ff5",
+            "stackup_digest": "3c44564185254e90209d2ebb5c866fa976c621096d2b6b8981b3c68f8cd2b15d",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 400.24079023694196,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 10.65700000000652,
+          "total_seconds": 11.751000000047497,
+          "stages": {
+            "projection_seconds": 0.28200000000651926,
+            "routing_seconds": 7.60999999998603,
+            "drc_seconds": 1.4690000000409782,
+            "refill_seconds": 1.187000000034459,
+            "coverage_seconds": 0.015999999945051968
+          }
+        }
+      },
+      "solver_order": [
+        "vela-routing",
+        "baseline",
+        "reference-triangles"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 6,
+      "trial": 1,
+      "input_sha256": {
+        "reference.kicad_pcb": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "c285bd58d81f545fe5dcc1fb9518faf6af1fd798ed7061c35f0c6c24203feb03"
+      },
+      "preparation_seconds": 0.9529999999795109,
+      "source_fill": {
+        "source_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "filled_board_digest": "c0c1f54d04bece496193ac760853d2377caaf129338c057770874baea5369aa0",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 9.156000000075437,
+          "total_seconds": 10.109000000054948,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 6.094000000040978,
+            "drc_seconds": 1.6089999999385327,
+            "refill_seconds": 1.390999999945052,
+            "coverage_seconds": 0.01600000006146729
+          }
+        },
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "d2f0f0acead1faf21fedf5684d2a703a641d2d5a313a76cc120970a542f39ff0",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "d2f0f0acead1faf21fedf5684d2a703a641d2d5a313a76cc120970a542f39ff0",
+            "stackup_digest": "143e1a4c127daaae543f005341329373bc86520ae884c9fd5f6bb03defa97f03",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 406.0038948577384,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 11.530999999959022,
+          "total_seconds": 12.483999999938533,
+          "stages": {
+            "projection_seconds": 0.3279999999795109,
+            "routing_seconds": 8.35999999998603,
+            "drc_seconds": 1.4690000000409782,
+            "refill_seconds": 1.25,
+            "coverage_seconds": 0.030999999959021807
+          }
+        },
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "filled_board_digest": "d634c7ca6028d24fdd8a8312bd94ea9ac43c0e2fa485b077f2e9a4312830e7ce",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "d634c7ca6028d24fdd8a8312bd94ea9ac43c0e2fa485b077f2e9a4312830e7ce",
+            "stackup_digest": "143e1a4c127daaae543f005341329373bc86520ae884c9fd5f6bb03defa97f03",
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.56387640595833,
+            "estimated_delay_ps": 406.1772444705249,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.56387640595831,
+            "via_count": 0
+          },
+          "wall_seconds": 15.219000000040978,
+          "total_seconds": 16.17200000002049,
+          "stages": {
+            "projection_seconds": 0.3440000000409782,
+            "routing_seconds": 10.687000000034459,
+            "drc_seconds": 2.577999999979511,
+            "refill_seconds": 1.4690000000409782,
+            "coverage_seconds": 0.03200000000651926
+          }
+        }
+      },
+      "solver_order": [
+        "baseline",
+        "reference-triangles",
+        "vela-routing"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 6,
+      "trial": 2,
+      "input_sha256": {
+        "reference.kicad_pcb": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "c285bd58d81f545fe5dcc1fb9518faf6af1fd798ed7061c35f0c6c24203feb03"
+      },
+      "preparation_seconds": 1.4690000000409782,
+      "source_fill": {
+        "source_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "154cc68a97ba200acc9fb323a6b3f04cd4ae5255641ece0012c135642255b376",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "154cc68a97ba200acc9fb323a6b3f04cd4ae5255641ece0012c135642255b376",
+            "stackup_digest": "143e1a4c127daaae543f005341329373bc86520ae884c9fd5f6bb03defa97f03",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 406.0038948577384,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 18.030999999959022,
+          "total_seconds": 19.5,
+          "stages": {
+            "projection_seconds": 0.3589999999385327,
+            "routing_seconds": 14.71799999999348,
+            "drc_seconds": 1.5,
+            "refill_seconds": 1.297000000020489,
+            "coverage_seconds": 0.015999999945051968
+          }
+        },
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "filled_board_digest": "7469d72ac2fa0ccfaf3724c1d105ea8f7324dec9b6e78959c421935900e25591",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "7469d72ac2fa0ccfaf3724c1d105ea8f7324dec9b6e78959c421935900e25591",
+            "stackup_digest": "143e1a4c127daaae543f005341329373bc86520ae884c9fd5f6bb03defa97f03",
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.55281610292029,
+            "estimated_delay_ps": 406.114469176108,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.55281610292027,
+            "via_count": 0
+          },
+          "wall_seconds": 11.452999999979511,
+          "total_seconds": 12.922000000020489,
+          "stages": {
+            "projection_seconds": 0.5,
+            "routing_seconds": 7.89000000001397,
+            "drc_seconds": 1.672000000020489,
+            "refill_seconds": 1.2959999999729916,
+            "coverage_seconds": 0.015999999945051968
+          }
+        },
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "filled_board_digest": "eb1180d3a8557172fca76a4f70194b459d920546cfea4e8cdb017a9bce337fee",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 10.73499999998603,
+          "total_seconds": 12.204000000027008,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 7.266000000061467,
+            "drc_seconds": 1.7179999999934807,
+            "refill_seconds": 1.672000000020489,
+            "coverage_seconds": 0.015999999945051968
+          }
+        }
+      },
+      "solver_order": [
+        "reference-triangles",
+        "vela-routing",
+        "baseline"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 6,
+      "trial": 3,
+      "input_sha256": {
+        "reference.kicad_pcb": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "c285bd58d81f545fe5dcc1fb9518faf6af1fd798ed7061c35f0c6c24203feb03"
+      },
+      "preparation_seconds": 1.702999999979511,
+      "source_fill": {
+        "source_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "filled_board_digest": "4bfcc8da0315f22f5fbf7aacf45e9bb99e1f5240ed08b36ceccc1248dd1cd4a0",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "4bfcc8da0315f22f5fbf7aacf45e9bb99e1f5240ed08b36ceccc1248dd1cd4a0",
+            "stackup_digest": "143e1a4c127daaae543f005341329373bc86520ae884c9fd5f6bb03defa97f03",
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.55281610292029,
+            "estimated_delay_ps": 406.114469176108,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.55281610292027,
+            "via_count": 0
+          },
+          "wall_seconds": 17.57900000002701,
+          "total_seconds": 19.28200000000652,
+          "stages": {
+            "projection_seconds": 0.7190000000409782,
+            "routing_seconds": 11.780999999959022,
+            "drc_seconds": 2.859000000054948,
+            "refill_seconds": 2.01500000001397,
+            "coverage_seconds": 0.03200000000651926
+          }
+        },
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "filled_board_digest": "ebcecfcc0ff6af8069ce38a8b8c69abb26b5e8a467bf95bfafbb0a3d33dc5a01",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 10.64000000001397,
+          "total_seconds": 12.34299999999348,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 7.60999999998603,
+            "drc_seconds": 1.687000000034459,
+            "refill_seconds": 1.297000000020489,
+            "coverage_seconds": 0.015000000013969839
+          }
+        },
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "f2ec979de18a0bc8b361c2f6e632d1ffe7edb562f6e64e37d96e89c5a01d8498",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "f2ec979de18a0bc8b361c2f6e632d1ffe7edb562f6e64e37d96e89c5a01d8498",
+            "stackup_digest": "143e1a4c127daaae543f005341329373bc86520ae884c9fd5f6bb03defa97f03",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 406.0038948577384,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 13.297000000020489,
+          "total_seconds": 15.0,
+          "stages": {
+            "projection_seconds": 0.2809999999590218,
+            "routing_seconds": 9.562999999965541,
+            "drc_seconds": 1.812000000034459,
+            "refill_seconds": 1.452999999979511,
+            "coverage_seconds": 0.030999999959021807
+          }
+        }
+      },
+      "solver_order": [
+        "vela-routing",
+        "baseline",
+        "reference-triangles"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 8,
+      "trial": 1,
+      "input_sha256": {
+        "reference.kicad_pcb": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "0e757cb9728becfd4475878ca7238e58df10a6ae8f5a0251b2543490fb31d652"
+      },
+      "preparation_seconds": 1.202999999979511,
+      "source_fill": {
+        "source_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "filled_board_digest": "aca37690777a172858bf8d103e3a45a104b66e26a1b3d57fd5890f6af9566aa5",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 12.48499999998603,
+          "total_seconds": 13.687999999965541,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 7.609000000054948,
+            "drc_seconds": 1.8599999999860302,
+            "refill_seconds": 2.859000000054948,
+            "coverage_seconds": 0.03200000000651926
+          }
+        },
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "f0478ced77838f155ddca2a9d158b7dc5f2f2b67a325e19c6938c7f5fd9de017",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "f0478ced77838f155ddca2a9d158b7dc5f2f2b67a325e19c6938c7f5fd9de017",
+            "stackup_digest": "140328e2f85c1abe8cd2c6894972b91090b4495cd2728182f07a80fa654c4ab9",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 411.3698394433405,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 25.655999999959022,
+          "total_seconds": 26.858999999938533,
+          "stages": {
+            "projection_seconds": 0.765999999945052,
+            "routing_seconds": 18.375,
+            "drc_seconds": 2.827999999979511,
+            "refill_seconds": 3.343999999924563,
+            "coverage_seconds": 0.06299999996554106
+          }
+        },
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "filled_board_digest": "3fa08b01ceed11de3112dda67aeebfa48c4a72bfce8e59e6e19eb6849794d895",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "3fa08b01ceed11de3112dda67aeebfa48c4a72bfce8e59e6e19eb6849794d895",
+            "stackup_digest": "140328e2f85c1abe8cd2c6894972b91090b4495cd2728182f07a80fa654c4ab9",
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.56387640595833,
+            "estimated_delay_ps": 411.5454801287692,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.56387640595831,
+            "via_count": 0
+          },
+          "wall_seconds": 18.780999999959022,
+          "total_seconds": 19.983999999938533,
+          "stages": {
+            "projection_seconds": 1.4059999999590218,
+            "routing_seconds": 13.156000000075437,
+            "drc_seconds": 2.187999999965541,
+            "refill_seconds": 1.7650000000139698,
+            "coverage_seconds": 0.062000000034458935
+          }
+        }
+      },
+      "solver_order": [
+        "baseline",
+        "reference-triangles",
+        "vela-routing"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 8,
+      "trial": 2,
+      "input_sha256": {
+        "reference.kicad_pcb": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "0e757cb9728becfd4475878ca7238e58df10a6ae8f5a0251b2543490fb31d652"
+      },
+      "preparation_seconds": 2.60999999998603,
+      "source_fill": {
+        "source_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "6b38277216d0d7c802da6650ff35f49dd59500e75750c145915933954b78b911",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "6b38277216d0d7c802da6650ff35f49dd59500e75750c145915933954b78b911",
+            "stackup_digest": "140328e2f85c1abe8cd2c6894972b91090b4495cd2728182f07a80fa654c4ab9",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 411.3698394433405,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 20.17200000002049,
+          "total_seconds": 22.78200000000652,
+          "stages": {
+            "projection_seconds": 0.734000000054948,
+            "routing_seconds": 13.937000000034459,
+            "drc_seconds": 1.859000000054948,
+            "refill_seconds": 3.375,
+            "coverage_seconds": 0.0470000000204891
+          }
+        },
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "filled_board_digest": "b12e364a08c65f6dc608081cd9a241e9f68c571e2b3fc30f2195ef7e690d24e4",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "b12e364a08c65f6dc608081cd9a241e9f68c571e2b3fc30f2195ef7e690d24e4",
+            "stackup_digest": "140328e2f85c1abe8cd2c6894972b91090b4495cd2728182f07a80fa654c4ab9",
+            "plan_digest": "bed5692f5ac4b045dc17007b2e33e06ec1e42168942f1de1f2cdecbc1bc9a88e",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.55281610292029,
+            "estimated_delay_ps": 411.48187516558454,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.55281610292027,
+            "via_count": 0
+          },
+          "wall_seconds": 19.75,
+          "total_seconds": 22.35999999998603,
+          "stages": {
+            "projection_seconds": 0.875,
+            "routing_seconds": 14.98499999998603,
+            "drc_seconds": 2.593999999924563,
+            "refill_seconds": 1.1560000000754371,
+            "coverage_seconds": 0.015000000013969839
+          }
+        },
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "986471c3b6d51a8880a8c3b46f3ec28c0c45ef117dc782b7573c02d061f65ea0",
+            "filled_board_digest": "48aa5f9c065dd61255549d4c685c036d27e010b3c2a2d359dcd596290c50092d",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 9.062999999965541,
+          "total_seconds": 11.672999999951571,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 5.937000000034459,
+            "drc_seconds": 1.4849999999860302,
+            "refill_seconds": 1.577999999979511,
+            "coverage_seconds": 0.015999999945051968
+          }
+        }
+      },
+      "solver_order": [
+        "reference-triangles",
+        "vela-routing",
+        "baseline"
+      ],
+      "source_unchanged": true
+    },
+    {
+      "layers": 8,
+      "trial": 3,
+      "input_sha256": {
+        "reference.kicad_pcb": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "0e757cb9728becfd4475878ca7238e58df10a6ae8f5a0251b2543490fb31d652"
+      },
+      "preparation_seconds": 1.202999999979511,
+      "source_fill": {
+        "source_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+        "context_digest": "d1c97e2bd081f44fc6196b1917c96c11e2f582cc46cec730f3289002a9515f03"
+      },
+      "solvers": {
+        "vela-routing": {
+          "accepted": true,
+          "keepouts": 33,
+          "report": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "filled_board_digest": "d25e3eec5b15e257578468d73dddce391e923bd0d14a759dbdfba82caf4c2254",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "d25e3eec5b15e257578468d73dddce391e923bd0d14a759dbdfba82caf4c2254",
+            "stackup_digest": "140328e2f85c1abe8cd2c6894972b91090b4495cd2728182f07a80fa654c4ab9",
+            "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.56387640595833,
+            "estimated_delay_ps": 411.5454801287692,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.56387640595831,
+            "via_count": 0
+          },
+          "wall_seconds": 18.07900000002701,
+          "total_seconds": 19.28200000000652,
+          "stages": {
+            "projection_seconds": 0.7190000000409782,
+            "routing_seconds": 13.219000000040978,
+            "drc_seconds": 2.297000000020489,
+            "refill_seconds": 1.7179999999934807,
+            "coverage_seconds": 0.015999999945051968
+          }
+        },
+        "baseline": {
+          "accepted": false,
+          "keepouts": 0,
+          "report": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "654ae722d7d0f3f007fea291164792f3122130bc75b2f0e84cbb9e1b9ed40613",
+            "filled_board_digest": "f2c2cbbc7b010d0d250fe2c0f4b6ecbe975b8fe346e0954b356101a29e9d1614",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "gap",
+                "affected_edges": [
+                  [
+                    0,
+                    0
+                  ]
+                ],
+                "details": "Trace width/margin crosses missing reference copper."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "gap",
+          "endpoint_delay": null,
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 50.0,
+            "via_count": 0
+          },
+          "wall_seconds": 19.92099999997299,
+          "total_seconds": 21.123999999952503,
+          "stages": {
+            "projection_seconds": 0.0,
+            "routing_seconds": 16.280999999959022,
+            "drc_seconds": 1.9059999999590218,
+            "refill_seconds": 1.6099999999860302,
+            "coverage_seconds": 0.030999999959021807
+          }
+        },
+        "reference-triangles": {
+          "accepted": true,
+          "keepouts": 596,
+          "report": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "drc_violations": 0,
+            "unconnected_count": 0,
+            "routed_connections": null,
+            "total_connections": null,
+            "enforced_constraint_ids": [],
+            "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+            "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+            "preexisting_warnings": 3,
+            "blocking_reasons": []
+          },
+          "coverage": {
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "filled_board_digest": "0099908623e600b785e4e1891934fdd01d5e87dac376ddae55d44a1a9ab8e131",
+            "requirements_digest": "7356c5346fd9e6577ec89af9484be0c04e7a24224b0d12cea7cb73b140fdfc51",
+            "checks": [
+              {
+                "requirement": {
+                  "net": "N1",
+                  "signal_layer": "F.Cu",
+                  "reference_layer": "In1.Cu",
+                  "reference_net": "GND",
+                  "edge_margin_mm": 0.05
+                },
+                "status": "covered",
+                "affected_edges": [],
+                "details": "Full trace width/margin is geometrically covered."
+              }
+            ],
+            "limitations": [
+              "Geometric coverage only; stored fill may be stale unless freshly regenerated for this candidate.",
+              "Reference-net attachment, via return transitions, impedance and signal integrity are not proven."
+            ]
+          },
+          "coverage_status": "covered",
+          "endpoint_delay": {
+            "status": "estimated",
+            "board_digest": "0099908623e600b785e4e1891934fdd01d5e87dac376ddae55d44a1a9ab8e131",
+            "stackup_digest": "140328e2f85c1abe8cd2c6894972b91090b4495cd2728182f07a80fa654c4ab9",
+            "plan_digest": "34690683ef193ec7960cafa8272d7bcffe0e0ba26f0fcd86d34aaf55e0fd7a2f",
+            "requirement_digest": "6f09bef680d300b5f056af453eeead376a7a4e3432c3000198fb3756c37f53bc",
+            "path_length_mm": 71.53333414778567,
+            "estimated_delay_ps": 411.3698394433405,
+            "details": "Connected endpoint path estimated with the declared dielectric and ideal microstrip model.",
+            "limitations": [
+              "Advisory zero-thickness quasi-static microstrip estimate; no mask, loss, dispersion, frequency, coupling, or manufacturing tolerance.",
+              "Reference copper attachment, filled-plane continuity, return transitions, impedance, and signal integrity are not verified.",
+              "Only F.Cu paths with adjacent In1.Cu reference copper, zero-rotation front pads, and no vias are supported."
+            ]
+          },
+          "fresh_drc": {
+            "blocking": 0,
+            "preexisting_warnings": 3,
+            "unconnected": 0
+          },
+          "metrics": {
+            "copper_length_mm": 71.53333414778565,
+            "via_count": 0
+          },
+          "wall_seconds": 22.266000000061467,
+          "total_seconds": 23.469000000040978,
+          "stages": {
+            "projection_seconds": 0.40700000000651926,
+            "routing_seconds": 18.25,
+            "drc_seconds": 1.890999999945052,
+            "refill_seconds": 1.4849999999860302,
+            "coverage_seconds": 0.015999999945051968
+          }
+        }
+      },
+      "solver_order": [
+        "vela-routing",
+        "baseline",
+        "reference-triangles"
+      ],
+      "source_unchanged": true
+    }
+  ],
+  "timing": "Total includes shared preparation plus projection, routing and validation; tool startup checks excluded equally. Solver order rotates by trial.",
+  "limitations": "Geometric reference coverage only; not SI, impedance or return-transition approval.",
+  "implementation_sha256": [
+    {
+      "file": "__init__.py",
+      "sha256": "cf08501ca96e5ffbfa4f9b11b1d9493b26b189f7946fe6c64b049524d063d59d"
+    },
+    {
+      "file": "__main__.py",
+      "sha256": "b47f52caa02fb33eb67f865300a06d3007507938733dc85abaaff640b24371a1"
+    },
+    {
+      "file": "audit.py",
+      "sha256": "3b8a86588b1a2c794d0feae1f275661020af7bdecdad284cd25733602de12345"
+    },
+    {
+      "file": "audit_rules.py",
+      "sha256": "ed3dfc31694782b49326594e103f61c325da3a8f018ea83decc2246ab92acb18"
+    },
+    {
+      "file": "benchmark.py",
+      "sha256": "e21a11ee477ce2b40955f033a583e216628a97369a35d8f1a4e83acb9ad8eccc"
+    },
+    {
+      "file": "bom.py",
+      "sha256": "23053c61a76d8229ce44ce20138a420d62b7434eea439a78c3d5cae4babb4a1b"
+    },
+    {
+      "file": "candidate.py",
+      "sha256": "22e1f7733fc1fb1f4850d7466dea94df1d1dec9ccf0d1c3d21b3e2ca727a80bb"
+    },
+    {
+      "file": "constraints.py",
+      "sha256": "49444b392c1ea0b03927ee5dba5063f30d78a7fb8e0f20296a519e2ed160ee57"
+    },
+    {
+      "file": "dsn.py",
+      "sha256": "a2635ebf9bd6482edb139e0bcf9aaeea2b7f43a11cb7bac8e6dfd0edbcf069ea"
+    },
+    {
+      "file": "electrical_rules.py",
+      "sha256": "c5237f98f6151b34b55841340cb8f5007be464714d1dbe38d33312206a9319e8"
+    },
+    {
+      "file": "endpoint_delay.py",
+      "sha256": "23c904d3a91af7b48333b05939c55a7540b9344c22c497f111e7b6e6bc1c9c79"
+    },
+    {
+      "file": "errors.py",
+      "sha256": "eaa8075bdb028f1b6b5e3afc4ac06ae0ea277c9347ae12603b7dbd27ca8865a6"
+    },
+    {
+      "file": "external_copper.py",
+      "sha256": "306880769b5c336408f841c26ab7c8e1ce3802c3630a48e636fd18bf4d39f85c"
+    },
+    {
+      "file": "findings.py",
+      "sha256": "a3a5dc355e11701dd60d70992a3fb6e6e5b83de44c3c6d754cd71ab588b36d8a"
+    },
+    {
+      "file": "flags.py",
+      "sha256": "a1423b201940d14d1684fedf582ba98e59fde2efc2123e0c229a38829a798253"
+    },
+    {
+      "file": "freerouting.py",
+      "sha256": "bd7fb06c10c6e47e835e64682b4e0fac9de8d5a5ae0a47c2cf0a2c4c9ce4c405"
+    },
+    {
+      "file": "ipc.py",
+      "sha256": "4cd8b763ad3d33cda9ad8e1b190602162937e37244ac4aa966939ee2200144a0"
+    },
+    {
+      "file": "kicad_cli.py",
+      "sha256": "d82085aff8d10a8018a7ba9d419f51a41c6a20d26f09f9ac4dbc8ce8bdca7eb3"
+    },
+    {
+      "file": "krt_benchmark.py",
+      "sha256": "be77a43ae2c25bdc49fa5ab78753c024bd817a3e3b174092b170d7d37d3fcd57"
+    },
+    {
+      "file": "models.py",
+      "sha256": "fb4e495eb8ba246fbb3e83dc2bf709ea0e85f0324dd6760d75a71307e158ac22"
+    },
+    {
+      "file": "netlist.py",
+      "sha256": "937e2c9ecfea4b3db9de0905aafe04f6261bd08df6d542942785c44a4a5713b8"
+    },
+    {
+      "file": "network.py",
+      "sha256": "baf4f2e0df7b38e35da89f378148d03ed5366561eee2b85bfd7707f8c01f2029"
+    },
+    {
+      "file": "parts_db.py",
+      "sha256": "487db6c556fb38cea8928bebc2ce8bfb8b10e49cf4035795533a11e91b7fceda"
+    },
+    {
+      "file": "portfolio.py",
+      "sha256": "9fc3bd89d018ad85fd8b4cafe0b38d349e7a098505eb10d55a55b4132b62ba39"
+    },
+    {
+      "file": "preflight.py",
+      "sha256": "47d93172fa070cde1bdeaa942e4093840d7b4ed288989be3482398ef99671852"
+    },
+    {
+      "file": "pricing.py",
+      "sha256": "75939d26b95b6e74499216dde6db52acfc055d1c8f4198ec68e217f0c74465ef"
+    },
+    {
+      "file": "privacy.py",
+      "sha256": "d35137dbaab960ddcabe7cd5cb000954d538e46ad49415298439d75990daa3d3"
+    },
+    {
+      "file": "provider.py",
+      "sha256": "807d4e696244c2e16270288f0d290cc6287de9ce5d245fead4e00147ca6febf6"
+    },
+    {
+      "file": "reference_benchmark.py",
+      "sha256": "d3646bea42e2778279b19d6fa8d60f9962d9a32274c1ced70632b2e98ba68959"
+    },
+    {
+      "file": "reference_planes.py",
+      "sha256": "6a1b8848d3787da82d908dcddd63e7da2fa2b25accbfc046ab17ca3a17aa9776"
+    },
+    {
+      "file": "reference_routing.py",
+      "sha256": "9f9fe3e6b7ee1a5b3029e34d74a5f94049242adb3b20bc20360faba2d82d25db"
+    },
+    {
+      "file": "report.py",
+      "sha256": "465cab03facbaadc68941fe03f33cfcfacc225e45581a58e4231b95fb1dc1103"
+    },
+    {
+      "file": "route_repair.py",
+      "sha256": "d14667fb9cb8e5950d3d7a4e53bcd0efd2ea6fe3ddbf062edc904621d14e9275"
+    },
+    {
+      "file": "routing.py",
+      "sha256": "ff385f58f6949989d6a10a7f327b3cf98c9b9402c4009971bd7d65c3946c5e64"
+    },
+    {
+      "file": "ses.py",
+      "sha256": "1836efc1b0ffacdb145f354c450b9a067b3d13be885450c891e27ae2e8c89925"
+    },
+    {
+      "file": "sexpr.py",
+      "sha256": "baddc8ffd35df43c9b0bfe2a390c621612f533f219b1c130d7f58f6f3a1860e3"
+    },
+    {
+      "file": "stackup.py",
+      "sha256": "daed080cfebe5b46944a1cbbad235a5e5e225c218d1fe14c7f47add633a1f3a0"
+    },
+    {
+      "file": "theme.py",
+      "sha256": "bf2edf1a91333d367af57c58c1ef4ec5bd57f56cc2ed900bed62df3c933ef047"
+    },
+    {
+      "file": "tokens.py",
+      "sha256": "1493128b777d448d063c484bb9cba4797bb90deb9b335ffea246fd2f579f576c"
+    },
+    {
+      "file": "ui.py",
+      "sha256": "da9cf8c6ca7a21794d6ff1e56d5feba82415a7407e5e2d90e1588e3d949859d5"
+    },
+    {
+      "file": "write_safety.py",
+      "sha256": "0a165d442f0dd5fc96b5de72cfc3793e01281a05e837e1cf1bef19598d73b801"
+    }
+  ],
+  "comparison": {
+    "4": {
+      "baseline": {
+        "attempts": 3,
+        "accepted": 0,
+        "median_total_seconds": 14.094000000040978
+      },
+      "reference-triangles": {
+        "attempts": 3,
+        "accepted": 3,
+        "median_total_seconds": 18.84499999997206
+      },
+      "vela-routing": {
+        "attempts": 3,
+        "accepted": 3,
+        "median_total_seconds": 16.10999999998603
+      },
+      "projection_speedup": 0.9507281553447232,
+      "universal_superiority_proven": false
+    },
+    "6": {
+      "baseline": {
+        "attempts": 3,
+        "accepted": 0,
+        "median_total_seconds": 12.204000000027008
+      },
+      "reference-triangles": {
+        "attempts": 3,
+        "accepted": 3,
+        "median_total_seconds": 15.0
+      },
+      "vela-routing": {
+        "attempts": 3,
+        "accepted": 3,
+        "median_total_seconds": 16.17200000002049
+      },
+      "projection_speedup": 0.7779276008710159,
+      "universal_superiority_proven": false
+    },
+    "8": {
+      "baseline": {
+        "attempts": 3,
+        "accepted": 0,
+        "median_total_seconds": 13.687999999965541
+      },
+      "reference-triangles": {
+        "attempts": 3,
+        "accepted": 3,
+        "median_total_seconds": 23.469000000040978
+      },
+      "vela-routing": {
+        "attempts": 3,
+        "accepted": 3,
+        "median_total_seconds": 19.983999999938533
+      },
+      "projection_speedup": 1.2171455243249167,
+      "universal_superiority_proven": false
+    }
+  },
+  "publication_note": "Implementation hashes were reformatted from a filename-keyed map to entries to avoid treating tokens.py as a credential field. All measured values and hash values are unchanged."
+}

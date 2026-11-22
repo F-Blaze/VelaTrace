@@ -1,0 +1,938 @@
+{
+  "scope": "Validation and fresh fill only; identical archived authored routes; no routing speed claim",
+  "kicad_version": [
+    10,
+    0,
+    4
+  ],
+  "kicad_cli_sha256": "e2fa37ddc9119a4b3c40cd61f5282c70ffc02c0190670d2fdb46dc11f3c95a93",
+  "cases": [
+    {
+      "layers": 4,
+      "input_sha256": {
+        "reference.kicad_pcb": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "bad74db6a5e39136813efaa75badaee707b12b329ed55eedc1c436c2efd28405",
+        "vela-routing\\reference.dsn": "d4d57a15d1757253438c90ec3787a77d3e8311efca70918b59abd6fb6aa4c195",
+        "vela-routing\\route.ses": "58b1ae2296a7bc1dc3acfe98c7ad1be1840bc2136d938e9924119c7be6c867c2"
+      },
+      "trials": [
+        {
+          "trial": 1,
+          "arms": {
+            "separate": {
+              "seconds": 9.562999999965541,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "fused": {
+              "seconds": 2.359000000054948,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "trial": 2,
+          "arms": {
+            "fused": {
+              "seconds": 2.094000000040978,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "separate": {
+              "seconds": 5.125,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "trial": 3,
+          "arms": {
+            "separate": {
+              "seconds": 4.577999999979511,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "fused": {
+              "seconds": 2.4209999999729916,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "6cf4b9ba7cffa70d206d3d40e3dd2c53b1b2560108dc43b79dacdd036c2f4dd1",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "source_unchanged": true,
+      "median_seconds": {
+        "separate": 5.125,
+        "fused": 2.359000000054948
+      },
+      "paired_reduction_percent": 59.14146341383457
+    },
+    {
+      "layers": 6,
+      "input_sha256": {
+        "reference.kicad_pcb": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "c285bd58d81f545fe5dcc1fb9518faf6af1fd798ed7061c35f0c6c24203feb03",
+        "vela-routing\\reference.dsn": "1e4be068da0803e3f65bc5378c4a36b469cfe451bdd85f50def9d9734d070eb8",
+        "vela-routing\\route.ses": "a12a664b730b5838d363f1c4dadaa67cc42886ef398cbe8250598f9f18095328"
+      },
+      "trials": [
+        {
+          "trial": 1,
+          "arms": {
+            "separate": {
+              "seconds": 4.26500000001397,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "fused": {
+              "seconds": 2.219000000040978,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "trial": 2,
+          "arms": {
+            "fused": {
+              "seconds": 2.3589999999385327,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "separate": {
+              "seconds": 4.187000000034459,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "trial": 3,
+          "arms": {
+            "separate": {
+              "seconds": 4.233999999938533,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "fused": {
+              "seconds": 2.187000000034459,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "0cafb2e88f99589689aa62711135bf382f4066b0c4354b4ad5b05ce66403561c",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "source_unchanged": true,
+      "median_seconds": {
+        "separate": 4.233999999938533,
+        "fused": 2.219000000040978
+      },
+      "paired_reduction_percent": 47.971864008588284
+    },
+    {
+      "layers": 8,
+      "input_sha256": {
+        "reference.kicad_pcb": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+        "reference.kicad_pro": "522440ddf7cf58b47ac3018e48551f7cbf1bca94b877cd3149bf1cfeb16ef9bd",
+        "reference.dsn": "0e757cb9728becfd4475878ca7238e58df10a6ae8f5a0251b2543490fb31d652",
+        "vela-routing\\reference.dsn": "7e3d6b4b8544f646115b96f0f75b13ccabae9aebf0695246d49ea4df08f59aec",
+        "vela-routing\\route.ses": "595ac9a99477c465d4990b8eaa384a137c4c4afbbb45b2c42315214d81b59a72"
+      },
+      "trials": [
+        {
+          "trial": 1,
+          "arms": {
+            "separate": {
+              "seconds": 4.421999999904074,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "fused": {
+              "seconds": 2.14000000001397,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "trial": 2,
+          "arms": {
+            "fused": {
+              "seconds": 2.125,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "separate": {
+              "seconds": 4.031000000075437,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        },
+        {
+          "trial": 3,
+          "arms": {
+            "separate": {
+              "seconds": 4.625,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            },
+            "fused": {
+              "seconds": 2.718999999924563,
+              "accepted": true,
+              "report": {
+                "plan_digest": "fc0b30070b5a1c5c823bd5543064fa8ad0295b8356fef362e37c0c647c564648",
+                "drc_violations": 0,
+                "unconnected_count": 0,
+                "routed_connections": null,
+                "total_connections": null,
+                "enforced_constraint_ids": [],
+                "details": "Official KiCad CLI DRC of the candidate against the unrouted board; source board unchanged.",
+                "board_digest": "ec8e0aa5b54b88ac0be2faaba5219b0a3a95a0453308cf06ebc233557b754e8e",
+                "preexisting_warnings": 3,
+                "blocking_reasons": []
+              },
+              "geometry_preserved": true,
+              "coverage": "covered",
+              "fresh_drc": {
+                "violations": 3,
+                "unconnected": 0,
+                "schematic_parity": 0,
+                "issues": [
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "7050a5c7-cc02-50bb-bc16-2c098e6e5d68"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "abca6274-a5a4-5afd-bcdf-c475ad8951a5"
+                    ]
+                  ],
+                  [
+                    "lib_footprint_issues",
+                    "warning",
+                    [
+                      "d27dbcaf-481b-5840-91e9-434a5ba5a263"
+                    ]
+                  ]
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "source_unchanged": true,
+      "median_seconds": {
+        "separate": 4.421999999904074,
+        "fused": 2.14000000001397
+      },
+      "paired_reduction_percent": 47.283552469356685
+    }
+  ]
+}
