@@ -265,11 +265,16 @@ class KiCadCli:
         return environment
 
     def check_startup(self) -> tuple[int, int, int]:
+        # kicad-cli re-saves kicad_common.json when it exits; printing the version needs no settings, so it gets
+        # an empty private folder and never rewrites the user's own (it set their working_dir before).
         try:
-            result = subprocess.run([str(self.executable), "version"], shell=False,
-                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                    timeout=10, check=False, env=self._environment(),
-                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            with tempfile.TemporaryDirectory(prefix="velatrace-version-", ignore_cleanup_errors=True) as private:
+                environment = self._environment()
+                environment["KICAD_CONFIG_HOME"] = private
+                result = subprocess.run([str(self.executable), "version"], shell=False, cwd=private,
+                                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                        timeout=10, check=False, env=environment,
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise CapabilityError("Cannot run kicad-cli. Check the configured KiCad installation.") from exc
         text = result.stdout[:4096].decode("utf-8", errors="replace")

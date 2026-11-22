@@ -75,6 +75,21 @@ class KiCadCliTests(unittest.TestCase):
                 self.assertFalse((home / '10.0' / 'kicad_common.json').exists())
                 self.assertEqual(run.call_args.args[-1], home)
 
+    def test_version_check_never_runs_in_the_users_kicad_settings(self):
+        # kicad-cli re-saves kicad_common.json on exit: the version check must give it a private folder.
+        cli = object.__new__(KiCadCli)
+        cli.executable, cli.config_directory = Path("kicad-cli"), None
+        seen = {}
+        def run(arguments, **kw):
+            seen.update(kw)
+            seen["home_existed"] = Path(kw["env"]["KICAD_CONFIG_HOME"]).is_dir()
+            return type("Done", (), {"returncode": 0, "stdout": b"10.0.6"})()
+        with patch("velatrace.kicad_cli.subprocess.run", side_effect=run):
+            self.assertEqual(cli.check_startup(), (10, 0, 6))
+        home = seen["env"]["KICAD_CONFIG_HOME"]
+        self.assertTrue(seen["home_existed"] and "velatrace-version-" in home and seen["cwd"] == home)
+        self.assertFalse(Path(home).exists())   # removed afterwards
+
     def test_missing_cli_is_actionable(self):
         with patch.dict(os.environ, {"PATH": ""}):
             with self.assertRaisesRegex(CapabilityError, "Install KiCad 9"):
