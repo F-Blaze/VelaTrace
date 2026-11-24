@@ -281,10 +281,20 @@ def check_vbus_capacitance(snapshot: DesignSnapshot) -> list[Finding]:
                 continue
             caps = _ground_caps(design, net, conn)
             behind = {}  # series part -> its capacitors
-            for part, far in _vbus_links(design, net, conn):
-                found = {ref: farad for ref, farad in _ground_caps(design, far, conn).items() if ref not in caps}
-                if found:
-                    behind[part.reference] = found
+            # Follow chains of such links (a fuse, then an OR-ing diode) up to three hops from the connector.
+            seen, frontier = {net}, [net]
+            for _ in range(3):
+                frontier, here = [], frontier
+                for near in here:
+                    for part, far in _vbus_links(design, near, conn):
+                        if far in seen:
+                            continue
+                        seen.add(far)
+                        frontier.append(far)
+                        counted = set(caps) | {ref for found in behind.values() for ref in found}
+                        found = {ref: farad for ref, farad in _ground_caps(design, far, conn).items() if ref not in counted}
+                        if found:
+                            behind[part.reference] = found
             total = sum(caps.values(), Decimal(0)) + sum((sum(f.values(), Decimal(0)) for f in behind.values()),
                                                          Decimal(0))
             # Ceramics lose much of their value at 5 V (DC bias), the smaller the case the more: judge the
@@ -540,4 +550,46 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
             f"{ic.reference} {', '.join(_pin_text(pin) for pin in bad)} is a power input and is connected to "
             "nothing (no net, no no-connect flag).",
             "Connect the pin to its supply or ground, or flag it no-connect if the datasheet allows leaving it open."))
+    return findings
+
+
+# --- power.rail_split ---------------------------------------------------------------------------
+
+def _rail_key(net: str) -> str:
+    """+3.3V, 3V3 and /power/+3V3 all mean 3V3; 5V0 and +5V mean 5V. Other text in the name is kept."""
+    name = net.rsplit("/", 1)[-1].upper().lstrip("+")
+    name = re.sub(r"(\d+)\.(\d+)V", r"\1V\2", name)
+    return re.sub(r"(\d+)V0(?!\d)", r"\1V", name)
+
+
+def check_rail_split(snapshot: DesignSnapshot) -> list[Finding]:
+    """Two supply nets whose names spell the same voltage differently (+3.3V and +3V3) with no part between
+    them: KiCad joins only identical names, so the board has two separate rails and one may have no source."""
+    design = _Design(snapshot)
+    groups: dict[str, list[str]] = {}
+    for net in sorted(design.supplies):
+        # A net on one part only (a breakout's own 3V3 pins tied together) is not one of the board's rails.
+        if len({c.reference for c, _ in design.nodes.get(net, ())}) >= 2 and re.search(r"\dV", _rail_key(net)):
+            groups.setdefault(_rail_key(net), []).append(net)
+    findings = []
+    for nets in groups.values():
+        if len({net.rsplit("/", 1)[-1] for net in nets}) < 2:
+            continue   # one spelling on several sheets: local labels, separate on purpose
+        joined = any(len({pin.net for pin in comp.pins} & set(nets)) > 1 for comp in snapshot.components)
+        if joined:
+            continue   # a ferrite, jumper or 0 ohm link between them: split on purpose
+        def side(net: str) -> str:
+            nodes = design.nodes[net]
+            source = [f"{c.reference} {p.name}" for c, p in nodes if _base_type(p) == "power_out"]
+            users = sorted({c.reference for c, p in nodes if _base_type(p) == "power_in"})
+            return (f"{net}: {len(nodes)} pins" + (f", fed by {', '.join(source[:2])}" if source else ", no power output")
+                    + (f", powers {', '.join(users[:5])}" if users else ""))
+        findings.append(Finding(
+            "power.rail_split", Severity.WARNING,
+            f"{' and '.join(nets)} are separate nets but name the same rail",
+            tuple(sorted({c.reference for net in nets for c, p in design.nodes[net]
+                          if _base_type(p) in ("power_in", "power_out")}))[:8], tuple(nets),
+            "; ".join(side(net) for net in nets) + ". Nothing connects them, so parts on one may get no supply.",
+            f"Use one spelling for the rail (e.g. {nets[0]}) on every power symbol and label, or join them on purpose "
+            "with a 0 ohm link or ferrite."))
     return findings

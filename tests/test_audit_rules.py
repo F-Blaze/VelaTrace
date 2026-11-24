@@ -938,3 +938,20 @@ def test_generic_symbol_name_with_a_value_is_not_missing():
     from velatrace.audit_rules import _GENERIC_VALUE
     assert _GENERIC_VALUE.fullmatch("R_Small_US") and _GENERIC_VALUE.fullmatch("C_Polarized_Small")
     assert not _GENERIC_VALUE.fullmatch("R_Poti_1K")   # round 13 (seen): a 1k pot named by its value
+
+
+def test_two_spellings_of_one_rail_are_a_split_rail():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_rail_split
+    reg = Component("U3", "AP2112K-3.3", "", (Pin("1", "+5V", "VIN", "power_in"), Pin("5", "+3.3V", "VOUT", "power_out"),
+                                              Pin("2", "GND", "GND", "power_in")))
+    mcu = Component("U6", "ESP32", "", (Pin("2", "+3V3", "3V3", "power_in"), Pin("1", "GND", "GND", "power_in")))
+    caps = (Component("C3", "10u", "", (Pin("1", "+3.3V"), Pin("2", "GND"))),
+            Component("C6", "100n", "", (Pin("1", "+3V3"), Pin("2", "GND"))))
+    (found,) = check_rail_split(DesignSnapshot((reg, mcu, *caps), "t"))
+    assert found.rule == "power.rail_split" and set(found.nets) == {"+3.3V", "+3V3"} and "fed by U3 VOUT" in found.evidence
+    link = Component("FB1", "BLM18", "", (Pin("1", "+3.3V"), Pin("2", "+3V3")))
+    assert check_rail_split(DesignSnapshot((reg, mcu, *caps, link), "t")) == []
+    local = (Component("C1", "1u", "", (Pin("1", "/IMU/Q_3V3"), Pin("2", "GND"))), Component("U1", "X", "", (Pin("1", "/IMU/Q_3V3", "VDD", "power_in"),)),
+             Component("C2", "1u", "", (Pin("1", "/P/Q_3V3"), Pin("2", "GND"))), Component("U2", "X", "", (Pin("1", "/P/Q_3V3", "VDD", "power_in"),)))
+    assert check_rail_split(DesignSnapshot(local, "t")) == []

@@ -1939,6 +1939,7 @@ RULES: dict[str, Check] = {
     "inductive.flyback_missing": _sibling("rules_ratings", "check_flyback_missing"),
     "relay.coil_voltage": _sibling("rules_ratings", "check_relay_coil_voltage"),
     "pin.power_unconnected": _sibling("rules_ratings", "check_power_unconnected"),
+    "power.rail_split": _sibling("rules_ratings", "check_rail_split"),
     "led.current_high": _sibling("rules_circuit", "check_led_current_high"),
     "logic.level_mismatch": _sibling("rules_circuit", "check_level_mismatch"),
     "mosfet.gate_pulldown_missing": _sibling("rules_circuit", "check_gate_pulldown_missing"),
@@ -1995,6 +1996,8 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         # PCB copper checks (2026-11): not yet measured on unseen boards.
                         "pcb.exposed_pad_open", "pcb.mains_spacing", "pcb.thermal_vias_missing", "pcb.schematic_mismatch",
                         "pcb.track_width",
+                        # Rail-name check (2026-11): not yet measured on unseen boards.
+                        "power.rail_split",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged
