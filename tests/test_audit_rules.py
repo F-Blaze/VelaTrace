@@ -955,3 +955,21 @@ def test_two_spellings_of_one_rail_are_a_split_rail():
     local = (Component("C1", "1u", "", (Pin("1", "/IMU/Q_3V3"), Pin("2", "GND"))), Component("U1", "X", "", (Pin("1", "/IMU/Q_3V3", "VDD", "power_in"),)),
              Component("C2", "1u", "", (Pin("1", "/P/Q_3V3"), Pin("2", "GND"))), Component("U2", "X", "", (Pin("1", "/P/Q_3V3", "VDD", "power_in"),)))
     assert check_rail_split(DesignSnapshot(local, "t")) == []
+
+
+def test_part_field_mpns_and_smd_part_numbers_on_through_hole_footprints():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_mpn_value_mismatch
+    axial = "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
+    r10 = Component("R10", "330", axial, (Pin("1", "A"), Pin("2", "B")), fields={"Part": "ERJ-6GEYJ471V"})
+    r11 = Component("R11", "470", axial, (Pin("1", "A"), Pin("2", "C")), fields={"Part": "ERJ-6GEYJ471V"})
+    reg = Component("U2", "L7805", "Package_TO_SOT_THT:TO-220-3_Vertical", (Pin("1", "VIN"), Pin("2", "GND"), Pin("3", "+5V")),
+                    fields={"Part": "L7805CDT-TR"})
+    found = {f.title for f in check_mpn_value_mismatch(DesignSnapshot((r10, r11, reg), "t"))}
+    assert "R10 is labelled 330 Ω but the Part field says 470 Ω" in {t.replace("Ω", "Ω") for t in found} or any(
+        t.startswith("R10 is labelled") for t in found)
+    assert any(t.startswith("R11 part number ERJ-6GEYJ471V is a surface-mount chip") for t in found)
+    assert any(t.startswith("U2 part number L7805CDT-TR is a surface-mount (DPAK/D2PAK) regulator") for t in found)
+    ok = Component("U2", "L7805", "Package_TO_SOT_THT:TO-220-3_Vertical", reg.pins, fields={"Part": "L7805CV"})
+    smd = Component("R11", "470", "Resistor_SMD:R_0805_2012Metric", r11.pins, fields={"Part": "ERJ-6GEYJ471V"})
+    assert check_mpn_value_mismatch(DesignSnapshot((ok, smd), "t")) == []

@@ -93,19 +93,30 @@ def check_mpn_value_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
     """One finding per (value shown, value ordered, field): a batch of parts with one wrong part number
     is one mistake."""
     groups: dict[tuple[str, str, str], list[tuple[Component, str]]] = {}
+    package: list[tuple[Component, str, str]] = []
     for comp in snapshot.components:
         kind = ar.part_kind(comp)
+        if not comp.dnp and kind not in {"resistor", "capacitor"}:
+            regulator = _regulator_package(comp)
+            if regulator:
+                package.append((comp, *regulator))
         if comp.dnp or kind not in {"resistor", "capacitor"}:
             continue
         shown = bom.parse_value(comp.value, kind)
         if shown is None:
             continue
-        claims = [(name, text, _decode_mpn(text, kind)) for name, text in _text_fields(comp, bom._MPN_FIELDS)]
+        # "Part" is read here too: decoding only fires on an exact manufacturer scheme, so a loose field is safe.
+        claims = [(name, text, _decode_mpn(text, kind)) for name, text in _text_fields(comp, _PART_FIELDS)]
         for name, text, wanted in [*claims, *_described(comp, kind)]:
             if wanted is not None and not _same(shown.value, wanted):
                 have, want = bom.format_value(shown.value, kind), bom.format_value(wanted, kind)
                 groups.setdefault((have, want, name), []).append((comp, text))
                 break
+        else:
+            # Every decoded scheme is a surface-mount chip: on a through-hole footprint the wrong part gets bought.
+            chip = next(((name, text) for name, text, wanted in claims if wanted is not None), None)
+            if chip and _THT.search(comp.footprint):
+                package.append((comp, *chip))
     findings = []
     for (have, want, name), rows in groups.items():
         refs = tuple(sorted((comp.reference for comp, _ in rows), key=_ref_order))
@@ -117,7 +128,30 @@ def check_mpn_value_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
             f"{len(refs)} part{'s' if len(refs) > 1 else ''} with Value {have}; {comp.reference} field '{name}' = "
             f"'{text}' decodes to {want}.",
             f"Correct the Value to {want}, or fix the {name} field if {have} is what you want."))
+    for comp, name, text in package:
+        chip = ar.part_kind(comp) in {"resistor", "capacitor"}
+        thing = "a surface-mount chip part" if chip else "a surface-mount (DPAK/D2PAK) regulator"
+        findings.append(Finding(
+            "part.mpn_value_mismatch", Severity.WARNING,
+            f"{comp.reference} part number {text} is {thing} but the footprint is through-hole", (comp.reference,), (),
+            f"{comp.reference} field '{name}' = '{text}' orders {thing}; the footprint is "
+            f"{comp.footprint.split(':', 1)[-1]}, so the bought part will not fit.",
+            "Order the through-hole version of the part, or change the footprint to match the part number."))
     return findings
+
+
+_PART_FIELDS = bom._MPN_FIELDS | {"part"}
+_THT = re.compile(r"(?i)_THT|AXIAL|RADIAL|DIP-|TO-220|TO-92")
+# 78xx/79xx linear regulators: ...DT (DPAK) and ...D2T (D2PAK) are surface-mount; ST, onsemi and TI share the suffixes.
+_SMD_78XX = re.compile(r"(?:L|LM|MC|UA|KA)?7[89]M?\d\d[A-Z]*?(?:D2T|DT)(?:-?TR|G|R4G|RKG)?")
+
+
+def _regulator_package(comp: Component) -> tuple[str, str] | None:
+    for name, text in _text_fields(comp, _PART_FIELDS):
+        code = re.sub(r"\s+", "", text).upper()
+        if _SMD_78XX.fullmatch(code) and re.search(r"(?i)TO-220|TO-92|TO-3P", comp.footprint):
+            return name, text
+    return None
 
 
 def _ref_order(ref: str) -> tuple[str, int]:
