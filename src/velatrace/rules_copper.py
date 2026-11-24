@@ -4,6 +4,8 @@ not what the schematic meant.
   pcb.exposed_pad_open  an IC's centre exposed pad, or the thermal vias inside it, has no net on the PCB
   pcb.thermal_vias_missing  a charger, motor driver or class-D amp's exposed pad has no via to the other layers
   pcb.mains_spacing     mains copper closer than 2.5 mm to neutral, earth or low-voltage copper
+  pcb.schematic_mismatch  PCB pads, pins or values differ from the saved schematic
+  pcb.track_width       a motor driver's current-sense resistor is joined to its sense pin by thin track
 """
 import math
 import re
@@ -271,8 +273,58 @@ def schematic_sync(schematic: DesignSnapshot):
     """A heavy check comparing the board's own pads and values with ``schematic`` (the saved schematic's
     netlist): pads joined differently from the schematic, and resistor/capacitor/inductor values that differ."""
     def check_schematic_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
-        return _schematic_mismatch(schematic, snapshot.copper)
+        # The sense-track check rides here because it needs pin names, which only the schematic has.
+        return _schematic_mismatch(schematic, snapshot.copper) + _sense_tracks(schematic, snapshot.copper)
     return check_schematic_mismatch
+
+
+# --- pcb.track_width ---------------------------------------------------------------------------
+
+# Motor-driver current-sense pins: DRV88xx ISENA/AISEN, A49xx SENSE1, TMC2xxx BRA, L298 SENSA.
+_SENSE_PIN = re.compile(r"(?i)[AB]?ISENS?E?[AB12]?|SENSE?_?[AB12]?|BR[AB12]|SR[AB12]")
+_OHM_MM = 1.72e-5 / 0.035   # 1 oz (35 um) copper: ohms per mm of length per mm of width
+
+
+def _sense_tracks(schematic: DesignSnapshot, copper) -> list[Finding]:
+    """A motor driver's sense resistor (0.5 ohm or less, to ground) joined to its sense pin only by thin track:
+    the whole bridge current flows there, and the track's own resistance adds to the sense value."""
+    from .audit_rules import is_ground, part_kind
+    from .bom import parse_value
+    if copper is None or not copper.segments:
+        return []
+    pins_on: dict[str, list] = {}
+    for comp in schematic.components:
+        for pin in comp.pins:
+            pins_on.setdefault(pin.net, []).append((comp, pin))
+    zoned = {zone.net for zone in copper.zones}
+    findings = []
+    for comp in schematic.components:
+        if part_kind(comp) != "resistor" or len(comp.pins) != 2:
+            continue
+        value = parse_value(comp.value, "resistor")
+        nets = [pin.net for pin in comp.pins]
+        if not value or not 0 < value.value <= 0.5 or sum(map(is_ground, nets)) != 1:
+            continue
+        net = next(n for n in nets if not is_ground(n))
+        driver = [(c, p) for c, p in pins_on.get(net, ()) if c is not comp and p.name and _SENSE_PIN.fullmatch(p.name)]
+        tracks = [s for s in copper.segments if s.net == net]
+        if not driver or not tracks or net in zoned:
+            continue
+        width, length = max(s.width_mm for s in tracks), sum(s.length_mm for s in tracks)
+        ohms = sum(_OHM_MM * s.length_mm / s.width_mm for s in tracks)
+        sense = float(value.value)
+        if ohms < 0.10 * sense:   # under ~10% the current limit only shifts a little
+            continue
+        ic, pin = driver[0]
+        findings.append(Finding(
+            "pcb.track_width", Severity.WARNING, f"{ic.reference} {pin.name} sense track to {comp.reference} is too thin",
+            (ic.reference, comp.reference), (net,),
+            f"{net} ({ic.reference} {pin.name} to {comp.reference} {comp.value}) is only track up to {width:.2f} mm wide, "
+            f"{length:.1f} mm long: about {ohms * 1000:.0f} mOhm on 1 oz copper, {ohms / sense:.0%} of the sense "
+            "resistor, carrying the full motor current.",
+            "Widen the sense track (1 mm or more) or use a short pour, and keep the resistor next to the pin so the "
+            "current limit matches the calculation."))
+    return findings
 
 
 def _schematic_mismatch(schematic: DesignSnapshot, copper) -> list[Finding]:
@@ -294,8 +346,10 @@ def _schematic_mismatch(schematic: DesignSnapshot, copper) -> list[Finding]:
     for _, s, q in pairs:
         by_sch[s, q] += 1
         by_pcb[q, s] += 1
-    main_q = {s: q for (s, q), _ in sorted(by_sch.items(), key=lambda kv: kv[1])}   # most pads win
-    main_s = {q: s for (q, s), _ in sorted(by_pcb.items(), key=lambda kv: kv[1])}
+    # Most pads win; a net that kept the schematic's name wins first, so a split names the pads that moved away.
+    same = lambda a, b: a.rsplit("/", 1)[-1].upper() == b.rsplit("/", 1)[-1].upper()
+    main_q = {s: q for (s, q), n in sorted(by_sch.items(), key=lambda kv: (same(*kv[0]), kv[1]))}
+    main_s = {q: s for (q, s), n in sorted(by_pcb.items(), key=lambda kv: (same(*kv[0]), kv[1]))}
     odd = [(key, s, q) for key, s, q in pairs if main_q[s] != q or main_s[q] != s]
     # A resistor, inductor or non-polar capacitor turned end for end is the same circuit.
     parts = {c.reference: c for c in schematic.components}
@@ -341,4 +395,32 @@ def _schematic_mismatch(schematic: DesignSnapshot, copper) -> list[Finding]:
             f"{shown}{'; ...' if len(changed) > 5 else ''}. The assembly files come from the PCB, so the PCB value "
             "is the one that gets fitted.",
             "Decide which value is right, then Update PCB from Schematic (F8) so both agree before ordering."))
+    # A connected schematic pin whose footprint has no pad of that number is simply not on the board
+    # (e.g. a TP4056's thermal pad on a plain SOIC-8 footprint).
+    # A duplicate pin (a connector's extra GND, a MOSFET's second drain) is no loss while another pad of the same
+    # part keeps that net; an exposed/thermal pad is, since its job is the solder joint itself.
+    # A board value that differs from the schematic's means the reference names a different part on the PCB
+    # (generated or re-annotated boards), so its pads cannot be compared pin by pin.
+    board_value = dict(copper.values)
+    renamed = {c.reference for c in schematic.components
+               if board_value.get(c.reference, c.value).strip().upper() != c.value.strip().upper()}
+    placed = {ref for ref, _ in pcb} - renamed
+    members = Counter(net for net in sch.values())
+    names = {(c.reference, p.number): p.name for c in schematic.components for p in c.pins}
+    kept = {(ref, net) for (ref, num), net in sch.items() if (ref, num) in pcb}
+    thermal = re.compile(r"(?i)E?PAD|EP\d*|THERMAL\w*|GND_?PAD|TAB")
+    lost = [(ref, num, net) for (ref, num), net in sorted(sch.items())
+            if ref in placed and (ref, num) not in pcb and not _open(net) and members[net] > 1
+            and ((ref, net) not in kept or thermal.fullmatch(num) or thermal.fullmatch(names.get((ref, num)) or ""))
+            and not _EP_MAY_FLOAT.search(parts[ref].value if ref in parts else "")]
+    if lost:
+        shown = "; ".join(f"{ref} pin {num} ({net})" for ref, num, net in lost[:5])
+        findings.append(Finding(
+            "pcb.schematic_mismatch", Severity.WARNING,
+            f"{len(lost)} schematic pin{'s have' if len(lost) != 1 else ' has'} no pad on the footprint",
+            tuple(dict.fromkeys(ref for ref, _, _ in lost))[:8], tuple(dict.fromkeys(n for _, _, n in lost))[:8],
+            f"{shown}{'; ...' if len(lost) > 5 else ''}: the footprint has no pad with that number, so the connection "
+            "does not exist on the board.",
+            "Pick a footprint with that pad (e.g. the exposed-pad package variant) or fix the symbol's pin numbers, "
+            "then Update PCB from Schematic (F8)."))
     return findings

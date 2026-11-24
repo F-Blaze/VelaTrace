@@ -148,3 +148,56 @@ def test_schematic_mismatch_reports_rewired_pads_and_changed_values_not_renames_
     assert found.rule == "pcb.schematic_mismatch" and "J1" in found.refs
     (value,) = check(pcb(r2="10k"))
     assert "R2 4k7 in the schematic, 10k on the PCB" in value.evidence
+
+
+def test_schematic_pin_without_a_footprint_pad():
+    from velatrace.rules_copper import schematic_sync
+    sch = DesignSnapshot((Component("U1", "TP4056", "Package_SO:SOIC-8", (Pin("1", "GND"), Pin("9", "GND", "PAD"), Pin("2", "/PROG"))),
+                          Component("R1", "2k", "", (Pin("1", "/PROG"), Pin("2", "GND")))), "sch")
+    pads = [pad("U1", "1", "GND", 0, 0), pad("U1", "2", "/PROG", 0, 1), pad("R1", "1", "/PROG", 1, 0), pad("R1", "2", "GND", 1, 1)]
+    copper = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads))
+    (found,) = schematic_sync(sch)(DesignSnapshot((), "pcb", copper=copper))
+    assert found.refs == ("U1",) and "U1 pin 9 (GND)" in found.evidence
+    with_ep = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=(*pads, pad("U1", "9", "GND", 0, 0.5, 2, 2)))
+    assert schematic_sync(sch)(DesignSnapshot((), "pcb", copper=with_ep)) == []
+    # A plain duplicate GND pin is no loss while pin 1 still carries GND.
+    dup = DesignSnapshot(tuple(c if c.reference != "U1" else Component("U1", "TP4056", "", (Pin("1", "GND"), Pin("9", "GND", "GND"),
+                                                                                         Pin("2", "/PROG"))) for c in sch.components), "sch")
+    assert schematic_sync(dup)(DesignSnapshot((), "pcb", copper=copper)) == []
+    by_number = DesignSnapshot(tuple(c if c.reference != "U1" else Component("U1", "TP4056", "", (Pin("1", "GND"), Pin("PAD", "GND", "GND"),
+                                                                                               Pin("2", "/PROG"))) for c in sch.components), "sch")
+    assert len(schematic_sync(by_number)(DesignSnapshot((), "pcb", copper=copper))) == 1
+    # The PCB's U1 is another part (different value): its pads say nothing about the schematic's U1.
+    other = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads), values=(("U1", "1N4148"),))
+    assert schematic_sync(sch)(DesignSnapshot((), "pcb", copper=other)) == []
+
+
+def test_thin_track_from_motor_driver_sense_pin_to_its_resistor():
+    from velatrace.rules_copper import schematic_sync
+    sch = DesignSnapshot((Component("U1", "DRV8825", "", (Pin("6", "/ISA", "ISENA"), Pin("9", "/IO", "IN1"))),
+                          Component("R3", "0.1", "Resistor_SMD:R_0603", (Pin("1", "/ISA"), Pin("2", "GND"))),
+                          Component("R9", "0.1", "Resistor_SMD:R_0603", (Pin("1", "/IO"), Pin("2", "GND")))), "sch")
+    pads = [pad("U1", "6", "/ISA", 0, 0), pad("U1", "9", "/IO", 0, 1), pad("R3", "1", "/ISA", 6, 0),
+            pad("R3", "2", "GND", 7, 0), pad("R9", "1", "/IO", 6, 1), pad("R9", "2", "GND", 7, 1)]
+    def run(width, zones=()):
+        segs = (Segment("/ISA", "F.Cu", (0, 0), (6, 0), width, 6.0), Segment("/IO", "F.Cu", (0, 1), (6, 1), 0.2, 6.0))
+        copper = BoardCopper(TWO, 1.6, segs, (), tuple(zones), frozenset(), {}, {}, pads=tuple(pads))
+        return [f for f in schematic_sync(sch)(DesignSnapshot((), "pcb", copper=copper)) if f.rule == "pcb.track_width"]
+    (found,) = run(0.2)   # ~15 mOhm, 15% of 0.1 ohm; R9 is not on a sense pin
+    assert found.refs == ("U1", "R3") and "15%" in found.evidence
+    assert run(1.5) == []
+    from velatrace.copper import FilledZone
+    assert run(0.2, [FilledZone("/ISA", "F.Cu", ((0, 0), (6, 0), (6, 1)))]) == []
+
+
+def test_a_split_net_names_the_pads_that_moved_away():
+    from velatrace.rules_copper import schematic_sync
+    pins = [("U6", "2"), ("R44", "2"), ("U7", "2"), ("U7", "3"), ("R23", "1")]
+    sch = DesignSnapshot(tuple(Component(ref, "", "", tuple(Pin(n, "/PD4") for r, n in pins if r == ref) + (Pin("9", "GND"),))
+                               for ref in dict.fromkeys(r for r, _ in pins)), "sch")
+    moved = {("U7", "2"), ("U7", "3"), ("R23", "1")}
+    pads = [pad(r, n, "/PD4_at_328PB_A" if (r, n) in moved else "/PD4", 0, i) for i, (r, n) in enumerate(pins)]
+    pads += [pad(r, "9", "GND", 1, i) for i, r in enumerate(dict.fromkeys(r for r, _ in pins))]
+    copper = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads))
+    (found,) = schematic_sync(sch)(DesignSnapshot((), "pcb", copper=copper))
+    assert set(found.refs) == {"U7", "R23"} and "U7 pad 2 is on /PD4_at_328PB_A (schematic: /PD4)" in found.evidence

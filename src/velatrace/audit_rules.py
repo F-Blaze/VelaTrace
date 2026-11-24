@@ -886,7 +886,7 @@ def check_led_resistors(snapshot: DesignSnapshot) -> list[Finding]:
                     and len(design.nodes.get(net, ())) == 2}
         ends = sorted(nets - internal)
         rails = [net for net in ends if net in design.supplies or net in design.grounds]
-        names = " → ".join(refs)
+        names = ("LED " if len(refs) == 1 else "LED chain ") + " → ".join(refs)   # say what D1 is
         if len(ends) == 2 and len(rails) == 2 and any(net in design.supplies for net in rails):
             findings.append(Finding(
                 "led.no_resistor", Severity.ERROR,
@@ -1994,6 +1994,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "fit.unverified",
                         # PCB copper checks (2026-11): not yet measured on unseen boards.
                         "pcb.exposed_pad_open", "pcb.mains_spacing", "pcb.thermal_vias_missing", "pcb.schematic_mismatch",
+                        "pcb.track_width",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged

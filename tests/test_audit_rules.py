@@ -306,6 +306,7 @@ def led(ref, a, k, a_name="A", k_name="K"):
 def test_led_across_rail_without_resistor():
     found = rules(design(led("D1", "+3V3", "GND")), "led")
     assert [(f.rule, f.severity, f.refs) for f in found] == [("led.no_resistor", Severity.ERROR, ("D1",))]
+    assert found[0].title.startswith("LED D1 ")   # readers can't see D1 is an LED otherwise
     ok = design(led("D1", "Net-(D1-A)", "GND"), res("R1", "+3V3", "Net-(D1-A)", "1k"))
     assert rules(ok, "led") == []
 
