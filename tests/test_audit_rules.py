@@ -990,3 +990,17 @@ def test_usb_c_known_by_pins_and_usb_ground_left_open():
     wired = Component("J1", j1.value, j1.footprint, tuple(p if not p.name.startswith("GND") else Pin(p.number, "GND", p.name, "power_in")
                                                           for p in j1.pins))
     assert check_power_unconnected(DesignSnapshot((wired, mcu), "t")) == []
+
+
+def test_qwiic_connector_pin_order():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_qwiic_pinout
+    def conn(order, value="Qwiic"):
+        return Component("J1", value, "Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal",
+                         tuple(Pin(str(i + 1), net) for i, net in enumerate(order)))
+    mcu = Component("U1", "MCU", "", (Pin("1", "/SDA", "SDA"), Pin("2", "/SCL", "SCL"), Pin("3", "GND"), Pin("4", "+3V3")))
+    bad = check_qwiic_pinout(DesignSnapshot((conn(["/SCL", "/SDA", "+3V3", "GND"]), mcu), "t"))
+    assert [f.rule for f in bad] == ["connector.qwiic_pinout"] and "SDA on pin 2 (should be 3)" in bad[0].evidence
+    assert check_qwiic_pinout(DesignSnapshot((conn(["GND", "+3V3", "/SDA", "/SCL"]), mcu), "t")) == []
+    # A plain JST-SH header in another order is not claimed to be Qwiic.
+    assert check_qwiic_pinout(DesignSnapshot((conn(["/SCL", "/SDA", "+3V3", "GND"], "I2C"), mcu), "t")) == []

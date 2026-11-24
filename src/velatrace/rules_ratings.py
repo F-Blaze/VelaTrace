@@ -613,3 +613,35 @@ def check_rail_split(snapshot: DesignSnapshot) -> list[Finding]:
             f"Use one spelling for the rail (e.g. {nets[0]}) on every power symbol and label, or join them on purpose "
             "with a 0 ohm link or ferrite."))
     return findings
+
+
+# --- connector.qwiic_pinout ----------------------------------------------------------------------
+
+_QWIIC = re.compile(r"QWIIC|STEMMA|PRT-14417|PRT-14757", re.IGNORECASE)   # SparkFun's Qwiic connector part numbers
+
+
+def check_qwiic_pinout(snapshot: DesignSnapshot) -> list[Finding]:
+    """A connector labelled Qwiic / STEMMA QT must follow 1 GND, 2 VCC, 3 SDA, 4 SCL, or a standard cable
+    connects the other board's pins to the wrong lines."""
+    from .audit_rules import i2c_line, is_ground
+    design = _Design(snapshot)
+    findings = []
+    for conn in design.of_kind("connector"):
+        pins = {pin.number: pin.net for pin in conn.pins if pin.number in {"1", "2", "3", "4"}}
+        if conn.dnp or len(pins) != 4 or not _QWIIC.search(f"{conn.value} {conn.footprint}"):
+            continue
+        role = {num: ("GND" if is_ground(net) else i2c_line(net) or "") for num, net in pins.items()}
+        found = {r: num for num, r in role.items() if r in {"GND", "SDA", "SCL"}}
+        if {"SDA", "SCL"} - set(found):
+            continue   # not used as I2C here
+        wrong = [f"{r} on pin {num} (should be {want})" for r, want in (("GND", "1"), ("SDA", "3"), ("SCL", "4"))
+                 if (num := found.get(r)) and num != want]
+        if wrong:
+            findings.append(Finding(
+                "connector.qwiic_pinout", Severity.ERROR,
+                f"{conn.reference} Qwiic/STEMMA QT pins are in the wrong order", (conn.reference,),
+                tuple(pins[n] for n in sorted(pins)),
+                f"{conn.reference} ({conn.value}): " + "; ".join(wrong) + ". The standard is 1 GND, 2 VCC, 3 SDA, 4 SCL, "
+                "so a standard cable joins this board's lines to the wrong pins of the other board.",
+                "Rewire the connector to 1 GND, 2 3V3, 3 SDA, 4 SCL (check the footprint's pin 1 against the part)."))
+    return findings
