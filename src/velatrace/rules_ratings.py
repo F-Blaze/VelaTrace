@@ -521,6 +521,29 @@ def _cap_fed_findings(design: _Design, ic: Component) -> list[Finding]:
         "leaving it open.")]
 
 
+# Outputs of an IC's own internal regulator or charge pump: the datasheet always asks for a capacitor here.
+_INTERNAL_REG = re.compile(r"V3P3OUT|V5OUT|VCAP_?\d?|VREG_?OUT|VINT|INTVCC|LDO_?OUT|VCP")
+
+
+def _regulator_pin_open(design: _Design) -> list[Finding]:
+    """An internal-regulator output (DRV8825 V3P3OUT, STM32 VCAP, LTC INTVCC ...) left open or no-connect: the
+    regulator has no output capacitor, so it may oscillate and the part misbehaves."""
+    findings = []
+    for ic in design.of_kind("ic"):
+        open_pins = [pin for pin in ic.pins if _INTERNAL_REG.fullmatch(_name(pin))
+                     and (not pin.net or pin.net.startswith("unconnected-("))]
+        if ic.dnp or not open_pins:
+            continue
+        names = ", ".join(sorted({_name(pin) for pin in open_pins}))
+        findings.append(Finding(
+            "decoupling.missing", Severity.WARNING, f"{ic.reference} {names} has no capacitor (left open)",
+            (ic.reference,), (), f"{ic.reference} ({ic.value}) {names} is the output of the part's internal regulator "
+            "or charge pump and is left unconnected, so it has none of the capacitance the datasheet requires.",
+            "Add the capacitor the datasheet gives for this pin (e.g. 0.47 uF for DRV8825 V3P3OUT, 2.2 uF for STM32 "
+            "VCAP) from the pin to ground, close to it."))
+    return findings
+
+
 def _usb_ground_open(design: _Design) -> list[Finding]:
     """A USB connector whose data or VBUS pins are wired but every GND pin is open or flagged no-connect:
     the cable's ground never reaches the board, so neither power nor data has a return."""
@@ -545,7 +568,7 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
     if not any(pin.electrical_type for comp in snapshot.components for pin in comp.pins):
         return []  # a PCB-sourced design has no pin types
     design = _Design(snapshot)
-    findings = _usb_ground_open(design)
+    findings = _usb_ground_open(design) + _regulator_pin_open(design)
     for ic in design.of_kind("ic"):
         if ic.dnp:
             continue

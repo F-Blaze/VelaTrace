@@ -1016,3 +1016,14 @@ def test_p_channel_with_grounded_source_cannot_switch_a_low_side_load():
     assert [(f.rule, f.refs) for f in found] == [("transistor.p_low_side", ("Q2", "Q3"))]
     assert check_p_low_side(DesignSnapshot((fet("Q2", "IRLML6344", "GND", "/M-"), load), "t")) == []      # N-channel
     assert check_p_low_side(DesignSnapshot((fet("Q2", "Si2319CDS", "+VBAT", "/M-"), load), "t")) == []    # high side
+
+
+def test_internal_regulator_output_left_open():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    drv = lambda net: Component("U1", "DRV8825", "", (Pin("4", "VM", "VMA", "power_in"), Pin("14", "GND", "GND", "power_in"),
+                                                      Pin("15", net, "V3P3OUT", "power_out")))
+    found = check_power_unconnected(DesignSnapshot((drv("unconnected-(U1-V3P3OUT-Pad15)"),), "t"))
+    assert [(f.rule, f.refs) for f in found] == [("decoupling.missing", ("U1",))]
+    cap = Component("C9", "470n", "", (Pin("1", "/V3P3"), Pin("2", "GND")))
+    assert check_power_unconnected(DesignSnapshot((drv("/V3P3"), cap), "t")) == []
