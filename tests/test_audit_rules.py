@@ -1027,3 +1027,15 @@ def test_internal_regulator_output_left_open():
     assert [(f.rule, f.refs) for f in found] == [("decoupling.missing", ("U1",))]
     cap = Component("C9", "470n", "", (Pin("1", "/V3P3"), Pin("2", "GND")))
     assert check_power_unconnected(DesignSnapshot((drv("/V3P3"), cap), "t")) == []
+
+
+def test_huge_capacitor_on_an_ldo_bypass_pin():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_bypass_pin_cap
+    ldo = Component("U3", "MIC5219-3.3", "", (Pin("1", "+5V", "IN"), Pin("2", "GND", "GND"), Pin("3", "+5V", "EN"),
+                                              Pin("4", "/BP", "BP"), Pin("5", "+3V3", "OUT")))
+    cap = lambda value: Component("C2", value, "", (Pin("1", "/BP"), Pin("2", "GND")))
+    assert [f.refs for f in check_bypass_pin_cap(DesignSnapshot((ldo, cap("470uF")), "t"))] == [("C2", "U3")]
+    assert check_bypass_pin_cap(DesignSnapshot((ldo, cap("470pF")), "t")) == []
+    amp = Component("U3", "LM386", "", (Pin("5", "/OUT", "VOUT"), Pin("6", "+9V", "VS"), Pin("7", "/BP", "BYPASS")))
+    assert check_bypass_pin_cap(DesignSnapshot((amp, cap("10uF")), "t")) == []

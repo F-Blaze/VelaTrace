@@ -1946,6 +1946,7 @@ RULES: dict[str, Check] = {
     "power.rail_split": _sibling("rules_ratings", "check_rail_split"),
     "connector.qwiic_pinout": _sibling("rules_ratings", "check_qwiic_pinout"),
     "transistor.p_low_side": _sibling("rules_ratings", "check_p_low_side"),
+    "power.bypass_pin_cap": _sibling("rules_ratings", "check_bypass_pin_cap"),
     "led.current_high": _sibling("rules_circuit", "check_led_current_high"),
     "logic.level_mismatch": _sibling("rules_circuit", "check_level_mismatch"),
     "mosfet.gate_pulldown_missing": _sibling("rules_circuit", "check_gate_pulldown_missing"),
@@ -2004,6 +2005,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "pcb.track_width",
                         # Rail-name check (2026-11): not yet measured on unseen boards.
                         "power.rail_split", "connector.qwiic_pinout", "transistor.p_low_side",
+                        "power.bypass_pin_cap",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged

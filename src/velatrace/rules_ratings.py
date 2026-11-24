@@ -703,3 +703,30 @@ def check_p_low_side(snapshot: DesignSnapshot) -> list[Finding]:
             "Use an N-channel MOSFET (or NPN) for a low-side switch, or move the part to the high side with a gate "
             "pull-up and a driver."))
     return findings
+
+
+# --- power.bypass_pin_cap ------------------------------------------------------------------------
+
+def check_bypass_pin_cap(snapshot: DesignSnapshot) -> list[Finding]:
+    """An LDO's noise-bypass pin (BP/BYP/NR) carrying more than 1 uF: datasheets ask for about 10 nF to 1 uF, so a
+    470 uF there is almost always a pF or nF value typed as uF, and it slows the regulator's start-up badly."""
+    design = _Design(snapshot)
+    findings = []
+    for ic in design.of_kind("ic"):
+        names = {_name(pin) for pin in ic.pins}
+        ldo = names & {"IN", "VIN"} and names & {"OUT", "VOUT"} and not names & {"SW", "LX", "PH"}
+        for pin in ic.pins:
+            if ic.dnp or not ldo or not pin.net or not re.fullmatch(r"BP|BYP|BYPASS|NR|NR/SS|NR_SS|SS/NR", _name(pin)):
+                continue
+            for comp, _ in design.nodes.get(pin.net, ()):
+                value = parse_value(comp.value, "capacitor") if design.kind[comp.reference] == "capacitor" else None
+                if value and value.value > Decimal("1e-6"):
+                    findings.append(Finding(
+                        "power.bypass_pin_cap", Severity.WARNING,
+                        f"{comp.reference} {comp.value} on {ic.reference} {_name(pin)} is far above the usual 10 nF-1 µF",
+                        (comp.reference, ic.reference), (pin.net,),
+                        f"{comp.reference} ({comp.value}) sits on {ic.reference} ({ic.value}) pin {_name(pin)}, the "
+                        "regulator's noise-bypass pin, where datasheets use about 10 nF to 1 µF; a value this large is "
+                        "most likely pF or nF typed as µF, and it makes the output rise very slowly.",
+                        "Check the datasheet's bypass-capacitor value (often 470 pF to 10 nF) and correct the Value."))
+    return findings
