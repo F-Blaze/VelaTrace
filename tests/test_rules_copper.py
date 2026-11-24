@@ -201,3 +201,15 @@ def test_a_split_net_names_the_pads_that_moved_away():
     copper = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads))
     (found,) = schematic_sync(sch)(DesignSnapshot((), "pcb", copper=copper))
     assert set(found.refs) == {"U7", "R23"} and "U7 pad 2 is on /PD4_at_328PB_A (schematic: /PD4)" in found.evidence
+
+
+def test_four_layer_board_with_nothing_inside():
+    from velatrace.rules_copper import check_inner_layers_empty
+    four = ("F.Cu", "In1.Cu", "In2.Cu", "B.Cu")
+    def snap(segments, unfilled=frozenset()):
+        copper = BoardCopper(four, 1.6, tuple(segments), (), (), frozenset(), {}, {}, unfilled_nets=unfilled)
+        return DesignSnapshot((), "t", copper=copper)
+    outer = [track("A", 0), track("B", 2, layer="B.Cu")]
+    assert [f.rule for f in check_inner_layers_empty(snap(outer))] == ["pcb.inner_layers_empty"]
+    assert check_inner_layers_empty(snap([*outer, track("C", 4, layer="In1.Cu")])) == []
+    assert check_inner_layers_empty(snap(outer, frozenset({"GND"}))) == []   # an unfilled zone may be inside

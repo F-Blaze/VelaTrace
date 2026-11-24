@@ -424,3 +424,23 @@ def _schematic_mismatch(schematic: DesignSnapshot, copper) -> list[Finding]:
             "Pick a footprint with that pad (e.g. the exposed-pad package variant) or fix the symbol's pin numbers, "
             "then Update PCB from Schematic (F8)."))
     return findings
+
+
+# --- pcb.inner_layers_empty --------------------------------------------------------------------
+
+def check_inner_layers_empty(snapshot: DesignSnapshot) -> list[Finding]:
+    """A 4+ layer board whose inner copper layers carry no track and no filled zone: it is ordered and paid
+    for as multilayer but routes as a 2-layer board. Boards with unfilled zones are skipped (those may sit inside)."""
+    copper = snapshot.copper
+    if copper is None or len(copper.layers) < 4 or copper.unfilled_nets or not copper.segments:
+        return []
+    inner = copper.layers[1:-1]
+    used = {s.layer for s in copper.segments} | {z.layer for z in copper.zones}
+    if used & set(inner):
+        return []
+    return [Finding(
+        "pcb.inner_layers_empty", Severity.SAVING, f"The {len(copper.layers)}-layer board's inner layers are empty",
+        (), (), f"{', '.join(inner)} carry no track and no filled zone; all {len(copper.segments)} track segments are on "
+        f"{' and '.join(sorted(used))}.",
+        "Either pour ground/power planes on the inner layers (better return paths), or set the board to 2 layers and "
+        "order it as such: a 2-layer board costs noticeably less.")]

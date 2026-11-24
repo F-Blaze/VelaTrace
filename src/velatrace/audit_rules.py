@@ -1962,6 +1962,7 @@ HEAVY_RULES: dict[str, Check] = {
     "pcb.exposed_pad_open": _sibling("rules_copper", "check_exposed_pad_open"),
     "pcb.mains_spacing": _sibling("rules_copper", "check_mains_spacing"),
     "pcb.thermal_vias_missing": _sibling("rules_copper", "check_thermal_vias_missing"),
+    "pcb.inner_layers_empty": _sibling("rules_copper", "check_inner_layers_empty"),
 }
 
 # Extra check providers: callables (snapshot) -> list[Finding], run after RULES.
@@ -2002,7 +2003,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "fit.unverified",
                         # PCB copper checks (2026-11): not yet measured on unseen boards.
                         "pcb.exposed_pad_open", "pcb.mains_spacing", "pcb.thermal_vias_missing", "pcb.schematic_mismatch",
-                        "pcb.track_width",
+                        "pcb.track_width", "pcb.inner_layers_empty",
                         # Rail-name check (2026-11): not yet measured on unseen boards.
                         "power.rail_split", "connector.qwiic_pinout", "transistor.p_low_side",
                         "power.bypass_pin_cap",
