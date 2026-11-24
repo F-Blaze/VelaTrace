@@ -645,3 +645,38 @@ def check_qwiic_pinout(snapshot: DesignSnapshot) -> list[Finding]:
                 "so a standard cable joins this board's lines to the wrong pins of the other board.",
                 "Rewire the connector to 1 GND, 2 3V3, 3 SDA, 4 SCL (check the footprint's pin 1 against the part)."))
     return findings
+
+
+# --- transistor.p_low_side -----------------------------------------------------------------------
+
+# P-channel / PNP by symbol or part: Vishay Si23x1/3/5/7/9 and AOS AO34x1/3/5/7/9 odd numbers are P-channel.
+_P_PART = re.compile(r"PNP|PMOS|P[-_ ]?CHANNEL|Q_P[-_]|(?<![A-Z0-9])(?:SI23\d[13579]|AO34\d[13579]|DMP\d|DMG23\d5|IRLML640[12]|IRLML5203|IRLML9301|"
+                     r"2N3906|BC807|BC857|MMBT3906|BSS84|FDN340P|NTR1P)", re.IGNORECASE)
+
+
+def check_p_low_side(snapshot: DesignSnapshot) -> list[Finding]:
+    """A P-channel MOSFET (or PNP) with its source (emitter) on ground: with the gate at 0 V or above it can
+    never turn on, so as a low-side switch it never switches the load."""
+    design = _Design(snapshot)
+    groups: dict[str, list] = {}
+    for part in design.of_kind("transistor"):
+        if part.dnp or not _P_PART.search(f"{part.value} {part.fields.get('lib_id', '')}"):
+            continue
+        source = [pin for pin in part.pins if _SOURCE.fullmatch(_name(pin))]
+        drain = [pin for pin in part.pins if _DRAIN.fullmatch(_name(pin))]
+        if source and drain and all(pin.net in design.grounds for pin in source)                 and not any(pin.net in design.grounds for pin in drain):
+            groups.setdefault(part.value, []).append((part, source[0].net, drain[0].net))
+    findings = []
+    for value, rows in groups.items():   # one finding per part number: the same wrong choice repeated
+        refs = tuple(part.reference for part, _, _ in rows)
+        part, ground, load = rows[0]
+        findings.append(Finding(
+            "transistor.p_low_side", Severity.ERROR,
+            f"{', '.join(refs)} ({value}) {'is a' if len(refs) == 1 else 'are'} P-channel/PNP with the source on ground",
+            refs, tuple(dict.fromkeys(n for _, g, d in rows for n in (g, d)))[:6],
+            f"{part.reference} source/emitter is on {ground} and drain/collector on {load}: a P-channel MOSFET or PNP "
+            "needs its gate/base below the source to conduct, which a 0-3.3 V drive on a grounded source never gives, "
+            "so the load is never switched.",
+            "Use an N-channel MOSFET (or NPN) for a low-side switch, or move the part to the high side with a gate "
+            "pull-up and a driver."))
+    return findings

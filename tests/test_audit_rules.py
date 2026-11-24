@@ -1004,3 +1004,15 @@ def test_qwiic_connector_pin_order():
     assert check_qwiic_pinout(DesignSnapshot((conn(["GND", "+3V3", "/SDA", "/SCL"]), mcu), "t")) == []
     # A plain JST-SH header in another order is not claimed to be Qwiic.
     assert check_qwiic_pinout(DesignSnapshot((conn(["/SCL", "/SDA", "+3V3", "GND"], "I2C"), mcu), "t")) == []
+
+
+def test_p_channel_with_grounded_source_cannot_switch_a_low_side_load():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_p_low_side
+    fet = lambda ref, value, s, d: Component(ref, value, "Package_TO_SOT_SMD:SOT-23",
+                                             (Pin("1", f"/G{ref}", "G"), Pin("2", s, "S"), Pin("3", d, "D")))
+    load = Component("M1", "Motor", "", (Pin("1", "+VBAT"), Pin("2", "/M-")))
+    found = check_p_low_side(DesignSnapshot((fet("Q2", "Si2319CDS", "GND", "/M-"), fet("Q3", "Si2319CDS", "GND", "/M2-"), load), "t"))
+    assert [(f.rule, f.refs) for f in found] == [("transistor.p_low_side", ("Q2", "Q3"))]
+    assert check_p_low_side(DesignSnapshot((fet("Q2", "IRLML6344", "GND", "/M-"), load), "t")) == []      # N-channel
+    assert check_p_low_side(DesignSnapshot((fet("Q2", "Si2319CDS", "+VBAT", "/M-"), load), "t")) == []    # high side
