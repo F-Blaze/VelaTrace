@@ -973,3 +973,20 @@ def test_part_field_mpns_and_smd_part_numbers_on_through_hole_footprints():
     ok = Component("U2", "L7805", "Package_TO_SOT_THT:TO-220-3_Vertical", reg.pins, fields={"Part": "L7805CV"})
     smd = Component("R11", "470", "Resistor_SMD:R_0805_2012Metric", r11.pins, fields={"Part": "ERJ-6GEYJ471V"})
     assert check_mpn_value_mismatch(DesignSnapshot((ok, smd), "t")) == []
+
+
+def test_usb_c_known_by_pins_and_usb_ground_left_open():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_usbc_cc
+    from velatrace.rules_ratings import check_power_unconnected
+    nc = lambda num, name: Pin(num, f"unconnected-(J1-{name}-Pad{num})", name, "power_in+no_connect")
+    j1 = Component("J1", "2171820001", "X:MOLEX_2171820001", (
+        Pin("A4", "+5V", "VBUS1", "power_in"), Pin("A6", "/D+", "DP1", "bidirectional"), Pin("A7", "/D-", "DN1", "bidirectional"),
+        Pin("A5", "/CC1", "CC1", "bidirectional"), Pin("B5", "/CC2", "CC2", "bidirectional"), nc("A1", "GND1"), nc("B12", "GND4")))
+    mcu = Component("U1", "ESP32", "", (Pin("1", "GND", "GND", "power_in"), Pin("2", "/D+", "D+", "bidirectional")))
+    snap = DesignSnapshot((j1, mcu), "t")
+    assert [f.title for f in check_usbc_cc(snap)] == ["J1 USB-C CC pull-down missing on CC1, CC2"]
+    assert [f.title for f in check_power_unconnected(snap)] == ["J1 USB ground pins are not connected"]
+    wired = Component("J1", j1.value, j1.footprint, tuple(p if not p.name.startswith("GND") else Pin(p.number, "GND", p.name, "power_in")
+                                                          for p in j1.pins))
+    assert check_power_unconnected(DesignSnapshot((wired, mcu), "t")) == []

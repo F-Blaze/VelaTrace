@@ -521,11 +521,31 @@ def _cap_fed_findings(design: _Design, ic: Component) -> list[Finding]:
         "leaving it open.")]
 
 
+def _usb_ground_open(design: _Design) -> list[Finding]:
+    """A USB connector whose data or VBUS pins are wired but every GND pin is open or flagged no-connect:
+    the cable's ground never reaches the board, so neither power nor data has a return."""
+    findings = []
+    for conn in design.of_kind("connector"):
+        names = {_name(pin) for pin in conn.pins}
+        if conn.dnp or not (any(n.startswith("VBUS") for n in names) and names & {"D+", "D-", "DP1", "DN1", "DP", "DM", "CC1"}):
+            continue
+        grounds = [pin for pin in conn.pins if re.fullmatch(r"GND\d*", _name(pin))]
+        live = [pin for pin in conn.pins if pin.net and not pin.net.startswith("unconnected-(") and not pin.no_connect]
+        if grounds and live and all(pin.no_connect or not pin.net or pin.net.startswith("unconnected-(") for pin in grounds):
+            findings.append(Finding(
+                "pin.power_unconnected", Severity.ERROR, f"{conn.reference} USB ground pins are not connected",
+                (conn.reference,), tuple(dict.fromkeys(pin.net for pin in live))[:4],
+                f"{conn.reference} has {len(live)} wired pins ({', '.join(sorted({_name(p) for p in live})[:4])}) but all "
+                f"{len(grounds)} GND pins are open or flagged no-connect, so the cable's ground never reaches the board.",
+                "Connect every GND pin of the connector to the board ground."))
+    return findings
+
+
 def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
     if not any(pin.electrical_type for comp in snapshot.components for pin in comp.pins):
         return []  # a PCB-sourced design has no pin types
     design = _Design(snapshot)
-    findings = []
+    findings = _usb_ground_open(design)
     for ic in design.of_kind("ic"):
         if ic.dnp:
             continue

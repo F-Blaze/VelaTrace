@@ -1115,7 +1115,11 @@ def check_usbc_cc(snapshot: DesignSnapshot) -> list[Finding]:
         return []
     findings = []
     for conn in design.of_kind("connector"):
-        if "USB_C" not in f"{conn.value} {conn.footprint}".upper():
+        names = {pin.name.strip().upper() for pin in conn.pins}
+        # By name, or by pins (CC1, CC2 and VBUS) when the part is only a manufacturer number.
+        text = f"{conn.value} {conn.footprint}".upper()
+        if "USB_C" not in text and (re.search(r"USB_?[AB]|MICRO|MINI", text) or not (
+                {"CC1", "CC2"} <= names and any(name.startswith("VBUS") for name in names))):
             continue
         cc_pins = [pin for pin in conn.pins if pin.name.strip().upper() in {"CC1", "CC2"}]
         # Duplicate, unnamed, disconnected, or shorted CC pins are ambiguous.
