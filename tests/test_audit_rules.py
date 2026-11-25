@@ -1099,3 +1099,21 @@ def test_high_threshold_mosfets_driven_from_a_3v3_gpio():
              if "GPIO" in f.title]
     assert [f.refs for f in found] == [("Q1", "Q2", "U1")]
     assert not [f for f in check_level_mismatch(DesignSnapshot((pico, fet("Q1", "2N7002", "/G1")), "t")) if "GPIO" in f.title]
+
+
+def test_i2c_pullups_on_a_switched_rail_with_an_always_on_slave():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_i2c_pullups
+    mcu = Component("U1", "ESP32-S3-WROOM-1", "", (Pin("1", "3V3", "3V3", "power_in"), Pin("2", "I2C_SDA", "IO8"),
+                                                   Pin("3", "I2C_SCL", "IO9")))
+    accel = Component("U7", "LIS2DH12TR", "", (Pin("1", "3V3", "VDD", "power_in"), Pin("2", "I2C_SDA", "SDA"),
+                                               Pin("3", "I2C_SCL", "SCL")))
+    codec = Component("U4", "ES8311", "", (Pin("1", "AUDIO_3V3", "VDD", "power_in"), Pin("2", "I2C_SDA", "CDATA"),
+                                           Pin("3", "I2C_SCL", "CCLK")))
+    switch = Component("Q1", "SI2301CDS", "", (Pin("1", "AUDIO_PWR_N", "G"), Pin("2", "3V3", "S"), Pin("3", "AUDIO_3V3", "D")))
+    pulls = (Component("R15", "4.7k", "", (Pin("1", "AUDIO_3V3"), Pin("2", "I2C_SCL"))),
+             Component("R16", "4.7k", "", (Pin("1", "AUDIO_3V3"), Pin("2", "I2C_SDA"))))
+    found = [f for f in check_i2c_pullups(DesignSnapshot((mcu, accel, codec, switch, *pulls), "t")) if "switched" in f.title]
+    assert len(found) == 1 and "U7" in found[0].refs and "Q1" in found[0].refs
+    # Only the MCU on the always-on rail: switching the sensor and its pull-ups off together is fine.
+    assert not [f for f in check_i2c_pullups(DesignSnapshot((mcu, codec, switch, *pulls), "t")) if "switched" in f.title]

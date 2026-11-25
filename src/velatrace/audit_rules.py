@@ -744,10 +744,33 @@ def _jumpered_pullups(design: _Design, net: str) -> list[tuple[Component, str, C
     return found
 
 
+def _switched_pullup_rail(design: _Design, net: str, real) -> tuple[str, str, str, tuple[str, ...]] | None:
+    """(rail, source, switch, always-on ICs) when every pull-up goes to one rail that a transistor switches from
+    another rail, and an IC on the bus is powered from that other rail instead."""
+    rails = {rail for _, rail, _ in real}
+    if len(rails) != 1:
+        return None
+    rail = next(iter(rails))
+    for switch, _ in design.nodes.get(rail, ()):
+        if design.kind[switch.reference] != "transistor":
+            continue
+        sources = {pin.net for pin in switch.pins if pin.net != rail and _is_rail(design, pin.net)
+                   and pin.net not in design.grounds}
+        for source in sorted(sources):
+            # The bus master staying on is the usual low-power design (sensor and its pull-ups switched off together).
+            always_on = tuple(sorted(comp.reference for comp, _ in design.nodes[net] if design.kind[comp.reference] == "ic"
+                                     and not _mcu_like(design, comp)
+                                     and any(_base_type(p) == "power_in" and p.net == source for p in comp.pins)
+                                     and not any(p.net == rail for p in comp.pins)))
+            if always_on:
+                return rail, source, switch.reference, always_on
+    return None
+
+
 def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
     """SDA/SCL lines: missing, redundant, mixed-rail, 0 Ω or out-of-range pull-ups."""
     design = _Design(snapshot)
-    findings = []
+    findings, reported_switch = [], set()
     for net in sorted(design.nodes):
         line = i2c_line(net)
         if line is None or "resistor_array" in design.kinds_on(net):
@@ -808,6 +831,19 @@ def check_i2c_pullups(snapshot: DesignSnapshot) -> list[Finding]:
                 f"Add one pull-up from {net} to the bus supply, e.g. 4.7 kΩ (100 kHz) or 2.2 kΩ (400 kHz). "
                 "MCU internal pull-ups (~20–50 kΩ) only suit short, slow (≤100 kHz) buses.", PASSIVE_USD))
             continue
+        if (switched := _switched_pullup_rail(design, net, real)) and switched[:2] not in reported_switch:
+            reported_switch.add(switched[:2])
+            rail, source, switch, always_on = switched
+            findings.append(Finding(
+                "i2c.pullup.mixed_rails", Severity.WARNING,
+                f"I2C pull-ups go to switched rail {rail}, but {', '.join(always_on)} {'stays' if len(always_on) == 1 else 'stay'} "
+                f"powered from {source}",
+                (*sorted(comp.reference for comp, _, _ in real), switch, *always_on), (net, rail, source),
+                f"{', '.join(comp.reference for comp, _, _ in real)} pull {line} up to {rail}, which {switch} switches "
+                f"from {source}; {', '.join(always_on)} on the same bus run from {source}. With {rail} off the bus has "
+                "no pull-ups (and parts on the dead rail can clamp it low), so the always-on parts cannot talk.",
+                f"Pull the bus up to {source} (the rail every bus device shares when powered), or put the unswitched "
+                "parts on their own bus."))
         for comp, rail, ohms in real:
             if ohms is not None and (ohms < 1000 or ohms > 100_000):
                 findings.append(Finding(
