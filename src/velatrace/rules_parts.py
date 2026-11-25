@@ -128,6 +128,14 @@ def check_mpn_value_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
             f"{len(refs)} part{'s' if len(refs) > 1 else ''} with Value {have}; {comp.reference} field '{name}' = "
             f"'{text}' decodes to {want}.",
             f"Correct the Value to {want}, or fix the {name} field if {have} is what you want."))
+    for (value, name, text), refs in _named_differently(snapshot).items():
+        refs = tuple(sorted(refs, key=_ref_order))
+        findings.append(Finding(
+            "part.mpn_value_mismatch", Severity.WARNING,
+            f"{', '.join(refs[:6])} Value {value} and {name} {text} name different parts", refs, (),
+            f"Value '{value}' and field '{name}' = '{text}' share no part-number digits, so the schematic shows one part "
+            "and the BOM orders another.",
+            f"Make the Value and {name} name the same part (or note the substitute on purpose)."))
     for comp, name, text in package:
         chip = ar.part_kind(comp) in {"resistor", "capacitor"}
         thing = "a surface-mount chip part" if chip else "a surface-mount (DPAK/D2PAK) regulator"
@@ -141,6 +149,37 @@ def check_mpn_value_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
 
 
 _PART_FIELDS = bom._MPN_FIELDS | {"part"}
+# A part-number token: up to five letters then 3+ digits (B5819W, 2N7002, LM66100DCKR); package words are not.
+_NUMBERED = re.compile(r"(\d?[A-Z]{1,5})(\d{3,})[A-Z0-9]*")
+_PACKAGE_WORD = re.compile(r"SOT|SOD|SOIC|SOP|TSSOP|MSOP|QFN|DFN|TO|LED|SMA|SMB|SMC|DO|LQFP|TQFP|BGA|WLCSP|USB|HTSSOP|"
+                           r"VQFN|WSON|SON|R|C|L")
+
+
+def _part_digits(text: str) -> list[str]:
+    found = []
+    for token in re.split(r"[^A-Z0-9]+", text.upper()):
+        match = _NUMBERED.fullmatch(token)
+        if match and not _PACKAGE_WORD.fullmatch(match.group(1)):
+            found.append(match.group(2))
+    return found
+
+
+def _named_differently(snapshot: DesignSnapshot) -> dict[tuple[str, str, str], list[str]]:
+    """Diodes, transistors and ICs whose Value is a part number sharing no digit group with the MPN field
+    (MMSD4148 vs CD1206-S01575). Equivalents from another maker keep their digits (B5819W vs 1N5819HW)."""
+    groups: dict[tuple[str, str, str], list[str]] = {}
+    for comp in snapshot.components:
+        if comp.dnp or ar.part_kind(comp) not in {"diode", "transistor", "ic", "led"}:
+            continue
+        digits = _part_digits(comp.value)
+        fields = [(name, text) for name, text in _text_fields(comp, _PART_FIELDS) if not re.fullmatch(r"C\d{3,}", text)]
+        if not digits or not fields:
+            continue
+        flat = " ".join(re.sub(r"[^A-Z0-9]", "", text.upper()) for _, text in fields)
+        if not any(d in flat for d in digits):
+            name, text = fields[0]
+            groups.setdefault((comp.value, name, text), []).append(comp.reference)
+    return groups
 _THT = re.compile(r"(?i)_THT|AXIAL|RADIAL|DIP-|TO-220|TO-92")
 # 78xx/79xx linear regulators: ...DT (DPAK) and ...D2T (D2PAK) are surface-mount; ST, onsemi and TI share the suffixes.
 _SMD_78XX = re.compile(r"(?:L|LM|MC|UA|KA)?7[89]M?\d\d[A-Z]*?(?:D2T|DT)(?:-?TR|G|R4G|RKG)?")

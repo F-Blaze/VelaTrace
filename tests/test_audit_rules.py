@@ -1039,3 +1039,14 @@ def test_huge_capacitor_on_an_ldo_bypass_pin():
     assert check_bypass_pin_cap(DesignSnapshot((ldo, cap("470pF")), "t")) == []
     amp = Component("U3", "LM386", "", (Pin("5", "/OUT", "VOUT"), Pin("6", "+9V", "VS"), Pin("7", "/BP", "BYPASS")))
     assert check_bypass_pin_cap(DesignSnapshot((amp, cap("10uF")), "t")) == []
+
+
+def test_value_and_mpn_naming_different_parts():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_mpn_value_mismatch
+    diode = lambda ref, value, mpn: Component(ref, value, "Diode_SMD:D_SOD-123", (Pin("1", "A"), Pin("2", "K")), fields={"MPN": mpn})
+    found = check_mpn_value_mismatch(DesignSnapshot((diode("D2", "MMSD4148T1G", "CD1206-S01575"),
+                                                     diode("D6", "MMSD4148T1G", "CD1206-S01575")), "t"))
+    assert [f.refs for f in found] == [("D2", "D6")]
+    same = (diode("D4", "B5819W", "1N5819HW-7-F"), diode("D5", "SOD-523_BSD5C051L", "BSD5C051L"), diode("D7", "SS14", "C2480"))
+    assert check_mpn_value_mismatch(DesignSnapshot(same, "t")) == []
