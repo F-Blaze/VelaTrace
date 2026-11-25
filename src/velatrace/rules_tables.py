@@ -343,3 +343,85 @@ TABLE_RULES = {
     "mcu.strap_pins": check_strap_pins,
     "power.ldo_dropout": check_ldo_dropout,
 }
+
+
+# --- protection.tvs_standoff ---------------------------------------------------------------------
+
+# Unidirectional/bidirectional TVS families whose number is the stand-off (working) voltage.
+_TVS = re.compile(r"(?:SMAJ|SMBJ|SMCJ|SMDJ|SMF|SMLJ|SM6T|P4SMA|P6SMB|1SMA|SMA6J)(\d+(?:\.\d+)?)C?A?(?:[-_].*)?")
+
+
+def _rail_volts(net: str) -> float | None:
+    """_stated_volts, plus names with a DC suffix (5VDC, 12V_DC, 3V3DC)."""
+    stated = _stated_volts(net)
+    if stated is not None:
+        return stated
+    name = net.rsplit("/", 1)[-1].upper().lstrip("+")
+    if match := re.fullmatch(r"(\d+)V(\d+)?[_-]?DC", name):
+        return float(f"{match.group(1)}.{match.group(2) or 0}")
+    if match := re.fullmatch(r"(\d+(?:\.\d+)?)V[_-]?DC", name):
+        return float(match.group(1))
+    return None
+
+
+def check_tvs_standoff(snapshot: DesignSnapshot) -> list[Finding]:
+    """A TVS from a rail to ground whose stand-off voltage is below the rail's normal voltage: it conducts in
+    normal use, heats up and fails short (or trips the fuse ahead of it). The rail voltage comes from its name, or
+    from a fixed LDO it feeds (its output plus dropout)."""
+    design = _power_design(snapshot)
+    floor: dict[str, tuple[float, str]] = {}
+    for ic in design.of_kind("ic", "other"):
+        vin, out = _single_net(ic, _LDO_IN), _single_net(ic, _LDO_OUT)
+        spec = None if ic.dnp else _ldo_of(ic)
+        if spec is None and not ic.dnp and out and (stated := _rail_volts(out)) is not None:
+            # A known family without the voltage in its value (NCP1117 on a 5V rail): the output net says it.
+            # Any maker's 1117 (NCP/LM/AZ/LD/AMS1117) drops about 1 V at load, like the table's AMS/LD1117 entries.
+            if re.search(r"(?:NCP|LM|AZ|LD|AMS|SPX|TLV|UA|IRU)1117", _text(ic)):
+                spec = (stated, 1.0, 15.0)
+        if spec and vin:
+            vout, dropout, _ = spec
+            need = vout + (dropout or 0)
+            if need > floor.get(vin, (0, ""))[0]:
+                floor[vin] = (need, f"{ic.reference} ({ic.value}) needs at least {need:g} V at its input")
+    # One step back through a series diode (anode side sits a diode drop higher) or a fuse/ferrite/link.
+    for net, (need, why) in list(floor.items()):
+        for comp, _ in design.nodes.get(net, ()):
+            if len(comp.pins) != 2 or comp.dnp:
+                continue
+            other = next((p.net for p in comp.pins if p.net != net), None)
+            kind = design.kind.get(comp.reference)
+            if other is None or other in floor or other in design.grounds:
+                continue
+            if kind == "diode" and not _TVS.fullmatch(re.sub(r"\s+", "", comp.value).upper()):
+                # Named K/CATHODE, else KiCad's diode symbols put the cathode on pin 1.
+                cathode = next((p.net for p in comp.pins if re.fullmatch(r"K|CATHODE", _pin_name(p))),
+                               next((p.net for p in comp.pins if p.number == "1" and not _pin_name(p)), None))
+                if cathode == net:
+                    drop = 0.3 if re.search(r"(?i)58[12]\d|SS\d|SK\d|BAT|SCHOTTKY|MBR|B\d{3}", comp.value) else 0.6
+                    floor[other] = (need + drop, f"{why}, so {other} must be at least {need + drop:g} V to feed it "
+                                                 f"through {comp.reference} ({comp.value})")
+            elif kind in {"fuse", "ferrite"}:
+                floor[other] = (need, f"{why}, fed through {comp.reference}")
+    findings = []
+    for comp in snapshot.components:
+        if comp.dnp or design.kind.get(comp.reference) != "diode" or len(comp.pins) != 2:
+            continue
+        texts = [comp.value, *(v for k, v in comp.fields.items() if isinstance(v, str))]
+        match = next((m for t in texts if (m := _TVS.fullmatch(re.sub(r"\s+", "", t).upper()))), None)
+        nets = [pin.net for pin in comp.pins]
+        if not match or sum(net in design.grounds for net in nets) != 1:
+            continue
+        rail = next(net for net in nets if net not in design.grounds)
+        standoff = float(match.group(1))
+        stated = _rail_volts(rail)
+        vmin, why = (stated, f"{rail} is a {stated:g} V rail") if stated is not None else floor.get(rail, (None, ""))
+        if vmin is None or standoff >= vmin - 0.05:
+            continue
+        findings.append(Finding(
+            "protection.tvs_standoff", Severity.ERROR,
+            f"{comp.reference} ({match.group(0)}) stands off only {standoff:g} V on {rail}", (comp.reference,), (rail,),
+            f"{comp.reference} is a {standoff:g} V stand-off TVS from {rail} to ground, but {why}: in normal use it "
+            "conducts, overheats and fails short or trips the fuse ahead of it.",
+            f"Choose a TVS whose stand-off voltage is at or above the highest normal voltage on {rail} (e.g. SMAJ15A "
+            "for a 12 V input)."))
+    return findings

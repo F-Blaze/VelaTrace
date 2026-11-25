@@ -1932,6 +1932,7 @@ RULES: dict[str, Check] = {
     "power.divider_voltage": _sibling("rules_tables", "check_divider_voltage"),
     "mcu.strap_pins": _sibling("rules_tables", "check_strap_pins"),
     "power.ldo_dropout": _sibling("rules_tables", "check_ldo_dropout"),
+    "protection.tvs_standoff": _sibling("rules_tables", "check_tvs_standoff"),
     "part.mpn_value_mismatch": _sibling("rules_parts", "check_mpn_value_mismatch"),
     "part.footprint_kind_mismatch": _sibling("rules_parts", "check_footprint_kind_mismatch"),
     "part.polarized_symbol": _sibling("rules_parts", "check_polarized_symbol"),
@@ -2006,7 +2007,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         "pcb.track_width", "pcb.inner_layers_empty",
                         # Rail-name check (2026-11): not yet measured on unseen boards.
                         "power.rail_split", "connector.qwiic_pinout", "transistor.p_low_side",
-                        "power.bypass_pin_cap",
+                        "power.bypass_pin_cap", "protection.tvs_standoff",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged

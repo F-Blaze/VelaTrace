@@ -1061,3 +1061,16 @@ def test_polarized_symbols_on_ceramic_chip_footprints_are_one_note():
              cap("C5", "Device:C_Polarized", "Capacitor_SMD:CP_Elec_6.3x7.7"), cap("C6", "Device:C", "Capacitor_SMD:C_0805_2012Metric"))
     found = check_polarized_symbol(DesignSnapshot(parts, "t"))
     assert [(f.severity.value, f.refs) for f in found] == [("info", ("C1", "C4"))]
+
+
+def test_tvs_stand_off_below_the_rail_it_protects():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_tables import check_tvs_standoff
+    tvs = lambda value, net: Component("D7", value, "Diode_SMD:D_SMA", (Pin("1", net, "K"), Pin("2", "GND", "A")))
+    ldo = Component("U5", "NCP1117", "", (Pin("3", "VIN", "VI"), Pin("2", "5VDC", "VO"), Pin("1", "GND", "GND")))
+    oring = Component("D3", "B5819W", "Diode_SMD:D_SOD-123", (Pin("1", "VIN"), Pin("2", "PWRIN")))
+    load = Component("C6", "47u", "", (Pin("1", "VIN"), Pin("2", "GND")))
+    (found,) = check_tvs_standoff(DesignSnapshot((tvs("SMAJ6.0A", "PWRIN"), ldo, oring, load), "t"))
+    assert found.refs == ("D7",) and "PWRIN must be at least 6.3 V" in found.evidence
+    assert check_tvs_standoff(DesignSnapshot((tvs("SMAJ15A", "PWRIN"), ldo, oring, load), "t")) == []
+    assert [f.refs for f in check_tvs_standoff(DesignSnapshot((tvs("SMBJ5.0A", "+12V"),), "t"))] == [("D7",)]
