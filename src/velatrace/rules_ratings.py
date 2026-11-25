@@ -773,3 +773,31 @@ def check_bypass_pin_cap(snapshot: DesignSnapshot) -> list[Finding]:
                         "most likely pF or nF typed as µF, and it makes the output rise very slowly.",
                         "Check the datasheet's bypass-capacitor value (often 470 pF to 10 nF) and correct the Value."))
     return findings
+
+
+# --- reserved pins that the datasheet ties to ground ---------------------------------------------
+
+# (part, reserved-pin names): WIZnet W5500 datasheet pin table: RSVD (23, 38-42) "tied to ground".
+# ST LIS2DH12/LIS3DH: RES "connect to GND". Others (Quectel RESERVED, module RFU) are kept open and not listed.
+_RESERVED_TO_GND = ((re.compile(r"W5500"), re.compile(r"RSVD\d*")), (re.compile(r"LIS2DH12|LIS3DH"), re.compile(r"RES\d*")))
+
+
+def check_reserved_pins(snapshot: DesignSnapshot) -> list[Finding]:
+    design = _Design(snapshot)
+    findings = []
+    for ic in design.of_kind("ic"):
+        names = next((pins for part, pins in _RESERVED_TO_GND if part.search(ic.value.upper())), None)
+        if ic.dnp or names is None:
+            continue
+        loose = [pin for pin in ic.pins if names.fullmatch(_name(pin)) and pin.net not in design.grounds]
+        if loose:
+            numbers = ", ".join(pin.number for pin in loose)
+            findings.append(Finding(
+                "pin.input_floating", Severity.WARNING,
+                f"{ic.reference} ({ic.value}) reserved pins {numbers} are not tied to ground", (ic.reference,),
+                tuple(dict.fromkeys(pin.net for pin in loose if pin.net))[:4],
+                f"{ic.reference} pins {numbers} ({_name(loose[0])}) are "
+                f"{'left open' if all(not p.net or p.net.startswith('unconnected-(') for p in loose) else 'not on ground'}; "
+                f"the {ic.value} datasheet says to tie its reserved pins to ground.",
+                "Connect the reserved pins to GND as the datasheet's pin table says."))
+    return findings

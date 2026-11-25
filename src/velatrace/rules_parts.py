@@ -238,6 +238,13 @@ _POLAR_WORDS = re.compile(r"(?i)\b(?:tantalum|electrolytic|alumini?um)\b")
 _NOT_POLAR = re.compile(r"(?i)non[\s-]?polar|bipolar|unpolari")
 
 
+def _polar_part(comp: Component) -> bool:
+    mpns = _text_fields(comp, bom._MPN_FIELDS)
+    texts = [comp.value, *(text for _, text in _text_fields(comp, _DESCRIPTION_FIELDS)), *(t for _, t in mpns)]
+    return any(_POLAR_MPN.match(re.sub(r"\s+", "", t).upper()) for _, t in mpns) or any(
+        _POLAR_WORDS.search(t) and not _NOT_POLAR.search(t) for t in texts)
+
+
 def check_polarized_symbol(snapshot: DesignSnapshot) -> list[Finding]:
     findings = []
     for comp in snapshot.components:
@@ -277,7 +284,8 @@ def check_polarized_symbol(snapshot: DesignSnapshot) -> list[Finding]:
     ceramic = [comp.reference for comp in snapshot.components
                if ar.part_kind(comp) == "capacitor" and not comp.dnp
                and re.search(r"(?i)C_Polari[sz]ed|(?:^|:)CP(?:_|$)", comp.fields.get("lib_id", ""))
-               and re.search(r"(?:^|:)C_(?:0201|0402|0603|0805|1206|1210|1812)_", comp.footprint)]
+               and re.search(r"(?:^|:)C_(?:0201|0402|0603|0805|1206|1210|1812)_", comp.footprint)
+               and not _polar_part(comp)]   # a tantalum/electrolytic part number makes the symbol right
     if ceramic:
         refs = tuple(sorted(ceramic, key=_ref_order))
         findings.append(Finding(

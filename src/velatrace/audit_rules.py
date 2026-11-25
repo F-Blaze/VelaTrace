@@ -1984,6 +1984,7 @@ RULES: dict[str, Check] = {
     "connector.qwiic_pinout": _sibling("rules_ratings", "check_qwiic_pinout"),
     "transistor.p_low_side": _sibling("rules_ratings", "check_p_low_side"),
     "power.bypass_pin_cap": _sibling("rules_ratings", "check_bypass_pin_cap"),
+    "pin.reserved_to_ground": _sibling("rules_ratings", "check_reserved_pins"),
     "led.current_high": _sibling("rules_circuit", "check_led_current_high"),
     "logic.level_mismatch": _sibling("rules_circuit", "check_level_mismatch"),
     "mosfet.gate_pulldown_missing": _sibling("rules_circuit", "check_gate_pulldown_missing"),

@@ -1117,3 +1117,12 @@ def test_i2c_pullups_on_a_switched_rail_with_an_always_on_slave():
     assert len(found) == 1 and "U7" in found[0].refs and "Q1" in found[0].refs
     # Only the MCU on the always-on rail: switching the sensor and its pull-ups off together is fine.
     assert not [f for f in check_i2c_pullups(DesignSnapshot((mcu, codec, switch, *pulls), "t")) if "switched" in f.title]
+
+
+def test_w5500_reserved_pins_must_be_grounded():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_reserved_pins
+    chip = lambda net: Component("U2", "W5500", "", (Pin("23", net(23), "RSVD"), Pin("38", net(38), "RSVD"), Pin("1", "GND", "GND")))
+    (found,) = check_reserved_pins(DesignSnapshot((chip(lambda n: f"unconnected-(U2-RSVD-Pad{n})"),), "t"))
+    assert found.refs == ("U2",) and "23, 38" in found.title
+    assert check_reserved_pins(DesignSnapshot((chip(lambda n: "GND"),), "t")) == []
