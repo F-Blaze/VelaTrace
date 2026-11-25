@@ -681,6 +681,36 @@ def _caps_to_nowhere(design: _Design) -> list[Finding]:
     return findings
 
 
+# (part, internal-regulator pin, datasheet minimum farads on that pin).
+_REG_PIN_MIN = ((re.compile(r"TMC22(?:0[89]|2[56])"), re.compile(r"5VOUT"), Decimal("2.2e-6")),
+                (re.compile(r"DRV8825"), re.compile(r"V3P3OUT"), Decimal("0.47e-6")),
+                (re.compile(r"STM32[FHL][47]"), re.compile(r"VCAP_?\d?"), Decimal("2.2e-6")))
+
+
+def _regulator_pin_small(design: _Design) -> list[Finding]:
+    """An internal-regulator pin with less capacitance than its datasheet minimum (TMC2209 5VOUT 2.2 uF ...)."""
+    findings = []
+    for ic in design.of_kind("ic"):
+        for part, pins, minimum in _REG_PIN_MIN:
+            if ic.dnp or not part.search(ic.value.upper()):
+                continue
+            for pin in ic.pins:
+                if not pins.fullmatch(_name(pin)) or not pin.net or pin.net.startswith("unconnected-("):
+                    continue
+                values = [v.value for comp, _ in design.nodes.get(pin.net, ()) if design.kind[comp.reference] == "capacitor"
+                          and (v := parse_value(comp.value, "capacitor"))]
+                if values and sum(values, Decimal(0)) < minimum:
+                    findings.append(Finding(
+                        "decoupling.missing", Severity.WARNING,
+                        f"{ic.reference} {_name(pin)} has {float(sum(values)) * 1e6:.2g} µF, under the "
+                        f"{float(minimum) * 1e6:g} µF its datasheet asks for", (ic.reference,), (pin.net,),
+                        f"{ic.reference} ({ic.value}) {_name(pin)} is the output of its internal regulator; {pin.net} carries "
+                        f"{float(sum(values)) * 1e6:.2g} µF, below the {float(minimum) * 1e6:g} µF minimum, so the "
+                        "regulator may oscillate or droop under load.",
+                        f"Use at least {float(minimum) * 1e6:g} µF (ceramic, X5R/X7R) on {_name(pin)}, next to the pin."))
+    return findings
+
+
 def _regulator_pin_open(design: _Design) -> list[Finding]:
     """An internal-regulator output (DRV8825 V3P3OUT, STM32 VCAP, LTC INTVCC ...) left open or no-connect: the
     regulator has no output capacitor, so it may oscillate and the part misbehaves."""
@@ -725,7 +755,7 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
         return []  # a PCB-sourced design has no pin types
     design = _Design(snapshot)
     findings = _usb_ground_open(design) + _regulator_pin_open(design) + _caps_to_nowhere(design) + _charger_bat_bare(design)
-    findings += _vdda_small(design)
+    findings += _vdda_small(design) + _regulator_pin_small(design)
     for ic in design.of_kind("ic"):
         if ic.dnp:
             continue

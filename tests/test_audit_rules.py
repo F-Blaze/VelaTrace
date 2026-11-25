@@ -1240,3 +1240,13 @@ def test_stm32_vdda_under_1uf():
     vdda = lambda *parts: [f for f in check_power_unconnected(DesignSnapshot((mcu, *parts), "t")) if "VDDA has only" in f.title]
     assert [f.refs for f in vdda(cap("C34", "100n"))] == [("U1",)]
     assert vdda(cap("C34", "100n"), cap("C35", "1u")) == []
+
+
+def test_internal_regulator_pin_under_its_datasheet_minimum():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    drv = Component("U3", "TMC2209-LA", "", (Pin("8", "/5VOUT", "5VOUT", "power_out"), Pin("1", "GND", "GND", "power_in")))
+    cap = lambda value: Component("C15", value, "", (Pin("1", "/5VOUT"), Pin("2", "GND")))
+    small = lambda c: [f for f in check_power_unconnected(DesignSnapshot((drv, c), "t")) if "datasheet asks" in f.title]
+    assert [f.refs for f in small(cap("100n"))] == [("U3",)]
+    assert small(cap("4.7u")) == []
