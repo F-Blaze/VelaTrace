@@ -1170,3 +1170,15 @@ def test_generic_transistor_names_and_dnp_typed_as_a_value():
     c = Component("C43", "DNP", "Capacitor_SMD:C_0402_1005Metric", (Pin("1", "/ANT"), Pin("2", "GND")))
     found = {f.rule: f.refs for f in check_values(DesignSnapshot((q, c), "t"))}
     assert found.get("value.missing") == ("Q1",) and found.get("value.dnp_not_marked") == ("C43",)
+
+
+def test_5v_pixel_led_data_straight_from_a_3v3_gpio():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_circuit import check_level_mismatch
+    mcu = Component("U2", "ESP32-WROOM-32", "", (Pin("1", "+3V3", "3V3", "power_in"), Pin("2", "/LED", "IO21")))
+    led = lambda vdd: Component("D7", "WS2812B", "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm",
+                                (Pin("1", vdd, "VDD"), Pin("3", "GND", "VSS"), Pin("4", "/DIN", "DIN"), Pin("2", "/DOUT", "DOUT")))
+    res = Component("R9", "470", "", (Pin("1", "/LED"), Pin("2", "/DIN")))
+    pixel = lambda snap: [f for f in check_level_mismatch(snap) if "takes its data" in f.title]
+    assert [f.refs for f in pixel(DesignSnapshot((mcu, led("+5V"), res), "t"))] == [("D7", "U2")]
+    assert pixel(DesignSnapshot((mcu, led("+3V3"), res), "t")) == []

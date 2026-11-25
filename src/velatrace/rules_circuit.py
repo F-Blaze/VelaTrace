@@ -148,9 +148,49 @@ def _weak_gate_drive(design: _Design) -> list[Finding]:
     return findings
 
 
+def _pixel_data_from_3v3(design: _Design) -> list[Finding]:
+    """WS2812/SK6812-type LEDs on a 4.5 V+ supply whose first DIN comes straight (or through a series resistor) from a
+    3.3 V GPIO: their input-high threshold is 0.7 x VDD (3.5 V at 5 V), above what the GPIO drives."""
+    from .audit_rules import _ADDRESSABLE_LED, _GPIO_PIN
+    findings = []
+    for led in snapshot_leds(design):
+        din = next((p.net for p in led.pins if re.fullmatch(r"DIN|DI|SDI|DATA_?IN", _name(p))), None)
+        vdd = next((p.net for p in led.pins if re.fullmatch(r"VDD|VCC|V\+|VLED", _name(p))), None)
+        volts = rail_voltage(vdd) if vdd else None
+        if volts is None and vdd and (lead := re.match(r"\+?(\d+)V(\d?)(?![0-9])", vdd.rsplit("/", 1)[-1].upper())):
+            volts = Decimal(f"{lead.group(1)}.{lead.group(2) or 0}")   # +5V_LED, 5V_STRIP
+        if not din or volts is None or volts < Decimal("4.5") or not _ADDRESSABLE_LED.search(f"{led.value} {led.footprint}"):
+            continue
+        nets = {din}
+        for comp, _ in design.nodes.get(din, ()):
+            ends = two_terminal_nets(comp)
+            if design.kind[comp.reference] == "resistor" and ends and din in ends and parse_resistance(comp.value) is not None                     and parse_resistance(comp.value) <= 1000:
+                nets |= set(ends)
+        driver = next(((c, p) for net in nets for c, p in design.nodes.get(net, ()) if c is not led
+                       and design.kind[c.reference] in {"ic", "module", "other"} and p.name
+                       and (_GPIO_PIN.fullmatch(p.name) or re.fullmatch(r"(?i)GP\d{1,2}", p.name))
+                       and (v := _gpio_volts(design, c)) is not None and v <= 3.6), None)
+        if driver:
+            ic, pin = driver
+            findings.append(Finding(
+                "logic.level_mismatch", Severity.WARNING,
+                f"{led.reference} ({led.value}) on {vdd} takes its data straight from 3.3 V {ic.reference} {pin.name}",
+                (led.reference, ic.reference), (din, vdd),
+                f"{led.reference} runs from {vdd} ({volts:g} V), so its DIN needs about {Decimal('0.7') * volts:g} V for "
+                f"a logic high, but {ic.reference} {pin.name} only drives 3.3 V: the strip may flicker or not respond, "
+                "worse with long wires and warm LEDs.",
+                "Add a 5 V level shifter (74AHCT1G125, 74HCT245) on the data line, or power the first LED from about "
+                "4 V through a diode so 3.3 V counts as high."))
+    return findings
+
+
+def snapshot_leds(design: _Design) -> list[Component]:
+    return [comp for comp in design.parts.values() if design.kind[comp.reference] in {"led", "ic", "other"} and not comp.dnp]
+
+
 def check_level_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
-    findings = _weak_gate_drive(design)
+    findings = _weak_gate_drive(design) + _pixel_data_from_3v3(design)
     for net, nodes in design.nodes.items():
         if net in design.grounds or net in design.supplies or len(nodes) != 2:
             continue
