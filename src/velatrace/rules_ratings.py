@@ -607,6 +607,28 @@ def _cap_fed_findings(design: _Design, ic: Component) -> list[Finding]:
 _INTERNAL_REG = re.compile(r"V3P3OUT|V5OUT|VCAP_?\d?|VREG_?OUT|VINT|INTVCC|LDO_?OUT|VCP")
 
 
+def _caps_to_nowhere(design: _Design) -> list[Finding]:
+    """Capacitors whose second ends meet only each other, all first ends on one net: they bypass nothing (a ground
+    or supply label missing from the shared end)."""
+    findings = []
+    for net, nodes in design.nodes.items():
+        caps = [comp for comp, _ in nodes]
+        if (len(nodes) < 2 or net in design.grounds or net in design.supplies or any(comp.dnp for comp in caps)
+                or not all(design.kind[comp.reference] == "capacitor" and len(comp.pins) == 2 for comp in caps)):
+            continue
+        far = {pin.net for comp in caps for pin in comp.pins if pin.net != net}
+        if len(far) != 1:
+            continue
+        refs = tuple(sorted(comp.reference for comp in caps))
+        rail = next(iter(far))
+        findings.append(Finding(
+            "decoupling.missing", Severity.WARNING, f"{', '.join(refs)} connect {rail} to nothing", refs, (rail, net),
+            f"{', '.join(refs)} each run from {rail} to {net}, and nothing else is on {net}, so they decouple nothing; "
+            "the ground (or other) end was most likely meant to have a label or power symbol.",
+            f"Connect the shared end ({net}) to ground, or to the net the capacitors were meant for."))
+    return findings
+
+
 def _regulator_pin_open(design: _Design) -> list[Finding]:
     """An internal-regulator output (DRV8825 V3P3OUT, STM32 VCAP, LTC INTVCC ...) left open or no-connect: the
     regulator has no output capacitor, so it may oscillate and the part misbehaves."""
@@ -650,7 +672,7 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
     if not any(pin.electrical_type for comp in snapshot.components for pin in comp.pins):
         return []  # a PCB-sourced design has no pin types
     design = _Design(snapshot)
-    findings = _usb_ground_open(design) + _regulator_pin_open(design)
+    findings = _usb_ground_open(design) + _regulator_pin_open(design) + _caps_to_nowhere(design)
     for ic in design.of_kind("ic"):
         if ic.dnp:
             continue

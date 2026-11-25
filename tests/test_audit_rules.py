@@ -1194,3 +1194,15 @@ def test_li_ion_charger_bat_pin_does_not_excuse_an_unprotected_battery_connector
         return check_connector_protection(DesignSnapshot((conn, ic, load), "t"))
     assert [f.refs[0] for f in board("TP4056", "BAT")] == ["J2"]
     assert board("DS3231M", "VBAT") == []     # an RTC's backup pin manages its coin cell
+
+
+def test_capacitors_whose_second_end_meets_nothing():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    mcu = Component("U1", "RP2040", "", (Pin("1", "+3.3V", "IOVDD", "power_in"), Pin("2", "GND", "GND", "power_in")))
+    cap = lambda ref, far: Component(ref, "100n", "", (Pin("1", "+3.3V"), Pin("2", far)))
+    found = [f for f in check_power_unconnected(DesignSnapshot((mcu, cap("C13", "Net-(C13-Pad2)"), cap("C14", "Net-(C13-Pad2)")), "t"))
+             if "to nothing" in f.title]
+    assert [f.refs for f in found] == [("C13", "C14")]
+    assert not [f for f in check_power_unconnected(DesignSnapshot((mcu, cap("C13", "GND"), cap("C14", "GND")), "t"))
+                if "to nothing" in f.title]
