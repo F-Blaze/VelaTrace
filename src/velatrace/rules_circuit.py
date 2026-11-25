@@ -100,9 +100,57 @@ def _rails(design: _Design, comp: Component, names: re.Pattern | None) -> list[D
             for pin in comp.pins if _base_type(pin) == "power_in" and (names is None or names.fullmatch(_name(pin)))]
 
 
+# N-MOSFETs whose gate threshold reaches 3 V or more (2N7000 up to 3 V; IRF540/IRFZ44N-class 2-4 V, Rds(on) given
+# at 10 V): a 3.3 V GPIO leaves them barely or not at all on. Logic-level parts (IRLZ44N, AO3400, 2N7002) are not here.
+_HIGH_VTH = re.compile(r"2N7000|IRF(?:Z?44N?|540N?|520N?|530N?|3205|Z34N?|630|640|740)(?!\d)|IRFB\d{4}|FQP\d+N\d+", re.I)
+_LOW_VOLT_MCU = re.compile(r"RP2040|RP2350|PICO|ESP32|ESP8266|ESP-?\d|STM32|NRF5|SAMD|ATSAM|CH32V|GD32", re.I)
+
+
+def _gpio_volts(design: _Design, ic: Component) -> float | None:
+    supplies = [rail_voltage(pin.net) for pin in ic.pins if _base_type(pin) == "power_in" and pin.net]
+    supplies = [float(v) for v in supplies if v is not None]
+    if supplies:
+        return min(supplies) if all(v <= 3.6 for v in supplies) else None
+    return 3.3 if _LOW_VOLT_MCU.search(ic.value) else None
+
+
+def _weak_gate_drive(design: _Design) -> list[Finding]:
+    """A high-threshold N-MOSFET whose gate a 3.3 V GPIO drives (directly or through a series resistor)."""
+    from .audit_rules import _GPIO_PIN
+    findings, groups = [], {}
+    for fet in design.of_kind("transistor"):
+        gate = next((p.net for p in fet.pins if re.fullmatch(r"G|GATE", _name(p))), None)
+        if fet.dnp or not gate or not _HIGH_VTH.search(fet.value):
+            continue
+        nets = {gate}
+        for comp, _ in design.nodes.get(gate, ()):
+            ends = two_terminal_nets(comp)
+            if design.kind[comp.reference] == "resistor" and ends and gate in ends:
+                nets |= set(ends)
+        for net in nets:
+            driver = next(((c, p) for c, p in design.nodes.get(net, ()) if design.kind[c.reference] in {"ic", "module"}
+                           and p.name and _GPIO_PIN.fullmatch(p.name) and (v := _gpio_volts(design, c)) is not None
+                           and v <= 3.6), None)
+            if driver:
+                groups.setdefault((fet.value, driver[0].reference), []).append((fet, driver[1], gate))
+                break
+    for (value, ic_ref), rows in groups.items():   # one finding per part number and driver
+        refs = tuple(fet.reference for fet, _, _ in rows)
+        pins = ", ".join(pin.name for _, pin, _ in rows)
+        findings.append(Finding(
+            "logic.level_mismatch", Severity.INFO,
+            f"{', '.join(refs)} ({value}) gate{'s are' if len(refs) > 1 else ' is'} driven from 3.3 V GPIO",
+            (*refs, ic_ref), tuple(gate for _, _, gate in rows),
+            f"{ic_ref} {pins} drive{'s' if len(refs) == 1 else ''} the gate of {', '.join(refs)} ({value}), whose gate "
+            "threshold can be 3 V or more and whose on-resistance is specified at 4.5-10 V: at 3.3 V it is only partly "
+            "on, so it may run hot or not switch its load fully.",
+            "Use a logic-level MOSFET (2N7002, AO3400, IRLZ44N, specified at VGS = 2.5 V) or add a gate driver."))
+    return findings
+
+
 def check_level_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
-    findings = []
+    findings = _weak_gate_drive(design)
     for net, nodes in design.nodes.items():
         if net in design.grounds or net in design.supplies or len(nodes) != 2:
             continue

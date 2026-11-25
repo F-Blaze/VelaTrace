@@ -1087,3 +1087,15 @@ def test_motor_sense_resistor_package_too_small_for_full_current():
     assert [f.refs for f in board("DRV8825PWPR", "0.1", "0603")] == [("R3", "U1")]
     assert board("DRV8825PWPR", "0.1", "2512") == []
     assert board("DRV8833PWPR", "300m", "1206") == []     # 0.67 A trip: 0.13 W in a 0.25 W part
+
+
+def test_high_threshold_mosfets_driven_from_a_3v3_gpio():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_circuit import check_level_mismatch
+    pico = Component("U1", "PicoW", "", (Pin("27", "/G1", "GPIO21"), Pin("21", "/G2", "GPIO16")))
+    fet = lambda ref, value, gate: Component(ref, value, "Package_TO_SOT_THT:TO-92", (Pin("1", "GND", "S"), Pin("2", gate, "G"),
+                                                                                      Pin("3", f"/{ref}D", "D")))
+    found = [f for f in check_level_mismatch(DesignSnapshot((pico, fet("Q1", "2N7000", "/G1"), fet("Q2", "2N7000", "/G2")), "t"))
+             if "GPIO" in f.title]
+    assert [f.refs for f in found] == [("Q1", "Q2", "U1")]
+    assert not [f for f in check_level_mismatch(DesignSnapshot((pico, fet("Q1", "2N7002", "/G1")), "t")) if "GPIO" in f.title]
