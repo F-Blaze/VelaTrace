@@ -11,10 +11,12 @@ jumper, resistor up to 1 kOhm) from it, and a part marked DNP still counts: the 
 """
 from __future__ import annotations
 
+from decimal import Decimal
 import re
 
 from .audit_rules import (Check, _Design, _base_type, _is_return, _pin_text, parse_resistance, terminals,
                           two_terminal_nets)
+from .bom import parse_value
 from .findings import Finding, Severity
 from .models import Component, DesignSnapshot, Pin
 
@@ -172,18 +174,23 @@ def _regulator_outputs(design: _Design, ic: Component) -> list[Pin]:
 
 
 def check_reg_out_cap_missing(snapshot: DesignSnapshot) -> list[Finding]:
-    """Linear regulators whose output net has no capacitor to ground anywhere."""
+    """Linear regulators whose output net has no capacitor to ground anywhere, or a 1117 with under 10 uF."""
     design = _power_design(snapshot)
-    findings = []
+    findings, small = [], {}
     for ic in design.of_kind("ic"):
         if ic.dnp:
             continue
-        bare = {}
+        bare: dict[str, Pin] = {}
         for pin in _regulator_outputs(design, ic):
             if pin.net in design.grounds or _alone(design, pin, ic):
                 continue  # grounded, or not wired to anything: not a powered output
-            if not _caps_to_ground(design, _group(design, pin.net)):
+            caps = _caps_to_ground(design, _group(design, pin.net))
+            if not caps:
                 bare.setdefault(pin.net, pin)
+            elif _1117.search(ic.value) and pin.net not in small:
+                total = sum((v.value for comp in caps if (v := parse_value(comp.value, "capacitor"))), Decimal(0))
+                if 0 < total < Decimal("10e-6"):
+                    small[pin.net] = (ic, pin, caps, total)
         for net, pin in bare.items():
             findings.append(Finding(
                 "power.reg_out_cap_missing", Severity.WARNING,
@@ -192,7 +199,19 @@ def check_reg_out_cap_missing(snapshot: DesignSnapshot) -> list[Finding]:
                 f"{ic.reference} {_pin_text(pin)} is the regulator output, and no capacitor connects {net} to ground.",
                 "Add the output capacitor the datasheet requires (typically 1 uF to 22 uF, mind the allowed ESR) "
                 "from the output to ground, right at the regulator; many linear regulators oscillate without it."))
+    for net, (ic, pin, caps, total) in small.items():
+        findings.append(Finding(
+            "power.reg_out_cap_missing", Severity.WARNING,
+            f"{ic.reference} ({ic.value}) has only {float(total) * 1e6:.3g} µF on its output {net}",
+            (ic.reference, *sorted(comp.reference for comp in caps)), (net,),
+            f"{', '.join(sorted(comp.reference for comp in caps))} add up to {float(total) * 1e6:.3g} µF on {net}; 1117-type "
+            "LDOs need at least 10 µF (AMS1117: 22 µF tantalum) on the output to stay stable.",
+            "Add a 10-22 µF capacitor (with the ESR the datasheet allows) from the output to ground, next to the regulator."))
     return findings
+
+
+# Any maker's 1117: an NPN-pass LDO whose output needs 10 uF or more (AMS1117 asks for 22 uF tantalum).
+_1117 = re.compile(r"(?:AMS|LM|LD|AZ|NCP|SPX|TLV|AP|UA|IRU)1117", re.IGNORECASE)
 
 
 # --- power.bootstrap_cap_missing --------------------------------------------------------------

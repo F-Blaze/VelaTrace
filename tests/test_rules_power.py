@@ -163,13 +163,14 @@ def test_reg_out_quiet_with_output_cap(value):
 
 
 def test_reg_out_quiet_when_the_cap_is_elsewhere_on_the_rail_or_behind_a_ferrite():
+    # (22 uF: enough for a 1117, so only the cap's position is under test)
     # the capacitor sits on the downstream side of a ferrite / 0R / inductor
     ferrite = part("FB1", "BLM18", "Inductor_SMD:L_0603", ("1", "+3V3"), ("2", "+3V3_F"))
-    assert found("power.reg_out_cap_missing", ldo(), load("+3V3_F"), ferrite, cap("C1", "+3V3_F", "GND")) == []
+    assert found("power.reg_out_cap_missing", ldo(), load("+3V3_F"), ferrite, cap("C1", "+3V3_F", "GND", value="22uF")) == []
     assert found("power.reg_out_cap_missing", ldo(), load(), res("R1", "+3V3", "+3V3_F", "0"),
-                 cap("C1", "+3V3_F", "GND")) == []
+                 cap("C1", "+3V3_F", "GND", value="22uF")) == []
     # a rail shared with another regulator that has the capacitor
-    assert found("power.reg_out_cap_missing", ldo(), ldo("U3", value="AMS1117-3.3"), load(), cap("C1", "+3V3", "AGND")) == []
+    assert found("power.reg_out_cap_missing", ldo(), ldo("U3", value="AMS1117-3.3"), load(), cap("C1", "+3V3", "AGND", value="22uF")) == []
 
 
 def test_reg_out_quiet_for_switching_converters_and_modules():

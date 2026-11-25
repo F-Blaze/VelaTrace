@@ -1218,3 +1218,15 @@ def test_li_ion_charger_bat_pin_without_a_capacitor():
     assert [f.refs for f in bare] == [("U2",)]
     cap = Component("C5", "4.7u", "", (Pin("1", "/BATT+"), Pin("2", "GND")))
     assert not [f for f in check_power_unconnected(DesignSnapshot((chg, conn, cap), "t")) if "BAT has no capacitor" in f.title]
+
+
+def test_1117_ldo_with_too_little_output_capacitance():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_power import check_reg_out_cap_missing
+    ldo = Component("U5", "AMS1117-3.3", "Package_TO_SOT_SMD:SOT-223-3_TabPin2",
+                    (Pin("3", "+5V", "VI", "power_in"), Pin("2", "+3V3", "VO", "power_out"), Pin("1", "GND", "GND", "power_in")))
+    load = Component("U1", "MCU", "", (Pin("1", "+3V3", "VDD", "power_in"), Pin("2", "GND", "GND", "power_in")))
+    cap = lambda ref, value: Component(ref, value, "", (Pin("1", "+3V3"), Pin("2", "GND")))
+    small = check_reg_out_cap_missing(DesignSnapshot((ldo, load, cap("C9", "100n"), cap("C34", "100n")), "t"))
+    assert [f.title for f in small] == ["U5 (AMS1117-3.3) has only 0.2 µF on its output +3V3"]
+    assert check_reg_out_cap_missing(DesignSnapshot((ldo, load, cap("C9", "100n"), cap("C10", "22u")), "t")) == []
