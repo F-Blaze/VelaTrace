@@ -1230,3 +1230,13 @@ def test_1117_ldo_with_too_little_output_capacitance():
     small = check_reg_out_cap_missing(DesignSnapshot((ldo, load, cap("C9", "100n"), cap("C34", "100n")), "t"))
     assert [f.title for f in small] == ["U5 (AMS1117-3.3) has only 0.2 µF on its output +3V3"]
     assert check_reg_out_cap_missing(DesignSnapshot((ldo, load, cap("C9", "100n"), cap("C10", "22u")), "t")) == []
+
+
+def test_stm32_vdda_under_1uf():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    mcu = Component("U1", "STM32H743IITx", "", (Pin("39", "VDDA", "VDDA", "power_in"), Pin("1", "GND", "VSS", "power_in")))
+    cap = lambda ref, value: Component(ref, value, "", (Pin("1", "VDDA"), Pin("2", "GND")))
+    vdda = lambda *parts: [f for f in check_power_unconnected(DesignSnapshot((mcu, *parts), "t")) if "VDDA has only" in f.title]
+    assert [f.refs for f in vdda(cap("C34", "100n"))] == [("U1",)]
+    assert vdda(cap("C34", "100n"), cap("C35", "1u")) == []

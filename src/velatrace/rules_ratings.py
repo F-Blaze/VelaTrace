@@ -607,6 +607,30 @@ def _cap_fed_findings(design: _Design, ic: Component) -> list[Finding]:
 _INTERNAL_REG = re.compile(r"V3P3OUT|V5OUT|VCAP_?\d?|VREG_?OUT|VINT|INTVCC|LDO_?OUT|VCP")
 
 
+def _vdda_small(design: _Design) -> list[Finding]:
+    """An STM32's VDDA with under 1 uF to ground: ST's datasheets ask for 1 uF + 100 nF on VDDA (the ADC reference
+    on small packages), and 100 nF alone leaves ADC readings noisy."""
+    findings = []
+    for ic in design.of_kind("ic"):
+        pin = next((p for p in ic.pins if re.fullmatch(r"VDDA(?:/VREF\+)?|VREF\+/VDDA", _name(p)) and p.net), None)
+        if ic.dnp or pin is None or not re.search(r"(?i)STM32", ic.value) or pin.net in design.grounds:
+            continue
+        total = Decimal(0)
+        for comp, _ in design.nodes.get(pin.net, ()):
+            ends = two_terminal_nets(comp)
+            value = parse_value(comp.value, "capacitor") if design.kind[comp.reference] == "capacitor" else None
+            if value and ends and any(end in design.grounds for end in ends):
+                total += value.value
+        if total < Decimal("1e-6"):
+            findings.append(Finding(
+                "decoupling.missing", Severity.WARNING,
+                f"{ic.reference} VDDA has only {float(total) * 1e6:.2g} µF ({pin.net})", (ic.reference,), (pin.net,),
+                f"{ic.reference} ({ic.value}) {_name(pin)} on {pin.net} has {float(total) * 1e6:.2g} µF to ground in all; "
+                "ST recommends 1 µF plus 100 nF on VDDA, which also feeds the ADC reference.",
+                "Add a 1 µF capacitor next to the 100 nF on VDDA (and on VREF+ if it is separate)."))
+    return findings
+
+
 def _charger_bat_bare(design: _Design) -> list[Finding]:
     """A Li-ion charger's BAT pin with no capacitor on its net: every charger datasheet puts 1-10 uF there, and with
     no cell (or a cell behind a protection FET) the charger output oscillates."""
@@ -693,6 +717,7 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
         return []  # a PCB-sourced design has no pin types
     design = _Design(snapshot)
     findings = _usb_ground_open(design) + _regulator_pin_open(design) + _caps_to_nowhere(design) + _charger_bat_bare(design)
+    findings += _vdda_small(design)
     for ic in design.of_kind("ic"):
         if ic.dnp:
             continue
