@@ -64,7 +64,9 @@ _EMPTY_VALUES = {"", "~", "?"}
 _GENERIC_VALUE = re.compile(
     r"val|value|rset|polyfuse|ferritebead|crystal(?:_\w+)?|relay(?:_\w+)?|"
     r"(?:r|c|l|d|led|cp)(?:_(?:small|us|polarized|schottky|zener|variable|pot)[a-z_]*)*|"  # R_Poti_1K has a value
-    r"tvs[a-z]?|esd|zener|schottky|diode|transistor|npn|pnp|nmos|pmos|mosfet", re.IGNORECASE)
+    r"tvs[a-z]?|esd|zener|schottky|diode|transistor|npn|pnp|nmos|pmos|mosfet|"
+    r"q_(?:npn|pnp|nmos|pmos|nigbt|pigbt|njfet|pjfet)[a-z_]*",   # KiCad's generic transistor symbol names (Q_PNP_BCE)
+    re.IGNORECASE)
 def _is_placeholder(value: str, kind: str = "") -> bool:
     """TBD-style values, or a template whose open digits set the part's rating: a TVS/zener/ESD voltage
     (1.5KExxA, ESD5Zxx, SMBJxxA). Templates that leave only a grade or revision open (MCP23008-xSO,
@@ -1375,9 +1377,12 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
                 (supply[0], ground[0]),
                 f"{res.reference} value '{res.value}' connects {supply[0]} directly to {ground[0]}.",
                 f"Give {res.reference} its intended value, or remove it if it is a leftover jumper."))
-    unset, order_only, placeholders = [], {}, []
+    unset, order_only, placeholders, unmarked = [], {}, [], []
     for comp in snapshot.components:
         value, kind = comp.value.strip(), design.kind[comp.reference]
+        if not comp.dnp and re.fullmatch(r"(?i)DNP|DNF|DNM|NOT ?FITTED|NO ?FIT", value):
+            unmarked.append(comp.reference)
+            continue
         if (kind in {"testpoint", "mounting"} or _NOT_A_PART.search(comp.footprint)
                 or _NOT_A_PART_REF.match(comp.reference.upper())):
             continue
@@ -1405,6 +1410,16 @@ def check_values(snapshot: DesignSnapshot) -> list[Finding]:
                 order_only[comp.reference] = code
         else:
             unset.append(comp.reference)
+    if unmarked:
+        unmarked.sort(key=lambda ref: (re.sub(r"\d+", "", ref), int(re.sub(r"\D", "", ref) or 0)))
+        findings.append(Finding(
+            "value.dnp_not_marked", Severity.INFO,
+            f"{len(unmarked)} part{'s' if len(unmarked) != 1 else ''} with the value 'DNP' {'are' if len(unmarked) != 1 else 'is'} "
+            f"not marked Do-not-populate ({', '.join(unmarked[:6])}{', …' if len(unmarked) > 6 else ''})",
+            tuple(unmarked), (), "The value says not to fit them, but the symbol's DNP attribute is off, so they still go "
+            "into the BOM and placement files as a part called 'DNP'.",
+            "Tick 'Do not populate' (and 'Exclude from BOM' if wanted) in the symbol properties, and give the part its "
+            "real value for when it is fitted."))
     unset.sort()
     if unset:
         shown = ", ".join(f"{ref} '{design.parts[ref].value}'" for ref in unset[:8])
@@ -2045,6 +2060,7 @@ BETA_RULES = frozenset({"decoupling.missing", "i2c.pullup.missing",
                         # Rail-name check (2026-11): not yet measured on unseen boards.
                         "power.rail_split", "connector.qwiic_pinout", "transistor.p_low_side",
                         "power.bypass_pin_cap", "protection.tvs_standoff",
+                        "value.dnp_not_marked",
                         # Contributor rule (b7f4360): 0/1 on holdout4, not yet measured further.
                         "connector.usbc_cc_missing",
                         # Placement check: right about 3 in 10 times on boards whose reviewers judged

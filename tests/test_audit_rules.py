@@ -1160,3 +1160,13 @@ def test_mlcc_part_number_voltage_code():
     over = check_cap_voltage_rating(DesignSnapshot((cap("C1", "10uF", "GRM188R61A106ME69D", "+12V"),), "t"))
     assert [f.title for f in over] == ["C1 is rated 10 V on the 12 V rail +12V"]
     assert check_cap_voltage_rating(DesignSnapshot((cap("C2", "100nF", "CL10B104KB8NNNC", "+12V"),), "t")) == []
+
+
+def test_generic_transistor_names_and_dnp_typed_as_a_value():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_values
+    q = Component("Q1", "Q_PNP_BCE", "Package_TO_SOT_SMD:SOT-23", (Pin("1", "/B", "B"), Pin("2", "+5V", "E"), Pin("3", "/C", "C")),
+                  fields={"lib_id": "Device:Q_PNP_BCE"})
+    c = Component("C43", "DNP", "Capacitor_SMD:C_0402_1005Metric", (Pin("1", "/ANT"), Pin("2", "GND")))
+    found = {f.rule: f.refs for f in check_values(DesignSnapshot((q, c), "t"))}
+    assert found.get("value.missing") == ("Q1",) and found.get("value.dnp_not_marked") == ("C43",)
