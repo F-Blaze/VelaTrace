@@ -229,7 +229,30 @@ def check_footprint_kind_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
             f"{len(refs)} {kind}{'s' if len(refs) != 1 else ''} on {other} footprints: {', '.join(refs)}", refs, (),
             "; ".join(f"{comp.reference} ({comp.value}) uses {comp.footprint}" for comp in comps),
             f"Check whether the symbol or the footprint is wrong and assign a {kind} footprint."))
-    return findings + _package_size_mismatch(snapshot)
+    return findings + _package_size_mismatch(snapshot) + _antenna_variant(snapshot)
+
+
+# Espressif WROOM/MINI modules: a trailing U (WROOM-1U, WROOM-32U, MINI-1U) is the external-antenna variant, with
+# a shorter body and no PCB antenna.
+_ESP_MODULE = re.compile(r"(ESP32(?:-[A-Z]\d)?-(?:WROOM|MINI)-\d+)(U?)(?![0-9])")
+
+
+def _antenna_variant(snapshot: DesignSnapshot) -> list[Finding]:
+    findings = []
+    for comp in snapshot.components:
+        value = _ESP_MODULE.search(comp.value.upper())
+        footprint = _ESP_MODULE.search(comp.footprint.rsplit(":", 1)[-1].upper())
+        if comp.dnp or not value or not footprint or value.group(1) != footprint.group(1) or value.group(2) == footprint.group(2):
+            continue
+        has_u = "value" if value.group(2) else "footprint"
+        findings.append(Finding(
+            "part.footprint_kind_mismatch", Severity.WARNING,
+            f"{comp.reference} is {comp.value} but its footprint is {comp.footprint.rsplit(':', 1)[-1]}", (comp.reference,),
+            (), f"The {has_u} names the external-antenna 'U' variant and the other does not: the U module is shorter "
+            "and has no PCB antenna, so either the antenna keep-out and outline are wrong or the ordered module needs "
+            "an external antenna.",
+            "Make the value and footprint name the same module variant (with or without U)."))
+    return findings
 
 
 # EIA case size encoded in common passive part numbers. The patterns are exact manufacturer schemes, so every

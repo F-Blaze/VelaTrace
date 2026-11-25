@@ -1136,3 +1136,14 @@ def test_passive_part_number_case_size_differs_from_footprint():
     found = check_footprint_kind_mismatch(DesignSnapshot((cap("C3", "0402", "CL10B104KO8NNND"), cap("C11", "0402", "CL10B104KO8NNND"),
                                                           cap("C4", "0603", "CL10B104KO8NNND"), cap("C5", "0603", "GRM188R71C104KA01D")), "t"))
     assert [(f.refs, "is 0603 but the footprint is 0402" in f.title) for f in found] == [(("C3", "C11"), True)]
+
+
+def test_esp32_module_antenna_variant_differs_from_footprint():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_footprint_kind_mismatch
+    mod = lambda value, fp: Component("U1", value, f"RF_Module:{fp}", (Pin("1", "GND"),))
+    assert len(check_footprint_kind_mismatch(DesignSnapshot((mod("ESP32-WROOM-32", "ESP32-WROOM-32U"),), "t"))) == 1
+    assert len(check_footprint_kind_mismatch(DesignSnapshot((mod("ESP32-S3-WROOM-1", "ESP32-S3-WROOM-1U"),), "t"))) == 1
+    for value, fp in (("ESP32-S3-WROOM-1U-N16R8", "ESP32-S3-WROOM-1U"), ("ESP32-S3-WROOM-1-N8", "ESP32-S3-WROOM-1"),
+                      ("ESP32-WROOM-32E", "ESP32-WROOM-32D")):
+        assert check_footprint_kind_mismatch(DesignSnapshot((mod(value, fp),), "t")) == [], value
