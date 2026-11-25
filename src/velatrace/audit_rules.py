@@ -1206,6 +1206,11 @@ def check_usbc_cc(snapshot: DesignSnapshot) -> list[Finding]:
                 PASSIVE_USD * len(missing)))
     return findings
 
+# Linear/switching Li-ion chargers and power-path managers whose BAT pin meets the cell directly.
+_LI_CHARGER = re.compile(r"TP40[5-6]\d|TP4057|MCP738\d\d|BQ240\d\d|BQ241\d\d|BQ2589\d|BQ2560\d|BQ2512\d|LTC40[5-9]\d|"
+                         r"IP5\d{3}|CN3\d{3}|MAX155[45]|MAX1811|SGM4056|LP4056|ETA6\d{3}|BQ25\d{3}", re.IGNORECASE)
+
+
 def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
     """Connectors carrying a supply and ground with no protection part on that supply."""
     design = _Design(snapshot)
@@ -1248,8 +1253,10 @@ def check_connector_protection(snapshot: DesignSnapshot) -> list[Finding]:
                     and any(_powers_ic(design, n) for n in group)
                     # Battery terminals take power in even where a charger also drives them.
                     and ("BAT" in net_label(net) or not _drives(design, _fed_group(design, group)))
-                    # An IC/module battery pin (charger BAT, module VBAT/VBACKUP) manages the cell it meets.
+                    # A backup-cell pin (RTC/MCU/module VBAT, VBACKUP) manages the coin cell it meets. A Li-ion
+                    # charger's BAT pin does not: a reversed cell there destroys the charger and can burn.
                     and not any(design.kind[comp.reference] in {"ic", "module"} and _BATTERY_PIN.fullmatch(pin.name.upper())
+                                and not _LI_CHARGER.search(comp.value)
                                 for n in group for comp, pin in design.nodes[n])
                     and not any(design.kind[part.reference] in protective or _PROTECTION_VALUE.search(part.value)
                                 or _PROTECTING_IC.search(part.value)

@@ -1182,3 +1182,15 @@ def test_5v_pixel_led_data_straight_from_a_3v3_gpio():
     pixel = lambda snap: [f for f in check_level_mismatch(snap) if "takes its data" in f.title]
     assert [f.refs for f in pixel(DesignSnapshot((mcu, led("+5V"), res), "t"))] == [("D7", "U2")]
     assert pixel(DesignSnapshot((mcu, led("+3V3"), res), "t")) == []
+
+
+def test_li_ion_charger_bat_pin_does_not_excuse_an_unprotected_battery_connector():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_connector_protection
+    conn = Component("J2", "JST_PH_2", "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal", (Pin("1", "VBAT"), Pin("2", "GND")))
+    def board(chip, pin):
+        ic = Component("U1", chip, "", (Pin("3", "VBAT", pin, "power_in"), Pin("2", "GND", "GND", "power_in")))
+        load = Component("U2", "ESP32-C3", "", (Pin("1", "VBAT", "VDD", "power_in"), Pin("2", "GND", "GND", "power_in")))
+        return check_connector_protection(DesignSnapshot((conn, ic, load), "t"))
+    assert [f.refs[0] for f in board("TP4056", "BAT")] == ["J2"]
+    assert board("DS3231M", "VBAT") == []     # an RTC's backup pin manages its coin cell
