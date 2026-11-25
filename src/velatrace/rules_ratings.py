@@ -615,12 +615,20 @@ def _vdda_small(design: _Design) -> list[Finding]:
         pin = next((p for p in ic.pins if re.fullmatch(r"VDDA(?:/VREF\+)?|VREF\+/VDDA", _name(p)) and p.net), None)
         if ic.dnp or pin is None or not re.search(r"(?i)STM32", ic.value) or pin.net in design.grounds:
             continue
-        total = Decimal(0)
+        total, to_return = Decimal(0), False
         for comp, _ in design.nodes.get(pin.net, ()):
             ends = two_terminal_nets(comp)
             value = parse_value(comp.value, "capacitor") if design.kind[comp.reference] == "capacitor" else None
-            if value and ends and any(end in design.grounds for end in ends):
-                total += value.value
+            if value and ends:
+                other = ends[1] if ends[0] == pin.net else ends[0]
+                if other in design.grounds or _is_return(design, other):
+                    total += value.value
+                    to_return = True
+                elif other != pin.net:
+                    total = None   # a capacitor to a net not known as ground (AUDIO_GROUND...): cannot judge
+                    break
+        if total is None or not design.grounds and not to_return:
+            continue
         if total < Decimal("1e-6"):
             findings.append(Finding(
                 "decoupling.missing", Severity.WARNING,
