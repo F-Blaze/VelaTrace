@@ -1126,3 +1126,13 @@ def test_w5500_reserved_pins_must_be_grounded():
     (found,) = check_reserved_pins(DesignSnapshot((chip(lambda n: f"unconnected-(U2-RSVD-Pad{n})"),), "t"))
     assert found.refs == ("U2",) and "23, 38" in found.title
     assert check_reserved_pins(DesignSnapshot((chip(lambda n: "GND"),), "t")) == []
+
+
+def test_passive_part_number_case_size_differs_from_footprint():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_footprint_kind_mismatch
+    cap = lambda ref, fp, mpn: Component(ref, "0.1uF", f"Capacitor_SMD:C_{fp}_Metric", (Pin("1", "+3V3"), Pin("2", "GND")),
+                                         fields={"TME Part Number": mpn})
+    found = check_footprint_kind_mismatch(DesignSnapshot((cap("C3", "0402", "CL10B104KO8NNND"), cap("C11", "0402", "CL10B104KO8NNND"),
+                                                          cap("C4", "0603", "CL10B104KO8NNND"), cap("C5", "0603", "GRM188R71C104KA01D")), "t"))
+    assert [(f.refs, "is 0603 but the footprint is 0402" in f.title) for f in found] == [(("C3", "C11"), True)]

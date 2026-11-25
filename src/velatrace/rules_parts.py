@@ -229,6 +229,56 @@ def check_footprint_kind_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
             f"{len(refs)} {kind}{'s' if len(refs) != 1 else ''} on {other} footprints: {', '.join(refs)}", refs, (),
             "; ".join(f"{comp.reference} ({comp.value}) uses {comp.footprint}" for comp in comps),
             f"Check whether the symbol or the footprint is wrong and assign a {kind} footprint."))
+    return findings + _package_size_mismatch(snapshot)
+
+
+# EIA case size encoded in common passive part numbers. The patterns are exact manufacturer schemes, so every
+# field is read (distributor order-number fields too).
+_METRIC = {"0603": "0201", "1005": "0402", "1608": "0603", "2012": "0805", "3216": "1206", "3225": "1210", "4532": "1812"}
+_MPN_PACKAGE = (
+    (re.compile(r"CL(03|05|10|21|31|32|43)[A-Z]"),                                                    # Samsung
+     {"03": "0201", "05": "0402", "10": "0603", "21": "0805", "31": "1206", "32": "1210", "43": "1812"}),
+    (re.compile(r"G[RC]M(03|15|18|21|31|32|43|55)"),                                                  # Murata
+     {"03": "0201", "15": "0402", "18": "0603", "21": "0805", "31": "1206", "32": "1210", "43": "1812", "55": "2220"}),
+    (re.compile(r"(?:RC|CC|AC|RT)(0201|0402|0603|0805|1206|1210|2010|2512)[A-Z]"), None),              # Yageo
+    (re.compile(r"CRCW(0201|0402|0603|0805|1206|1210|2010|2512)"), None),                              # Vishay
+    (re.compile(r"ERJ-?([2368])[A-Z]"), {"2": "0402", "3": "0603", "6": "0805", "8": "1206"}),         # Panasonic
+    (re.compile(r"(0201|0402|0603|0805|1206)W[A-Z0-9][BDFJ]"), None),                                  # Uniroyal
+    (re.compile(r"RK73[HB](1E|1J|2A|2B|2E)"), {"1E": "0402", "1J": "0603", "2A": "0805", "2B": "1206", "2E": "1210"}),  # KOA
+    (re.compile(r"C(1005|1608|2012|3216|3225|4532)[A-Z0-9]{2}"), _METRIC),                             # TDK
+)
+
+
+def _mpn_package(text: str) -> str | None:
+    code = re.sub(r"\s+", "", text).upper()
+    for pattern, table in _MPN_PACKAGE:
+        if match := pattern.match(code):
+            return match.group(1) if table is None else table.get(match.group(1))
+    return None
+
+
+def _package_size_mismatch(snapshot: DesignSnapshot) -> list[Finding]:
+    """A resistor/capacitor whose part number is one case size (CL10 = 0603) on a footprint of another (0402)."""
+    groups: dict[tuple[str, str, str, str], list[str]] = {}
+    for comp in snapshot.components:
+        footprint = bom.package_of(comp.footprint)
+        if comp.dnp or ar.part_kind(comp) not in {"resistor", "capacitor"} or not footprint:
+            continue
+        for name, text in comp.fields.items():
+            if isinstance(text, str) and name not in {"Footprint", "Datasheet", "lib_id"} and (size := _mpn_package(text)):
+                if size != footprint:
+                    groups.setdefault((text.strip(), name, size, footprint), []).append(comp.reference)
+                break
+    findings = []
+    for (text, name, size, footprint), refs in groups.items():
+        refs = sorted(refs, key=_ref_order)
+        findings.append(Finding(
+            "part.footprint_kind_mismatch", Severity.WARNING,
+            f"{', '.join(refs[:6])}{', …' if len(refs) > 6 else ''}: part number {text} is {size} but the footprint is "
+            f"{footprint}", tuple(refs), (),
+            f"{len(refs)} part{'s' if len(refs) > 1 else ''} on a {footprint} footprint carry {name} '{text}', whose "
+            f"code means a {size} case, so the ordered part will not fit the pads.",
+            f"Order the {footprint} version of the part, or change the footprint to {size}."))
     return findings
 
 
