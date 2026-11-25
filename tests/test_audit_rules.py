@@ -1206,3 +1206,15 @@ def test_capacitors_whose_second_end_meets_nothing():
     assert [f.refs for f in found] == [("C13", "C14")]
     assert not [f for f in check_power_unconnected(DesignSnapshot((mcu, cap("C13", "GND"), cap("C14", "GND")), "t"))
                 if "to nothing" in f.title]
+
+
+def test_li_ion_charger_bat_pin_without_a_capacitor():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    chg = Component("U2", "TP4056", "", (Pin("5", "/BATT+", "BAT", "power_out"), Pin("4", "+5V", "VCC", "power_in"),
+                                         Pin("3", "GND", "GND", "power_in")))
+    conn = Component("J8", "BATT", "", (Pin("1", "/BATT+"), Pin("2", "GND")))
+    bare = [f for f in check_power_unconnected(DesignSnapshot((chg, conn), "t")) if "BAT has no capacitor" in f.title]
+    assert [f.refs for f in bare] == [("U2",)]
+    cap = Component("C5", "4.7u", "", (Pin("1", "/BATT+"), Pin("2", "GND")))
+    assert not [f for f in check_power_unconnected(DesignSnapshot((chg, conn, cap), "t")) if "BAT has no capacitor" in f.title]

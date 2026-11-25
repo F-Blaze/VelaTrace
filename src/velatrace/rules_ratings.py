@@ -607,6 +607,26 @@ def _cap_fed_findings(design: _Design, ic: Component) -> list[Finding]:
 _INTERNAL_REG = re.compile(r"V3P3OUT|V5OUT|VCAP_?\d?|VREG_?OUT|VINT|INTVCC|LDO_?OUT|VCP")
 
 
+def _charger_bat_bare(design: _Design) -> list[Finding]:
+    """A Li-ion charger's BAT pin with no capacitor on its net: every charger datasheet puts 1-10 uF there, and with
+    no cell (or a cell behind a protection FET) the charger output oscillates."""
+    from .audit_rules import _LI_CHARGER
+    findings = []
+    for ic in design.of_kind("ic"):
+        if ic.dnp or not _LI_CHARGER.search(ic.value):
+            continue
+        bat = next((pin.net for pin in ic.pins if re.fullmatch(r"V?BATT?\d?", re.sub(r"_", "", _name(pin)))
+                    and pin.net and not pin.net.startswith("unconnected-(")), None)
+        if bat and not any(design.kind[comp.reference] == "capacitor" for comp, _ in design.nodes.get(bat, ())):
+            findings.append(Finding(
+                "decoupling.missing", Severity.WARNING, f"{ic.reference} ({ic.value}) BAT has no capacitor",
+                (ic.reference,), (bat,), f"{ic.reference} battery pin net {bat} has no capacitor at all; the {ic.value} "
+                "datasheet asks for one (typically 1-10 uF) close to BAT, so with the cell absent or switched off by "
+                "its protection the charger output can oscillate.",
+                "Add the datasheet's BAT capacitor (e.g. 4.7 uF) from BAT to ground, next to the pin."))
+    return findings
+
+
 def _caps_to_nowhere(design: _Design) -> list[Finding]:
     """Capacitors whose second ends meet only each other, all first ends on one net: they bypass nothing (a ground
     or supply label missing from the shared end)."""
@@ -672,7 +692,7 @@ def check_power_unconnected(snapshot: DesignSnapshot) -> list[Finding]:
     if not any(pin.electrical_type for comp in snapshot.components for pin in comp.pins):
         return []  # a PCB-sourced design has no pin types
     design = _Design(snapshot)
-    findings = _usb_ground_open(design) + _regulator_pin_open(design) + _caps_to_nowhere(design)
+    findings = _usb_ground_open(design) + _regulator_pin_open(design) + _caps_to_nowhere(design) + _charger_bat_bare(design)
     for ic in design.of_kind("ic"):
         if ic.dnp:
             continue
