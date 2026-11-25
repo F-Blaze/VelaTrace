@@ -1105,7 +1105,7 @@ def test_i2c_pullups_on_a_switched_rail_with_an_always_on_slave():
     from velatrace.models import Component, DesignSnapshot, Pin
     from velatrace.audit_rules import check_i2c_pullups
     mcu = Component("U1", "ESP32-S3-WROOM-1", "", (Pin("1", "3V3", "3V3", "power_in"), Pin("2", "I2C_SDA", "IO8"),
-                                                   Pin("3", "I2C_SCL", "IO9")))
+                                                   Pin("3", "I2C_SCL", "IO9"), Pin("4", "/A", "IO1"), Pin("5", "/B", "IO2")))
     accel = Component("U7", "LIS2DH12TR", "", (Pin("1", "3V3", "VDD", "power_in"), Pin("2", "I2C_SDA", "SDA"),
                                                Pin("3", "I2C_SCL", "SCL")))
     codec = Component("U4", "ES8311", "", (Pin("1", "AUDIO_3V3", "VDD", "power_in"), Pin("2", "I2C_SDA", "CDATA"),
