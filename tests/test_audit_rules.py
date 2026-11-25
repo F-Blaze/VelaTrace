@@ -1147,3 +1147,16 @@ def test_esp32_module_antenna_variant_differs_from_footprint():
     for value, fp in (("ESP32-S3-WROOM-1U-N16R8", "ESP32-S3-WROOM-1U"), ("ESP32-S3-WROOM-1-N8", "ESP32-S3-WROOM-1"),
                       ("ESP32-WROOM-32E", "ESP32-WROOM-32D")):
         assert check_footprint_kind_mismatch(DesignSnapshot((mod(value, fp),), "t")) == [], value
+
+
+def test_mlcc_part_number_voltage_code():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_cap_voltage_rating
+    cap = lambda ref, value, mpn, rail="+3V3": Component(ref, value, "Capacitor_SMD:C_0603_1608Metric",
+                                                         (Pin("1", rail), Pin("2", "GND")), fields={"MPN": mpn})
+    found = check_cap_voltage_rating(DesignSnapshot((cap("C15", "10uF 50v", "GRM188R61A106ME69D"),
+                                                     cap("C16", "1uF 50v", "GRM188R61A105KA61D")), "t"))
+    assert [f.refs for f in found] == [("C15", "C16")]
+    over = check_cap_voltage_rating(DesignSnapshot((cap("C1", "10uF", "GRM188R61A106ME69D", "+12V"),), "t"))
+    assert [f.title for f in over] == ["C1 is rated 10 V on the 12 V rail +12V"]
+    assert check_cap_voltage_rating(DesignSnapshot((cap("C2", "100nF", "CL10B104KB8NNNC", "+12V"),), "t")) == []

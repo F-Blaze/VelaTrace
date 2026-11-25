@@ -43,12 +43,42 @@ def _rated_volts(comp: Component) -> Decimal | None:
     return found.pop() if len(found) == 1 else None
 
 
+# Rated voltage encoded in common MLCC part numbers.
+_JIS_VOLTS = {"0G": "4", "0J": "6.3", "1A": "10", "1C": "16", "1E": "25", "1V": "35", "1H": "50", "2A": "100",
+              "2D": "200", "2E": "250", "2W": "450", "2J": "630", "3A": "1000"}
+_MLCC_VOLTS = (
+    (re.compile(r"G[RC][MJT]\d{3}[A-Z0-9]{2}(\d[A-Z])"), _JIS_VOLTS),                                    # Murata
+    (re.compile(r"C(?:0603|1005|1608|2012|3216|3225|4532)(?:X7R|X5R|C0G|X7S|X6S|NP0)(\d[A-Z])"), _JIS_VOLTS),  # TDK
+    (re.compile(r"CL\d\d[A-Z]\d{3}[A-Z]([A-Z])\d"),                                                     # Samsung
+     {"R": "4", "Q": "6.3", "P": "10", "O": "16", "A": "25", "L": "35", "B": "50", "C": "100", "D": "200",
+      "E": "250", "G": "500", "H": "630", "I": "1000"}),
+    (re.compile(r"CC\d{4}[A-Z]{2}(?:NPO|X7R|X5R|C0G|Y5V|X7S|X6S)(\d)B"),                                  # Yageo
+     {"5": "6.3", "6": "10", "7": "16", "8": "25", "9": "50", "0": "100"}),
+)
+
+
+def _mpn_volts(comp: Component) -> tuple[Decimal, str] | None:
+    for name, text in comp.fields.items():
+        if not isinstance(text, str) or name in {"Footprint", "Datasheet", "lib_id"}:
+            continue
+        code = re.sub(r"\s+", "", text).upper()
+        for pattern, table in _MLCC_VOLTS:
+            if (match := pattern.match(code)) and match.group(1) in table:
+                return Decimal(table[match.group(1)]), text.strip()
+    return None
+
+
 def check_cap_voltage_rating(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
-    findings = []
+    findings, understated = [], []
     for comp in design.of_kind("capacitor"):
         ends = two_terminal_nets(comp)
         rated = _rated_volts(comp)
+        coded = None if comp.dnp else _mpn_volts(comp)
+        if rated is not None and coded and coded[0] < rated:
+            understated.append((comp, rated, coded))
+        elif rated is None and coded:
+            rated = coded[0]
         if comp.dnp or ends is None or rated is None:
             continue
         for rail, other in (ends, ends[::-1]):
@@ -62,6 +92,15 @@ def check_cap_voltage_rating(snapshot: DesignSnapshot) -> list[Finding]:
                 f"{comp.reference} ({comp.value}) is rated {_volts(rated)} but sits between {rail} "
                 f"(nominal {_volts(volts)}) and {other}, so it is over-stressed.",
                 f"Use a capacitor rated for more than {_volts(volts)}; a 50 percent margin is common practice."))
+    if understated:   # one finding for the board: the same habit of copying a part number without its voltage code
+        refs = tuple(comp.reference for comp, _, _ in understated)
+        findings.append(Finding(
+            "cap.voltage_rating", Severity.WARNING,
+            f"{', '.join(refs[:6])}: the part number is rated lower than the value states", refs, (),
+            "; ".join(f"{comp.reference} ({comp.value}) {code} is a {_volts(coded)} part, the value says {_volts(rated)}"
+                      for comp, rated, (coded, code) in understated[:5]) + ". The bought part is rated lower than the "
+            "schematic claims.",
+            "Order the part numbers for the stated voltage, or correct the values if the lower rating is enough."))
     return findings
 
 
