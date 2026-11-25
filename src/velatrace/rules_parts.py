@@ -272,6 +272,21 @@ def check_polarized_symbol(snapshot: DesignSnapshot) -> list[Finding]:
                 f"{comp.reference} uses symbol {lib_id} and footprint {comp.footprint} but {reason}, so the board "
                 "has no polarity mark.",
                 "Use a polarized symbol and footprint (for example Device:C_Polarized, CP_*) so + is marked."))
+    # The reverse: a polarized symbol on a plain ceramic chip footprint. Ceramics have no polarity, but the symbol
+    # invites a tantalum or electrolytic buyer, and nothing on the board marks +.
+    ceramic = [comp.reference for comp in snapshot.components
+               if ar.part_kind(comp) == "capacitor" and not comp.dnp
+               and re.search(r"(?i)C_Polari[sz]ed|(?:^|:)CP(?:_|$)", comp.fields.get("lib_id", ""))
+               and re.search(r"(?:^|:)C_(?:0201|0402|0603|0805|1206|1210|1812)_", comp.footprint)]
+    if ceramic:
+        refs = tuple(sorted(ceramic, key=_ref_order))
+        findings.append(Finding(
+            "part.polarized_symbol", Severity.INFO,
+            f"{', '.join(refs[:6])}{', …' if len(refs) > 6 else ''} use a polarized symbol on a ceramic chip footprint",
+            refs, (), f"{len(refs)} capacitor{'s' if len(refs) > 1 else ''} drawn with a polarized symbol sit on plain "
+            "C_xxxx chip footprints: a ceramic has no polarity, and the symbol can lead to a tantalum or electrolytic "
+            "being bought with no + mark on the board.",
+            "Use the non-polar symbol (Device:C) for ceramics, or a CP_ footprint if a polarized part is intended."))
     return findings
 
 

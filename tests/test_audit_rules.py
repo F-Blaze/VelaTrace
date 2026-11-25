@@ -1050,3 +1050,14 @@ def test_value_and_mpn_naming_different_parts():
     assert [f.refs for f in found] == [("D2", "D6")]
     same = (diode("D4", "B5819W", "1N5819HW-7-F"), diode("D5", "SOD-523_BSD5C051L", "BSD5C051L"), diode("D7", "SS14", "C2480"))
     assert check_mpn_value_mismatch(DesignSnapshot(same, "t")) == []
+
+
+def test_polarized_symbols_on_ceramic_chip_footprints_are_one_note():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_polarized_symbol
+    cap = lambda ref, lib, fp: Component(ref, "10u", fp, (Pin("1", "+9V"), Pin("2", "GND")), fields={"lib_id": lib})
+    parts = (cap("C1", "Device:C_Polarized", "Capacitor_SMD:C_0805_2012Metric"),
+             cap("C4", "Device:C_Polarized", "Capacitor_SMD:C_0805_2012Metric"),
+             cap("C5", "Device:C_Polarized", "Capacitor_SMD:CP_Elec_6.3x7.7"), cap("C6", "Device:C", "Capacitor_SMD:C_0805_2012Metric"))
+    found = check_polarized_symbol(DesignSnapshot(parts, "t"))
+    assert [(f.severity.value, f.refs) for f in found] == [("info", ("C1", "C4"))]
