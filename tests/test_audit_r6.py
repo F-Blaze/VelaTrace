@@ -68,4 +68,5 @@ def test_r6_low_current_parts_skip_far_but_not_missing(value):
 def test_r6_big_or_ordinary_parts_keep_far():
     far = cap("C1", pin_pos=((22.0, 10.0), (23.0, 10.0)))
     assert r6_found("decoupling.far", r6_chip("W25Q128"), far) == [("decoupling.far", ("U1", "C1"))]
-    assert r6_found("decoupling.far", r6_chip("74LVC1G00", pins=6), far) == [("decoupling.far", ("U1", "C1"))]
+    farther = cap("C1", pin_pos=((32.0, 10.0), (33.0, 10.0)))  # a single gate is a slow part: 12 mm allowed
+    assert r6_found("decoupling.far", r6_chip("74LVC1G00", pins=6), farther) == [("decoupling.far", ("U1", "C1"))]

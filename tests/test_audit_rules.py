@@ -306,6 +306,7 @@ def led(ref, a, k, a_name="A", k_name="K"):
 def test_led_across_rail_without_resistor():
     found = rules(design(led("D1", "+3V3", "GND")), "led")
     assert [(f.rule, f.severity, f.refs) for f in found] == [("led.no_resistor", Severity.ERROR, ("D1",))]
+    assert found[0].title.startswith("LED D1 ")   # readers can't see D1 is an LED otherwise
     ok = design(led("D1", "Net-(D1-A)", "GND"), res("R1", "+3V3", "Net-(D1-A)", "1k"))
     assert rules(ok, "led") == []
 
@@ -635,10 +636,10 @@ def gate_board():
 
 def test_gate_experimental_rules_are_the_light_beta_rules():
     assert audit_rules.EXPERIMENTAL_RULES == audit_rules.BETA_RULES - {
-        rule for rule in audit_rules.BETA_RULES if rule.startswith(("hs.", "fit."))}
+        rule for rule in audit_rules.BETA_RULES if rule.startswith(("hs.", "fit.", "pcb."))}
     assert {"decoupling.missing", "i2c.pullup.missing", "net.single_pin", "pin.input_floating"} \
         <= audit_rules.EXPERIMENTAL_RULES
-    assert not any(rule.startswith(("hs.", "fit.")) for rule in audit_rules.EXPERIMENTAL_RULES)
+    assert not any(rule.startswith(("hs.", "fit.", "pcb.")) for rule in audit_rules.EXPERIMENTAL_RULES)
 
 
 def test_gate_run_rules_shows_experimental_by_default_and_can_hide_and_count_them():
@@ -719,6 +720,57 @@ def test_regulator_feedback_pin_is_not_a_supply_input():
     assert rules(design(driver, bulk), "decoupling") == []
 
 
+def test_slow_parts_get_a_centimetre_but_not_more():
+    def chip(value):
+        return part("U1", value, "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)), ("5", "/CANH", "CANH", "bidirectional"),
+                    ("6", "/CANL", "CANL", "bidirectional"))
+    def at(mm):
+        return cap(a="+3V3", pin_pos=((10.0 + mm, 10.0), (11.0 + mm, 10.0)))
+    for value in ("DS3231M", "74LVC2G14", "H11L1"):
+        assert rules(design(chip(value), at(9.0)), "decoupling") == [], value
+        assert [f.rule for f in rules(design(chip(value), at(20.0)), "decoupling")] == ["decoupling.far"], value
+    for value in ("ATtiny85", "TJA1042T/3", "SN65HVD230"):  # bus transceivers switch tens of mA: 5 mm as usual
+        assert [f.rule for f in rules(design(chip(value), at(9.0)), "decoupling")] == ["decoupling.far"], value
+
+
+def test_efuse_output_needs_no_cap_but_usb_power_switch_output_does():
+    def switch(value):
+        return part("U1", value, "Package_TO_SOT_SMD:SOT-23-6", ("5", "+5V_IN", "IN", "power_in"),
+                    ("1", "+5V", "OUT", "power_out"), ("2", "GND", "GND", "power_in"), ("3", "/EN", "EN", "input"))
+    load = part("J2", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "+5V"), ("2", "GND"))
+    for value, nets in (("TPS259470A", []), ("TPS22918", []), ("CH217K", [("+5V",)])):
+        found = rules(design(switch(value), load, cap(a="+5V_IN")), "decoupling.missing")
+        assert [f.nets for f in found] == nets, value
+
+
+def test_far_cap_quiet_for_sockets_display_modules_microamp_sensors_and_generic_gates():
+    def chip(value, footprint="Package_SO:SOIC-8_3.9x4.9mm_P1.27mm", extra=4):
+        return part("U1", value, footprint, ("8", "+3V3", "VCC", "power_in", (10.0, 10.0)),
+                    ("4", "GND", "GND", "power_in", (10.0, 12.0)),
+                    *[(str(n), f"/S{n}", f"IO{n}", "bidirectional") for n in range(1, extra + 1)])
+    far = cap(a="+3V3", pin_pos=((19.0, 10.0), (20.0, 10.0)))  # 9 mm
+    farther = cap(a="+3V3", pin_pos=((40.0, 10.0), (41.0, 10.0)))  # 30 mm
+    for comp in (chip("PIC_18_PINS", "Package_DIP:DIP-18_W7.62mm_Socket_LongPads"), chip("LCD_ST7735S_1.8"),
+                 chip("BME280"), chip("TPL5010DDC"), chip("NAND", "Package_TO_SOT_SMD:SOT-353", 2), chip("MCP23008-xSO")):
+        assert rules(design(comp, far), "decoupling") == [], comp.value
+    assert [f.rule for f in rules(design(chip("MCP23008-xSO"), farther), "decoupling")] == ["decoupling.far"]
+    assert [f.rule for f in rules(design(chip("ATmega328P"), far), "decoupling")] == ["decoupling.far"]
+
+
+def test_missing_cap_quiet_for_surge_stopper_input_battery_sense_and_mic94xx_output():
+    stopper = part("U2", "LTC4365", "Package_DFN_QFN:DFN-8", ("1", "+12V_RAW", "VIN", "power_in"),
+                   ("2", "GND", "GND", "power_in"), ("3", "/GATE", "GATE", "output"), ("4", "/UV", "UV", "input"))
+    charger = part("U3", "BQ25792", "Package_DFN_QFN:QFN-29", ("1", "+VBAT", "BAT", "power_out"),
+                   ("2", "GND", "GND", "power_in"), ("3", "Net-(U3-BATP)", "BATP", "power_in"), ("4", "/SDA", "SDA", "bidirectional"))
+    sense = res("R8", "Net-(U3-BATP)", "+VBAT", "100")
+    switch = part("U4", "MIC9409C6", "Package_TO_SOT_SMD:SOT-23-6", ("4", "+3V3", "VIN", "power_in"),
+                  ("1", "VSWITCH", "VOUT", "power_in"), ("2", "GND", "GND", "power_in"), ("6", "/CTRL", "EN", "input"))
+    load = part("J3", "Screw", "TerminalBlock:TerminalBlock_1x02", ("1", "VSWITCH"), ("2", "GND"))
+    found = rules(design(stopper, charger, sense, switch, load, cap(a="+3V3"), cap("C2", "+VBAT")), "decoupling.missing")
+    assert found == [], [f.title for f in found]
+
+
 def test_unconnected_supply_pin_needs_no_decoupling():
     module = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "unconnected-(U1-5V-Pad1)", "5V", "power_in"),
                   ("2", "GND", "GND", "power_in"), *exp4_spare())
@@ -744,6 +796,35 @@ def test_qwiic_and_fan_ports_are_not_power_entries():
     found = rules(design(conn("/UART_TX", "/UART_RX"), reg, cap("C2", "+5V")), "connector")
     assert [f.nets for f in found] == [("+5V",)]
 
+
+
+def test_i2c_pullup_pair_to_a_switched_rail_counts():
+    sda_scl = design(ic("U1", ("3", "SDA", "SDA"), ("4", "SCL", "SCL")), ic("U2", ("3", "SDA", "SDA"), ("4", "SCL", "SCL"),
+                     value="SENSOR"), cap(), res("R1", "SDA", "Net-(Q5-D)"), res("R2", "SCL", "Net-(Q5-D)"))
+    assert [f.rule for f in rules(sda_scl, "i2c.pullup.missing")] == []
+    lone = design(ic("U1", ("3", "SDA", "SDA")), ic("U2", ("3", "SDA", "SDA"), value="SENSOR"), cap(),
+                  res("R1", "SDA", "Net-(U1-X)"))  # one resistor to an unknown net is not a pull-up
+    assert [f.rule for f in rules(lone, "i2c.pullup.missing")] == ["i2c.pullup.missing"]
+
+
+def test_rail_selected_by_a_jumper_and_buck_module_headers_are_not_entries():
+    buck = part("U3", "TPS62840", "Package_SON:WSON-6", ("1", "+5V", "VIN", "power_in"),
+                ("2", "GND", "GND", "power_in"), ("3", "/Vo_Buck", "VOUT", "power_out"))
+    sel = part("J5", "Conn_01x03_Pin", "", ("1", "/Vo_Buck"), ("2", "/VCC"), ("3", "/Vo_LDO"))
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "/VCC", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    header = part("J6", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "/VCC"), ("2", "GND"))
+    assert rules(design(buck, sel, mcu, header, cap("C1", "/VCC")), "connector") == []
+    assert [f.refs for f in rules(design(mcu, header, cap("C1", "/VCC")), "connector")] == [("J6",)]
+    module = part("M1", "MP1584EN", "Connector_PinHeader_2.54mm:PinHeader_1x04", ("1", "+12V"), ("2", "GND"), ("3", "+5V"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert "M1" not in [ref for f in rules(design(module, load, cap("C1", "+5V")), "connector") for ref in f.refs]
+
+
+def test_connector_labelled_as_an_output_is_not_a_power_entry():
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+BATT", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    for value, quiet in (("Battery_conn_out", True), ("LOAD", True), ("Battery_conn", False)):
+        conn = part("J2", value, "Connector_JST:JST_PH_B2B-PH-K_1x02", ("1", "+BATT"), ("2", "GND"))
+        assert (rules(design(conn, mcu, cap("C1", "+BATT")), "connector") == []) is quiet, value
 
 
 def test_value_missing_leds_with_order_code_and_value_named_symbols_are_fine():
@@ -794,3 +875,378 @@ def test_regulator_by_part_number_and_marked_up_battery_pin_drive_their_rails():
     found = rules(design(charger, load, battery, cap("C2", "/VBAT")), "connector")
     assert [f.nets for f in found] == [("/VBAT",)]  # a battery input stays flagged, without claiming nothing drives it
     assert "nothing on the board drives" not in found[0].evidence and "reversed cell" in found[0].evidence
+
+
+def test_mains_inputs_of_an_ac_dc_module_need_no_bypass_cap():
+    module = part("U3", "HLK-PM01", "Converter_ACDC:HLK-PM01", ("1", "/AC/L", "AC", "power_in"),
+                  ("2", "/AC/N", "AC", "power_in"), ("3", "GND", "-Vo", "power_out"), ("4", "+5V", "+Vo", "power_out"))
+    load = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert [f.nets for f in rules(design(module, load, cap(a="+5V")), "decoupling.missing")] == []
+
+
+def test_lm2596_out_pin_through_its_inductor_drives_the_rail():
+    buck = part("U1", "LM2596S-5.0", "Package_TO_SOT_SMD:TO-263-5", ("1", "+24V", "VIN", "power_in"),
+                ("2", "/SW", "OUT", "output"), ("3", "GND", "GND", "power_in"), ("4", "+5V", "FB", "input"))
+    coil = part("L1", "33uH", "Inductor_SMD:L_12x12mm", ("1", "/SW"), ("2", "+5V"))
+    load = part("J4", "Conn_01x05", "Connector_PinHeader_2.54mm:PinHeader_1x05", ("1", "+5V"), ("2", "GND"))
+    mcu = part("U2", "MCU", "Package_QFP:LQFP-32", ("1", "+5V", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert "J4" not in [ref for f in rules(design(buck, coil, load, mcu, cap("C1", "+5V")), "connector") for ref in f.refs]
+
+
+@pytest.mark.parametrize("value", ["1.5KExxA", "ESD5Zxx", "SMBJxxA", "TBD", "tba", "TBC", "???", "BAT54xx"])
+def test_value_missing_flags_placeholder_values(value):
+    assert values_missing(part("U2", value, "Package_SO:SOIC-8", ("1", "A"))) == [(Severity.INFO, ("U2",))]
+
+
+@pytest.mark.parametrize("value", ["0x3C", "PinHeader_1x10", "2x2.5mm", "4x4mm", "STM32F103C8T6", "LMx58",
+                                   "1.5KE18A", "ESD5ZXX", "TBDX", "MCP6002-ISN",
+                                   "MCP6002-xSN", "MCP23008-xSO", "CP2102N-Axx-xQFN20", "24Cxx"])
+def test_value_missing_placeholder_quiet_near_misses(value):
+    assert values_missing(part("U2", value, "Package_SO:SOIC-8", ("1", "A"))) == []
+
+
+def test_value_missing_placeholder_with_an_mpn_is_quiet_and_groups_refs():
+    assert values_missing(part("U2", "TBD", "Package_SO:SOIC-8", ("1", "A"), fields={"MPN": "LM358"})) == []
+    assert values_missing(part("U2", "TBD", "Package_SO:SOIC-8", ("1", "A")),
+                          part("U3", "ESD5Zxx", "Package_SO:SOIC-8", ("1", "B"))) == [
+        (Severity.INFO, ("U2", "U3"))]
+
+
+def test_placeholder_template_with_a_jlc_order_code_is_identified():
+    ic = part("U2", "nRF52810-QFxx", "Package_DFN_QFN:QFN-48", ("1", "+3V3", "VDD"), fields={"JLCPN": "C141828"})
+    assert rules(design(ic, cap()), "value.missing") == []
+    tvs = part("D2", "1.5KExxA", "Diode_SMD:D_SMC", ("1", "+12V"), ("2", "GND"))
+    assert [f.rule for f in rules(design(tvs, cap()), "value.missing")] == ["value.missing"]
+    assert rules(design(tvs, cap()), "value.missing") != [] and rules(design(
+        part("D2", "1.5KExxA", "Diode_SMD:D_SMC", ("1", "+12V"), ("2", "GND"), fields={"JLCPN": "C8678"}), cap()),
+        "value.missing") == []
+
+
+def test_ldo_pins_named_output_drive_and_hv_startup_pin_is_not_a_supply():
+    ldo = part("IC1", "NCP1117LPST33T3G", "Package_TO_SOT_SMD:SOT-223", ("2", "/VCC_3V3", "OUTPUT_1", "passive"),
+               ("3", "/VCC_5V", "INPUT", "passive"), ("1", "GND", "ADJUST/GROUND", "passive"))
+    header = part("J1", "Conn_02x10", "Connector_PinHeader_2.54mm:PinHeader_2x10", ("1", "/VCC_3V3"), ("2", "GND"))
+    mcu = part("U1", "MCU", "Package_QFP:LQFP-32", ("1", "/VCC_3V3", "VDD", "power_in"), ("2", "GND", "GND", "power_in"))
+    assert "J1" not in [r for f in rules(design(ldo, header, mcu, cap("C1", "/VCC_3V3")), "connector") for r in f.refs]
+    ctrl = part("U1", "UCC256610", "Package_SO:SOIC-14", ("1", "/HV", "HV", "power_in"), ("2", "+12V", "VCCP", "power_in"),
+                ("3", "GND", "GND", "power_in"), ("4", "/X", "LO", "output"))
+    feed = res("R1", "/HV", "+400V", "1M")
+    assert [f.nets for f in rules(design(ctrl, feed, cap("C1", "+12V")), "decoupling.missing")] == []
+
+
+def test_generic_symbol_name_with_a_value_is_not_missing():
+    from velatrace.audit_rules import _GENERIC_VALUE
+    assert _GENERIC_VALUE.fullmatch("R_Small_US") and _GENERIC_VALUE.fullmatch("C_Polarized_Small")
+    assert not _GENERIC_VALUE.fullmatch("R_Poti_1K")   # round 13 (seen): a 1k pot named by its value
+
+
+def test_two_spellings_of_one_rail_are_a_split_rail():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_rail_split
+    reg = Component("U3", "AP2112K-3.3", "", (Pin("1", "+5V", "VIN", "power_in"), Pin("5", "+3.3V", "VOUT", "power_out"),
+                                              Pin("2", "GND", "GND", "power_in")))
+    mcu = Component("U6", "ESP32", "", (Pin("2", "+3V3", "3V3", "power_in"), Pin("1", "GND", "GND", "power_in")))
+    caps = (Component("C3", "10u", "", (Pin("1", "+3.3V"), Pin("2", "GND"))),
+            Component("C6", "100n", "", (Pin("1", "+3V3"), Pin("2", "GND"))))
+    (found,) = check_rail_split(DesignSnapshot((reg, mcu, *caps), "t"))
+    assert found.rule == "power.rail_split" and set(found.nets) == {"+3.3V", "+3V3"} and "fed by U3 VOUT" in found.evidence
+    link = Component("FB1", "BLM18", "", (Pin("1", "+3.3V"), Pin("2", "+3V3")))
+    assert check_rail_split(DesignSnapshot((reg, mcu, *caps, link), "t")) == []
+    local = (Component("C1", "1u", "", (Pin("1", "/IMU/Q_3V3"), Pin("2", "GND"))), Component("U1", "X", "", (Pin("1", "/IMU/Q_3V3", "VDD", "power_in"),)),
+             Component("C2", "1u", "", (Pin("1", "/P/Q_3V3"), Pin("2", "GND"))), Component("U2", "X", "", (Pin("1", "/P/Q_3V3", "VDD", "power_in"),)))
+    assert check_rail_split(DesignSnapshot(local, "t")) == []
+
+
+def test_part_field_mpns_and_smd_part_numbers_on_through_hole_footprints():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_mpn_value_mismatch
+    axial = "Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P7.62mm_Horizontal"
+    r10 = Component("R10", "330", axial, (Pin("1", "A"), Pin("2", "B")), fields={"Part": "ERJ-6GEYJ471V"})
+    r11 = Component("R11", "470", axial, (Pin("1", "A"), Pin("2", "C")), fields={"Part": "ERJ-6GEYJ471V"})
+    reg = Component("U2", "L7805", "Package_TO_SOT_THT:TO-220-3_Vertical", (Pin("1", "VIN"), Pin("2", "GND"), Pin("3", "+5V")),
+                    fields={"Part": "L7805CDT-TR"})
+    found = {f.title for f in check_mpn_value_mismatch(DesignSnapshot((r10, r11, reg), "t"))}
+    assert "R10 is labelled 330 Ω but the Part field says 470 Ω" in {t.replace("Ω", "Ω") for t in found} or any(
+        t.startswith("R10 is labelled") for t in found)
+    assert any(t.startswith("R11 part number ERJ-6GEYJ471V is a surface-mount chip") for t in found)
+    assert any(t.startswith("U2 part number L7805CDT-TR is a surface-mount (DPAK/D2PAK) regulator") for t in found)
+    ok = Component("U2", "L7805", "Package_TO_SOT_THT:TO-220-3_Vertical", reg.pins, fields={"Part": "L7805CV"})
+    smd = Component("R11", "470", "Resistor_SMD:R_0805_2012Metric", r11.pins, fields={"Part": "ERJ-6GEYJ471V"})
+    assert check_mpn_value_mismatch(DesignSnapshot((ok, smd), "t")) == []
+
+
+def test_usb_c_known_by_pins_and_usb_ground_left_open():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_usbc_cc
+    from velatrace.rules_ratings import check_power_unconnected
+    nc = lambda num, name: Pin(num, f"unconnected-(J1-{name}-Pad{num})", name, "power_in+no_connect")
+    j1 = Component("J1", "2171820001", "X:MOLEX_2171820001", (
+        Pin("A4", "+5V", "VBUS1", "power_in"), Pin("A6", "/D+", "DP1", "bidirectional"), Pin("A7", "/D-", "DN1", "bidirectional"),
+        Pin("A5", "/CC1", "CC1", "bidirectional"), Pin("B5", "/CC2", "CC2", "bidirectional"), nc("A1", "GND1"), nc("B12", "GND4")))
+    mcu = Component("U1", "ESP32", "", (Pin("1", "GND", "GND", "power_in"), Pin("2", "/D+", "D+", "bidirectional")))
+    snap = DesignSnapshot((j1, mcu), "t")
+    assert [f.title for f in check_usbc_cc(snap)] == ["J1 USB-C CC pull-down missing on CC1, CC2"]
+    assert [f.title for f in check_power_unconnected(snap)] == ["J1 USB ground pins are not connected"]
+    wired = Component("J1", j1.value, j1.footprint, tuple(p if not p.name.startswith("GND") else Pin(p.number, "GND", p.name, "power_in")
+                                                          for p in j1.pins))
+    assert check_power_unconnected(DesignSnapshot((wired, mcu), "t")) == []
+
+
+def test_qwiic_connector_pin_order():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_qwiic_pinout
+    def conn(order, value="Qwiic"):
+        return Component("J1", value, "Connector_JST:JST_SH_SM04B-SRSS-TB_1x04-1MP_P1.00mm_Horizontal",
+                         tuple(Pin(str(i + 1), net) for i, net in enumerate(order)))
+    mcu = Component("U1", "MCU", "", (Pin("1", "/SDA", "SDA"), Pin("2", "/SCL", "SCL"), Pin("3", "GND"), Pin("4", "+3V3")))
+    bad = check_qwiic_pinout(DesignSnapshot((conn(["/SCL", "/SDA", "+3V3", "GND"]), mcu), "t"))
+    assert [f.rule for f in bad] == ["connector.qwiic_pinout"] and "SDA on pin 2 (should be 3)" in bad[0].evidence
+    assert check_qwiic_pinout(DesignSnapshot((conn(["GND", "+3V3", "/SDA", "/SCL"]), mcu), "t")) == []
+    # A plain JST-SH header in another order is not claimed to be Qwiic.
+    assert check_qwiic_pinout(DesignSnapshot((conn(["/SCL", "/SDA", "+3V3", "GND"], "I2C"), mcu), "t")) == []
+
+
+def test_p_channel_with_grounded_source_cannot_switch_a_low_side_load():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_p_low_side
+    fet = lambda ref, value, s, d: Component(ref, value, "Package_TO_SOT_SMD:SOT-23",
+                                             (Pin("1", f"/G{ref}", "G"), Pin("2", s, "S"), Pin("3", d, "D")))
+    load = Component("M1", "Motor", "", (Pin("1", "+VBAT"), Pin("2", "/M-")))
+    found = check_p_low_side(DesignSnapshot((fet("Q2", "Si2319CDS", "GND", "/M-"), fet("Q3", "Si2319CDS", "GND", "/M2-"), load), "t"))
+    assert [(f.rule, f.refs) for f in found] == [("transistor.p_low_side", ("Q2", "Q3"))]
+    assert check_p_low_side(DesignSnapshot((fet("Q2", "IRLML6344", "GND", "/M-"), load), "t")) == []      # N-channel
+    assert check_p_low_side(DesignSnapshot((fet("Q2", "Si2319CDS", "+VBAT", "/M-"), load), "t")) == []    # high side
+
+
+def test_internal_regulator_output_left_open():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    drv = lambda net: Component("U1", "DRV8825", "", (Pin("4", "VM", "VMA", "power_in"), Pin("14", "GND", "GND", "power_in"),
+                                                      Pin("15", net, "V3P3OUT", "power_out")))
+    found = check_power_unconnected(DesignSnapshot((drv("unconnected-(U1-V3P3OUT-Pad15)"),), "t"))
+    assert [(f.rule, f.refs) for f in found] == [("decoupling.missing", ("U1",))]
+    cap = Component("C9", "470n", "", (Pin("1", "/V3P3"), Pin("2", "GND")))
+    assert check_power_unconnected(DesignSnapshot((drv("/V3P3"), cap), "t")) == []
+
+
+def test_huge_capacitor_on_an_ldo_bypass_pin():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_bypass_pin_cap
+    ldo = Component("U3", "MIC5219-3.3", "", (Pin("1", "+5V", "IN"), Pin("2", "GND", "GND"), Pin("3", "+5V", "EN"),
+                                              Pin("4", "/BP", "BP"), Pin("5", "+3V3", "OUT")))
+    cap = lambda value: Component("C2", value, "", (Pin("1", "/BP"), Pin("2", "GND")))
+    assert [f.refs for f in check_bypass_pin_cap(DesignSnapshot((ldo, cap("470uF")), "t"))] == [("C2", "U3")]
+    assert check_bypass_pin_cap(DesignSnapshot((ldo, cap("470pF")), "t")) == []
+    amp = Component("U3", "LM386", "", (Pin("5", "/OUT", "VOUT"), Pin("6", "+9V", "VS"), Pin("7", "/BP", "BYPASS")))
+    assert check_bypass_pin_cap(DesignSnapshot((amp, cap("10uF")), "t")) == []
+
+
+def test_value_and_mpn_naming_different_parts():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_mpn_value_mismatch
+    diode = lambda ref, value, mpn: Component(ref, value, "Diode_SMD:D_SOD-123", (Pin("1", "A"), Pin("2", "K")), fields={"MPN": mpn})
+    found = check_mpn_value_mismatch(DesignSnapshot((diode("D2", "MMSD4148T1G", "CD1206-S01575"),
+                                                     diode("D6", "MMSD4148T1G", "CD1206-S01575")), "t"))
+    assert [f.refs for f in found] == [("D2", "D6")]
+    same = (diode("D4", "B5819W", "1N5819HW-7-F"), diode("D5", "SOD-523_BSD5C051L", "BSD5C051L"), diode("D7", "SS14", "C2480"))
+    assert check_mpn_value_mismatch(DesignSnapshot(same, "t")) == []
+
+
+def test_polarized_symbols_on_ceramic_chip_footprints_are_one_note():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_polarized_symbol
+    cap = lambda ref, lib, fp: Component(ref, "10u", fp, (Pin("1", "+9V"), Pin("2", "GND")), fields={"lib_id": lib})
+    parts = (cap("C1", "Device:C_Polarized", "Capacitor_SMD:C_0805_2012Metric"),
+             cap("C4", "Device:C_Polarized", "Capacitor_SMD:C_0805_2012Metric"),
+             cap("C5", "Device:C_Polarized", "Capacitor_SMD:CP_Elec_6.3x7.7"), cap("C6", "Device:C", "Capacitor_SMD:C_0805_2012Metric"))
+    found = check_polarized_symbol(DesignSnapshot(parts, "t"))
+    assert [(f.severity.value, f.refs) for f in found] == [("info", ("C1", "C4"))]
+
+
+def test_tvs_stand_off_below_the_rail_it_protects():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_tables import check_tvs_standoff
+    tvs = lambda value, net: Component("D7", value, "Diode_SMD:D_SMA", (Pin("1", net, "K"), Pin("2", "GND", "A")))
+    ldo = Component("U5", "NCP1117", "", (Pin("3", "VIN", "VI"), Pin("2", "5VDC", "VO"), Pin("1", "GND", "GND")))
+    oring = Component("D3", "B5819W", "Diode_SMD:D_SOD-123", (Pin("1", "VIN"), Pin("2", "PWRIN")))
+    load = Component("C6", "47u", "", (Pin("1", "VIN"), Pin("2", "GND")))
+    (found,) = check_tvs_standoff(DesignSnapshot((tvs("SMAJ6.0A", "PWRIN"), ldo, oring, load), "t"))
+    assert found.refs == ("D7",) and "PWRIN must be at least 6.3 V" in found.evidence
+    assert check_tvs_standoff(DesignSnapshot((tvs("SMAJ15A", "PWRIN"), ldo, oring, load), "t")) == []
+    assert [f.refs for f in check_tvs_standoff(DesignSnapshot((tvs("SMBJ5.0A", "+12V"),), "t"))] == [("D7",)]
+
+
+def test_motor_sense_resistor_package_too_small_for_full_current():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_resistor_power_rating
+    def board(driver, ohms, package):
+        ic = Component("U1", driver, "", (Pin("6", "/ISA", "ISENA" if driver.startswith("DRV8825") else "AISEN"),
+                                          Pin("1", "GND", "GND", "power_in")))
+        res = Component("R3", ohms, f"Resistor_SMD:R_{package}_Metric", (Pin("1", "/ISA"), Pin("2", "GND")))
+        return [f for f in check_resistor_power_rating(DesignSnapshot((ic, res), "t")) if "motor current" in f.title]
+    assert [f.refs for f in board("DRV8825PWPR", "0.1", "0603")] == [("R3", "U1")]
+    assert board("DRV8825PWPR", "0.1", "2512") == []
+    assert board("DRV8833PWPR", "300m", "1206") == []     # 0.67 A trip: 0.13 W in a 0.25 W part
+
+
+def test_high_threshold_mosfets_driven_from_a_3v3_gpio():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_circuit import check_level_mismatch
+    pico = Component("U1", "PicoW", "", (Pin("27", "/G1", "GPIO21"), Pin("21", "/G2", "GPIO16")))
+    fet = lambda ref, value, gate: Component(ref, value, "Package_TO_SOT_THT:TO-92", (Pin("1", "GND", "S"), Pin("2", gate, "G"),
+                                                                                      Pin("3", f"/{ref}D", "D")))
+    found = [f for f in check_level_mismatch(DesignSnapshot((pico, fet("Q1", "2N7000", "/G1"), fet("Q2", "2N7000", "/G2")), "t"))
+             if "GPIO" in f.title]
+    assert [f.refs for f in found] == [("Q1", "Q2", "U1")]
+    assert not [f for f in check_level_mismatch(DesignSnapshot((pico, fet("Q1", "2N7002", "/G1")), "t")) if "GPIO" in f.title]
+
+
+def test_i2c_pullups_on_a_switched_rail_with_an_always_on_slave():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_i2c_pullups
+    mcu = Component("U1", "ESP32-S3-WROOM-1", "", (Pin("1", "3V3", "3V3", "power_in"), Pin("2", "I2C_SDA", "IO8"),
+                                                   Pin("3", "I2C_SCL", "IO9"), Pin("4", "/A", "IO1"), Pin("5", "/B", "IO2")))
+    accel = Component("U7", "LIS2DH12TR", "", (Pin("1", "3V3", "VDD", "power_in"), Pin("2", "I2C_SDA", "SDA"),
+                                               Pin("3", "I2C_SCL", "SCL")))
+    codec = Component("U4", "ES8311", "", (Pin("1", "AUDIO_3V3", "VDD", "power_in"), Pin("2", "I2C_SDA", "CDATA"),
+                                           Pin("3", "I2C_SCL", "CCLK")))
+    switch = Component("Q1", "SI2301CDS", "", (Pin("1", "AUDIO_PWR_N", "G"), Pin("2", "3V3", "S"), Pin("3", "AUDIO_3V3", "D")))
+    pulls = (Component("R15", "4.7k", "", (Pin("1", "AUDIO_3V3"), Pin("2", "I2C_SCL"))),
+             Component("R16", "4.7k", "", (Pin("1", "AUDIO_3V3"), Pin("2", "I2C_SDA"))))
+    found = [f for f in check_i2c_pullups(DesignSnapshot((mcu, accel, codec, switch, *pulls), "t")) if "switched" in f.title]
+    assert len(found) == 1 and "U7" in found[0].refs and "Q1" in found[0].refs
+    # Only the MCU on the always-on rail: switching the sensor and its pull-ups off together is fine.
+    assert not [f for f in check_i2c_pullups(DesignSnapshot((mcu, codec, switch, *pulls), "t")) if "switched" in f.title]
+
+
+def test_w5500_reserved_pins_must_be_grounded():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_reserved_pins
+    chip = lambda net: Component("U2", "W5500", "", (Pin("23", net(23), "RSVD"), Pin("38", net(38), "RSVD"), Pin("1", "GND", "GND")))
+    (found,) = check_reserved_pins(DesignSnapshot((chip(lambda n: f"unconnected-(U2-RSVD-Pad{n})"),), "t"))
+    assert found.refs == ("U2",) and "23, 38" in found.title
+    assert check_reserved_pins(DesignSnapshot((chip(lambda n: "GND"),), "t")) == []
+
+
+def test_passive_part_number_case_size_differs_from_footprint():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_footprint_kind_mismatch
+    cap = lambda ref, fp, mpn: Component(ref, "0.1uF", f"Capacitor_SMD:C_{fp}_Metric", (Pin("1", "+3V3"), Pin("2", "GND")),
+                                         fields={"TME Part Number": mpn})
+    found = check_footprint_kind_mismatch(DesignSnapshot((cap("C3", "0402", "CL10B104KO8NNND"), cap("C11", "0402", "CL10B104KO8NNND"),
+                                                          cap("C4", "0603", "CL10B104KO8NNND"), cap("C5", "0603", "GRM188R71C104KA01D")), "t"))
+    assert [(f.refs, "is 0603 but the footprint is 0402" in f.title) for f in found] == [(("C3", "C11"), True)]
+
+
+def test_esp32_module_antenna_variant_differs_from_footprint():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_parts import check_footprint_kind_mismatch
+    mod = lambda value, fp: Component("U1", value, f"RF_Module:{fp}", (Pin("1", "GND"),))
+    assert len(check_footprint_kind_mismatch(DesignSnapshot((mod("ESP32-WROOM-32", "ESP32-WROOM-32U"),), "t"))) == 1
+    assert len(check_footprint_kind_mismatch(DesignSnapshot((mod("ESP32-S3-WROOM-1", "ESP32-S3-WROOM-1U"),), "t"))) == 1
+    for value, fp in (("ESP32-S3-WROOM-1U-N16R8", "ESP32-S3-WROOM-1U"), ("ESP32-S3-WROOM-1-N8", "ESP32-S3-WROOM-1"),
+                      ("ESP32-WROOM-32E", "ESP32-WROOM-32D")):
+        assert check_footprint_kind_mismatch(DesignSnapshot((mod(value, fp),), "t")) == [], value
+
+
+def test_mlcc_part_number_voltage_code():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_cap_voltage_rating
+    cap = lambda ref, value, mpn, rail="+3V3": Component(ref, value, "Capacitor_SMD:C_0603_1608Metric",
+                                                         (Pin("1", rail), Pin("2", "GND")), fields={"MPN": mpn})
+    found = check_cap_voltage_rating(DesignSnapshot((cap("C15", "10uF 50v", "GRM188R61A106ME69D"),
+                                                     cap("C16", "1uF 50v", "GRM188R61A105KA61D")), "t"))
+    assert [f.refs for f in found] == [("C15", "C16")]
+    over = check_cap_voltage_rating(DesignSnapshot((cap("C1", "10uF", "GRM188R61A106ME69D", "+12V"),), "t"))
+    assert [f.title for f in over] == ["C1 is rated 10 V on the 12 V rail +12V"]
+    assert check_cap_voltage_rating(DesignSnapshot((cap("C2", "100nF", "CL10B104KB8NNNC", "+12V"),), "t")) == []
+
+
+def test_generic_transistor_names_and_dnp_typed_as_a_value():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_values
+    q = Component("Q1", "Q_PNP_BCE", "Package_TO_SOT_SMD:SOT-23", (Pin("1", "/B", "B"), Pin("2", "+5V", "E"), Pin("3", "/C", "C")),
+                  fields={"lib_id": "Device:Q_PNP_BCE"})
+    c = Component("C43", "DNP", "Capacitor_SMD:C_0402_1005Metric", (Pin("1", "/ANT"), Pin("2", "GND")))
+    found = {f.rule: f.refs for f in check_values(DesignSnapshot((q, c), "t"))}
+    assert found.get("value.missing") == ("Q1",) and found.get("value.dnp_not_marked") == ("C43",)
+
+
+def test_5v_pixel_led_data_straight_from_a_3v3_gpio():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_circuit import check_level_mismatch
+    mcu = Component("U2", "ESP32-WROOM-32", "", (Pin("1", "+3V3", "3V3", "power_in"), Pin("2", "/LED", "IO21")))
+    led = lambda vdd: Component("D7", "WS2812B", "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm",
+                                (Pin("1", vdd, "VDD"), Pin("3", "GND", "VSS"), Pin("4", "/DIN", "DIN"), Pin("2", "/DOUT", "DOUT")))
+    res = Component("R9", "470", "", (Pin("1", "/LED"), Pin("2", "/DIN")))
+    pixel = lambda snap: [f for f in check_level_mismatch(snap) if "takes its data" in f.title]
+    assert [f.refs for f in pixel(DesignSnapshot((mcu, led("+5V"), res), "t"))] == [("D7", "U2")]
+    assert pixel(DesignSnapshot((mcu, led("+3V3"), res), "t")) == []
+
+
+def test_li_ion_charger_bat_pin_does_not_excuse_an_unprotected_battery_connector():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.audit_rules import check_connector_protection
+    conn = Component("J2", "JST_PH_2", "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal", (Pin("1", "VBAT"), Pin("2", "GND")))
+    def board(chip, pin):
+        ic = Component("U1", chip, "", (Pin("3", "VBAT", pin, "power_in"), Pin("2", "GND", "GND", "power_in")))
+        load = Component("U2", "ESP32-C3", "", (Pin("1", "VBAT", "VDD", "power_in"), Pin("2", "GND", "GND", "power_in")))
+        return check_connector_protection(DesignSnapshot((conn, ic, load), "t"))
+    assert [f.refs[0] for f in board("TP4056", "BAT")] == ["J2"]
+    assert board("DS3231M", "VBAT") == []     # an RTC's backup pin manages its coin cell
+
+
+def test_capacitors_whose_second_end_meets_nothing():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    mcu = Component("U1", "RP2040", "", (Pin("1", "+3.3V", "IOVDD", "power_in"), Pin("2", "GND", "GND", "power_in")))
+    cap = lambda ref, far: Component(ref, "100n", "", (Pin("1", "+3.3V"), Pin("2", far)))
+    found = [f for f in check_power_unconnected(DesignSnapshot((mcu, cap("C13", "Net-(C13-Pad2)"), cap("C14", "Net-(C13-Pad2)")), "t"))
+             if "to nothing" in f.title]
+    assert [f.refs for f in found] == [("C13", "C14")]
+    assert not [f for f in check_power_unconnected(DesignSnapshot((mcu, cap("C13", "GND"), cap("C14", "GND")), "t"))
+                if "to nothing" in f.title]
+
+
+def test_li_ion_charger_bat_pin_without_a_capacitor():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    chg = Component("U2", "TP4056", "", (Pin("5", "/BATT+", "BAT", "power_out"), Pin("4", "+5V", "VCC", "power_in"),
+                                         Pin("3", "GND", "GND", "power_in")))
+    conn = Component("J8", "BATT", "", (Pin("1", "/BATT+"), Pin("2", "GND")))
+    bare = [f for f in check_power_unconnected(DesignSnapshot((chg, conn), "t")) if "BAT has no capacitor" in f.title]
+    assert [f.refs for f in bare] == [("U2",)]
+    cap = Component("C5", "4.7u", "", (Pin("1", "/BATT+"), Pin("2", "GND")))
+    assert not [f for f in check_power_unconnected(DesignSnapshot((chg, conn, cap), "t")) if "BAT has no capacitor" in f.title]
+
+
+def test_1117_ldo_with_too_little_output_capacitance():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_power import check_reg_out_cap_missing
+    ldo = Component("U5", "AMS1117-3.3", "Package_TO_SOT_SMD:SOT-223-3_TabPin2",
+                    (Pin("3", "+5V", "VI", "power_in"), Pin("2", "+3V3", "VO", "power_out"), Pin("1", "GND", "GND", "power_in")))
+    load = Component("U1", "MCU", "", (Pin("1", "+3V3", "VDD", "power_in"), Pin("2", "GND", "GND", "power_in")))
+    cap = lambda ref, value: Component(ref, value, "", (Pin("1", "+3V3"), Pin("2", "GND")))
+    small = check_reg_out_cap_missing(DesignSnapshot((ldo, load, cap("C9", "100n"), cap("C34", "100n")), "t"))
+    assert [f.title for f in small] == ["U5 (AMS1117-3.3) has only 0.2 µF on its output +3V3"]
+    assert check_reg_out_cap_missing(DesignSnapshot((ldo, load, cap("C9", "100n"), cap("C10", "22u")), "t")) == []
+
+
+def test_stm32_vdda_under_1uf():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    mcu = Component("U1", "STM32H743IITx", "", (Pin("39", "VDDA", "VDDA", "power_in"), Pin("1", "GND", "VSS", "power_in")))
+    cap = lambda ref, value: Component(ref, value, "", (Pin("1", "VDDA"), Pin("2", "GND")))
+    vdda = lambda *parts: [f for f in check_power_unconnected(DesignSnapshot((mcu, *parts), "t")) if "VDDA has only" in f.title]
+    assert [f.refs for f in vdda(cap("C34", "100n"))] == [("U1",)]
+    assert vdda(cap("C34", "100n"), cap("C35", "1u")) == []
+
+
+def test_internal_regulator_pin_under_its_datasheet_minimum():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_power_unconnected
+    drv = Component("U3", "TMC2209-LA", "", (Pin("8", "/5VOUT", "5VOUT", "power_out"), Pin("1", "GND", "GND", "power_in")))
+    cap = lambda value: Component("C15", value, "", (Pin("1", "/5VOUT"), Pin("2", "GND")))
+    small = lambda c: [f for f in check_power_unconnected(DesignSnapshot((drv, c), "t")) if "datasheet asks" in f.title]
+    assert [f.refs for f in small(cap("100n"))] == [("U3",)]
+    assert small(cap("4.7u")) == []

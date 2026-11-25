@@ -208,6 +208,33 @@ def _alignments(fp: Sequence[tuple[float, float]], real: Sequence[tuple[float, f
         yield excess, sum(d for _, d in near), index, [d for _, d in near], mirrored
 
 
+# Makers that allow the centre pad to stay unsoldered: SPI flash (no internal connection), Sensirion sensors.
+EP_MAY_FLOAT = re.compile(r"(?i)W25Q|W25X|GD25|AT25|MX25|IS25|SST26|SGP\d|SHT\d|SHTC|STS\d")
+_SUBSET_MM = 0.3
+
+
+def _subset(fp: Sequence[Group], part: Sequence[Group]) -> list[int] | None:
+    """Indexes of the part pads no footprint pad lands on, when each footprint pad lands (within _SUBSET_MM)
+    on a part pad of its own under some rotation/mirror and shift: the footprint uses only some of the part's
+    pads (7 pins cut from a 40-pin strip, a module's unused bottom pads). None when they do not.
+    ponytail: O(8 x part x fp x part); skipped above 64 part pads."""
+    if not fp or len(fp) >= len(part) or len(part) > 64:
+        return None
+    points = [(pad[1], pad[2]) for pad in fp]
+    for moved, _ in _moves([(pad[1], pad[2]) for pad in part]):
+        for anchor in moved:
+            dx, dy = anchor[0] - points[0][0], anchor[1] - points[0][1]
+            used: list[int] = []
+            for x, y in points:
+                j = min(range(len(moved)), key=lambda k: math.dist((x + dx, y + dy), moved[k]))
+                if j in used or math.dist((x + dx, y + dy), moved[j]) > _SUBSET_MM:
+                    break
+                used.append(j)
+            else:
+                return [k for k in range(len(part)) if k not in used]
+    return None
+
+
 def _served(fp: Sequence[Group], part: Sequence[Group]) -> list[tuple]:
     """Alignments (shaped like _alignments, without offsets) in which every part pad's centre lies
     inside the copper of some footprint pad and every footprint pad serves one. Needs the sizes of
@@ -254,8 +281,32 @@ def _label(rows: int, cols: int) -> str:
     return f"{rows} × {cols}"
 
 
+_SWITCH = re.compile(r"(?:^|\s)(?:SW|S|PWR|BOOT|RST|RESET)\d*\s|SWITCH|SLIDE|TOGGLE|SPDT|(?<![A-Z])K3-\d|SS-?1[23]|MSK-?1[23]")
+
+
+def pad_names(comp: Component) -> dict[str, str]:
+    """Pad number -> the symbol's pin name (DIN, VDD ...), for compare()."""
+    return {pin.number.strip().upper(): pin.name for pin in comp.pins if pin.name and pin.name != pin.number}
+
+
+_PIN_ALIAS = {"DI": "DIN", "SDI": "DIN", "DO": "DOUT", "SDO": "DOUT", "VSS": "GND", "GROUND": "GND", "VCC": "VDD"}
+
+
+def _same_function(a: str, b: str) -> bool:
+    """KiCad pin name and the part's pin name name the same function (DI = DIN, VSS = GND, GPIO3/RXD = RXD0 ...)."""
+    def names(name: str) -> set[str]:
+        out = set()
+        for item in name.upper().split("/"):
+            item = re.sub(r"[^A-Z0-9+]", "", item)
+            item = _PIN_ALIAS.get(item, item)
+            out |= {item, (item[:-1] if item in ("RXD0", "TXD0") else item)} if item else set()
+        return out
+    return bool(names(a) & names(b))
+
+
 def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
-            nets: dict[str, str] | None = None, generic_header: bool = False) -> list[Finding]:
+            nets: dict[str, str] | None = None, generic_header: bool = False,
+            names: dict[str, str] | None = None) -> list[Finding]:
     """Findings (at most one) for a footprint whose pads do not fit the real part. With nets (from
     pad_nets) a numbering difference whose swapped pins share a net is not reported; for a
     generic_header (fit3_generic_header) no numbering difference is."""
@@ -273,6 +324,12 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     merged = _served(fp, part) if len(fp) < len(part) else []   # several part pads on one footprint pad
     large = _large_pads(part)
     tab = next((number for number in large if number in used), None) if len(part) > 2 and not merged else None
+    fp_tab = part_tab = tab
+    own = _large_pads([(*pad[:4], pad[4] or sum(w * h for *_, w, h in pad[5])) for pad in fp])
+    if 2 < len(part) <= 5 and len(fp) == len(part) and not merged and large and own and own[0] != tab:
+        # The two number the tab differently (KiCad DPAK tab pad 3, EasyEDA pad 2): each side's own tab is set
+        # aside. ponytail: the tab's number itself is then not compared; leads still are.
+        fp_tab, part_tab = own[0], large[0]
     part_count = len(part) or real.pin_count
     if not fp or not part_count:
         return []
@@ -283,6 +340,16 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
         return [Finding(rule, severity, f"{reference} {title}", (reference,), (), evidence + blind, fix)]
 
     if len(fp) != part_count and not merged:
+        # The footprint uses some of the part's pads: a pin header cut from a long break-away strip (sold as
+        # 20 to 80 pins), or a sensor/flash whose maker lets the exposed die pad stay unsoldered.
+        unused = _subset(fp, part) if part else None
+        if unused is not None:
+            kept = [pad for k, pad in enumerate(part) if k not in unused]
+            centre = all(min(p[1] for p in kept) < part[k][1] < max(p[1] for p in kept)
+                         and min(p[2] for p in kept) < part[k][2] < max(p[2] for p in kept) for k in unused)
+            strip = part_count >= 20 and re.search(r"HEADER|PIN ?STRIP|BREAK", name.upper())
+            if strip or (EP_MAY_FLOAT.search(name) and centre):
+                return []
         extra = f" (and {len(mech)} mounting pad(s))" if mech else ""
         return finding("fit.pad_count", f"footprint has {len(fp)} pads but {name} has {part_count}",
                        f"The footprint has {len(fp)} pads{extra}; the part's data lists {part_count}.",
@@ -295,7 +362,7 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
                        f"The footprint's pads are {mount[here]}; the part's pads are {mount[there]}.",
                        "Use a footprint with the same mounting type as the part.")
     count = len(fp)
-    fp, part = [pad for pad in fp if pad[0] != tab], [pad for pad in part if pad[0] != tab]
+    fp, part = [pad for pad in fp if pad[0] != fp_tab], [pad for pad in part if pad[0] != part_tab]
     rows_cols = _rows_cols(fp)
     if part:
         part_rows_cols = _rows_cols(part)
@@ -309,7 +376,9 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     fits = [option for option in options if option[0] <= 0]
     if not fits:   # the centres differ, but part pads still land inside the footprint's pads
         fits = _served(fp, part)
-    if not fits and sorted(rows_cols) != sorted(part_rows_cols):
+    # Three pads (SOT-23, SOT-89, DPAK with its tab) read as 2 x 2 or 2 x 1 depending on offsets alone: rows and
+    # columns say nothing there (mount type and pitch still apply).
+    if not fits and sorted(rows_cols) != sorted(part_rows_cols) and not (count == 3 and part_count == 3):
         return finding("fit.layout", f"pad layout differs from {name} (footprint "
                        f"{_label(*rows_cols)}, part {_label(*part_rows_cols)})",
                        f"The footprint's {count} pads form {rows_cols[0]} row(s) × {rows_cols[1]} column(s); "
@@ -347,6 +416,7 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
     if len(numbers) == 4 and "" not in pairs and sorted(pairs.values()) == [2, 2]:
         return []
     wrong = []
+    part_names = {pad.number.strip().upper(): pad.name for pad in real.pads}
     for _, _, nearest, _, mirrored in fits:
         swapped = [(fp[i][0], part[j][0]) for i, j in enumerate(nearest)
                    if fp[i][0] != part[j][0] and fp[i][0] in shared and part[j][0] in shared]
@@ -355,8 +425,18 @@ def compare(reference: str, kicad_pads: Iterable[Pad], real: RealPart,
                if nets is None or (net(a) and net(b) and (mirrored or net(a) != net(b)))]
         if not bad and (swapped or not mirrored):
             return []
+        # The numbers differ but every pad carries the function the part has at that spot (a symbol with
+        # its own numbering on a footprint drawn by function): the part is wired right.
+        if names and not mirrored and all(_same_function(names.get(fp[i][0].upper(), ""),
+                                                          part_names.get(part[j][0].upper(), ""))
+                                          for i, j in enumerate(nearest)):
+            return []
         wrong.append(bad)
     bad = min(wrong, key=len)
+    # An SPDT slide/toggle switch with its two throws (pins 1 and 3, common 2) swapped only reverses
+    # which position is on; the circuit is the same.
+    if sorted(bad) == [("1", "3"), ("3", "1")] and "2" in numbers and _SWITCH.search(f"{reference} {name}".upper()):
+        return []
     if not bad:
         return finding("fit.pin_order", f"footprint is a mirror image of {name}",
                        "The pads and numbers match the part only when flipped left-to-right, so pin 1 "

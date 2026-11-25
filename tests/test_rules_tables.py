@@ -150,7 +150,8 @@ def test_ldo_quiet_when_the_input_voltage_is_not_stated():
 
 
 def test_ldo_quiet_for_parts_that_are_not_in_the_table_or_have_no_known_output():
-    for value in ("AMS1117", "AMS1117-ADJ", "LD1117S33", "HT7333-1", "HT7333-2", "XC6206", "MCP1700", "AP2112K-ADJ", "LM1117-3.3"):
+    assert found("power.ldo_dropout", ldo("LD1117S33TR", "30V")) != []   # in the table: 15 V maximum input
+    for value in ("AMS1117", "AMS1117-ADJ", "HT7333-1", "HT7333-2", "XC6206", "MCP1700", "AP2112K-ADJ", "LM1117-3.3"):
         assert found("power.ldo_dropout", ldo(value, "3V3")) == []
         assert found("power.ldo_dropout", ldo(value, "30V")) == []
 

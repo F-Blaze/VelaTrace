@@ -3,6 +3,7 @@ import pytest
 
 from test_audit_rules import cap, design, part, res, rules
 from velatrace.findings import Severity
+from velatrace.models import Component, Pin
 
 GND = ("2", "GND", "GND", "power_in")
 QFN = "Package_DFN_QFN:QFN-32-1EP_5x5mm_P0.5mm_EP3.45x3.45mm"
@@ -162,13 +163,14 @@ def test_reg_out_quiet_with_output_cap(value):
 
 
 def test_reg_out_quiet_when_the_cap_is_elsewhere_on_the_rail_or_behind_a_ferrite():
+    # (22 uF: enough for a 1117, so only the cap's position is under test)
     # the capacitor sits on the downstream side of a ferrite / 0R / inductor
     ferrite = part("FB1", "BLM18", "Inductor_SMD:L_0603", ("1", "+3V3"), ("2", "+3V3_F"))
-    assert found("power.reg_out_cap_missing", ldo(), load("+3V3_F"), ferrite, cap("C1", "+3V3_F", "GND")) == []
+    assert found("power.reg_out_cap_missing", ldo(), load("+3V3_F"), ferrite, cap("C1", "+3V3_F", "GND", value="22uF")) == []
     assert found("power.reg_out_cap_missing", ldo(), load(), res("R1", "+3V3", "+3V3_F", "0"),
-                 cap("C1", "+3V3_F", "GND")) == []
+                 cap("C1", "+3V3_F", "GND", value="22uF")) == []
     # a rail shared with another regulator that has the capacitor
-    assert found("power.reg_out_cap_missing", ldo(), ldo("U3", value="AMS1117-3.3"), load(), cap("C1", "+3V3", "AGND")) == []
+    assert found("power.reg_out_cap_missing", ldo(), ldo("U3", value="AMS1117-3.3"), load(), cap("C1", "+3V3", "AGND", value="22uF")) == []
 
 
 def test_reg_out_quiet_for_switching_converters_and_modules():
@@ -357,3 +359,36 @@ def test_ep_quiet_for_a_plain_gnd_that_is_not_the_extra_pad():
 def test_vcap_quiet_when_the_return_net_is_only_known_by_a_gnd_pin():
     ic = chip(("3", "VCAP", "VCAP_1", "passive"), ("4", "COMMON", "GND", "power_in"))
     assert found("power.vcap_missing", ic, cap("C1", "VCAP", "COMMON")) == []
+
+
+# --- rtc.vbat_unconnected -----------------------------------------------------------------------
+
+def rtc(vbat_net, value="DS3231SN", name="VBAT", extra=()):
+    return part("U5", value, "Package_SO:SOIC-16W", ("1", "+3V3", "VCC", "power_in"), ("2", "GND", "GND", "power_in"),
+                ("3", vbat_net, name, "power_in"), *extra)
+
+
+@pytest.mark.parametrize("value,name", [("DS3231SN", "VBAT"), ("PCF85063A", "VBACKUP"), ("RV-3028-C7", "VBACKUP"),
+                                        ("MCP7940N", "VBAT"), ("ISL1208", "VBAT"), ("DS1307", "VBAT")])
+@pytest.mark.parametrize("net", ["", "unconnected-(U5-VBAT)"])
+def test_rtc_open_backup_pin_fires(value, name, net):
+    assert found("rtc.vbat_unconnected", rtc(net, value, name)) == [("rtc.vbat_unconnected", ("U5",))]
+
+
+def test_rtc_no_connect_flag_fires_and_ground_hint_is_given():
+    pin = Pin("3", "X", "VBAT", "power_in+no_connect")
+    ic = Component("U5", "DS3231", "Package_SO:SOIC-16W", (pin,), {})
+    (finding,) = rules(design(ic), "rtc.vbat_unconnected")
+    assert "ground" in finding.fix
+    assert finding.severity is Severity.WARNING
+
+
+@pytest.mark.parametrize("net", ["GND", "VBAT_CELL", "+3V3", "/rtc/BT1+"])
+def test_rtc_backup_pin_on_any_real_net_is_quiet(net):
+    assert found("rtc.vbat_unconnected", rtc(net)) == []
+
+
+def test_rtc_quiet_for_other_chips_missing_pin_and_dnp():
+    assert found("rtc.vbat_unconnected", rtc("", "STM32F103")) == []
+    assert found("rtc.vbat_unconnected", rtc("", "DS3231", name="SQW")) == []
+    assert found("rtc.vbat_unconnected", rtc("", "DS3231", name="")) == []

@@ -197,9 +197,16 @@ def test_row_spacing_may_differ_but_pin_pitch_may_not():
 def test_tab_pad_is_left_out_of_layout_and_positions():
     assert rules(SOT89_3, real("C16106")) == []     # KiCad anchors the tab by the pins, LCSC mid-tab
     assert rules(TO252_2, real("C116325")) == []
+    # A DPAK footprint that numbers its tab 3 (leads 1, 2) against a part whose tab is 2: the leads are compared
+    # as leads, not a lead against the tab (round 11, HSU30N20 C42376812 on TO-252-3).
+    part = RealPart("C42376812", "HSU30N20", "TO-252-2", (RealPad("2", -3.424, 0.0, False, 35.96, "D"),
+                    RealPad("3", 3.424, -2.286, False, 4.2, "S"), RealPad("1", 3.424, 2.286, False, 4.2, "G")), "easyeda")
+    dpak = [("1", -4.05, -2.286, False, (2.6, 1.06)), ("2", -4.05, 2.286, False, (2.6, 1.06)),
+            ("3", 2.5, 0.0, False, (5.7, 5.632))]
+    assert compare("Q1", dpak, part) == []
     # SOT-23 pads (1 and 2 on one side, 3 opposite) are still not a SOT-89.
     sot23 = [("1", -0.9375, -0.95, False), ("2", -0.9375, 0.95, False), ("3", 0.9375, 0.0, False)]
-    assert rules(sot23, real("C16106")) == ["fit.layout"]
+    assert rules(sot23, real("C16106")) == ["fit.pitch"]     # three pads: caught by position, not row count
     # The tab still counts: a SOT-89 footprint without it has too few pads.
     assert rules(SOT89_3[::2], real("C16106")) == ["fit.pad_count"]
 
@@ -279,8 +286,8 @@ def test_rows_a_hair_apart_are_not_a_layout_difference():
     # H015/H016: posts at 3.15 mm next to a pin at 3.0 mm cluster as one row in KiCad, two at LCSC.
     nets = {"1": "Net-(BOOT0-Pad1)", "2": "+3.3V", "3": "Net-(U16-BOOT0)",
             "4": "unconnected-(BOOT0-Pad4)", "5": "unconnected-(BOOT0-Pad5)"}
-    (finding,) = compare("BOOT0", K3_1270, C145857, nets)
-    assert finding.rule == "fit.pin_order" and "(2 of 5 pads)" in finding.title   # pins 1 and 3 do swap
+    # Pins 1 and 3 do swap, but on this SPDT slide switch that only flips the positions: no layout or pin-order finding.
+    assert compare("BOOT0", K3_1270, C145857, nets) == []
     assert rules(row(5, tht=False), C145857) == ["fit.layout"]                     # a real layout difference still is one
 
 
@@ -429,6 +436,29 @@ def test_four_pads_on_two_nets_two_each_are_not_a_pin_order_finding():
     # Distinct nets, or an unconnected pair: the numbering matters.
     assert [f.rule for f in compare("SW1", FIT_TACT, FIT_TACT_PART, {"1": "A", "2": "B", "3": "C", "4": "D"})] == ["fit.pin_order"]
     assert [f.rule for f in compare("SW1", FIT_TACT, FIT_TACT_PART, {"1": "A", "2": "A", "3": "B", "4": "C"})] == ["fit.pin_order"]
+
+
+def test_spdt_switch_with_its_throws_swapped_is_not_a_pin_order_finding():
+    pads = [("1", -2.0, 0.0, False), ("2", 0.0, 0.0, False), ("3", 2.0, 0.0, False), ("4", -3.5, 1.6, False)]
+    part = fit_part(("1", 2.0, 0.0, 0.7), ("2", 0.0, 0.0, 0.7), ("3", -2.0, 0.0, 0.7), ("4", -3.5, 1.6, 0.7))
+    nets = {"1": "/BAT", "2": "/VSYS", "3": "/OFF", "4": "GND"}
+    assert compare("PWR1", pads, part, nets) == []
+    assert [f.rule for f in compare("J3", pads, part, nets)] == ["fit.pin_order"]  # not a switch: numbering matters
+
+
+def test_numbering_differs_but_every_pad_has_the_right_function_is_not_a_pin_order_finding():
+    # WS2812B-2020 (LCSC C52917434: 1 DO, 2 GND, 3 DI, 4 VDD) on a footprint numbered like the
+    # 5050 symbol (1 VDD, 2 DOUT, 3 VSS, 4 DIN) and drawn by function, as on a real board.
+    part = real("C52917434")
+    assert [(p.number, p.name) for p in sorted(part.pads, key=lambda p: p.number)] == [
+        ("1", "DO"), ("2", "GND"), ("3", "DI"), ("4", "VDD")]
+    pads = [("1", 0.745, -0.66, False), ("2", 2.575, -0.66, False), ("3", 2.575, -1.76, False), ("4", 0.745, -1.76, False)]
+    nets = {"1": "+5V", "2": "/D1", "3": "GND", "4": "/D0"}
+    assert [f.rule for f in compare("D1", pads, part, nets)] == ["fit.pin_order"]          # no names: numbers only
+    names = {"1": "VDD", "2": "DOUT", "3": "VSS", "4": "DIN"}
+    assert compare("D1", pads, part, nets, names=names) == []
+    swapped = {"1": "VDD", "2": "DIN", "3": "VSS", "4": "DOUT"}                              # data in/out reversed
+    assert [f.rule for f in compare("D1", pads, part, nets, names=swapped)] == ["fit.pin_order"]
 
 
 # ---- IPC offsets ----
@@ -594,3 +624,24 @@ def test_usb_c_with_shared_wide_pads_fits_the_per_contact_part():
     part = fit_part(*[(n, x, -2.474, 0.39) for n, x in contacts],
                     ("0", -4.325, -1.706, 2.4), ("3", -4.325, 2.474, 2.2), ("1", 4.325, -1.706, 2.4), ("2", 4.325, 2.474, 2.2))
     assert rules(pads, part) == []
+
+
+def test_cut_header_strip_and_optional_die_pad_are_not_pad_count_findings():
+    """Round 12 (seen): 7 pins cut from a 40-pin break-away strip; an SHT40 footprint without the optional die pad."""
+    strip = fit_part(*[(str(i + 1), i * 2.54, 0.0, 1.0) for i in range(40)])
+    strip = replace(strip, title="Header-Male-2.54_1x40")
+    seven = fit_sized([(str(i + 1), i * 2.54, 0.0, True) for i in range(7)], (1.7, 1.7))
+    assert rules(seven, strip) == []
+    sht40 = RealPart("C2848306", "SHT40-AD1B-R3", "DFN-4", tuple(RealPad(n, x, y, False, a, nm) for n, x, y, a, nm in (
+        ("1", -0.6774, -0.4, 0.2121, "SDA"), ("2", -0.6774, 0.4, 0.2121, "SCL"), ("3", 0.6774, 0.4, 0.2121, "VDD"),
+        ("4", 0.6774, -0.4, 0.2121, "VSS"), ("5", 0.0, 0.0, 0.44, "EP"))), "easyeda")
+    four = [("1", -0.7, -0.4, False, (0.5, 0.3)), ("2", -0.7, 0.4, False, (0.5, 0.3)),
+            ("3", 0.7, 0.4, False, (0.5, 0.3)), ("4", 0.7, -0.4, False, (0.5, 0.3))]
+    assert compare("U5", four, sht40) == []
+    assert [f.rule for f in compare("U5", four, replace(sht40, title="LIS3DH"))] == ["fit.pad_count"]
+
+
+def test_pin_names_with_alternatives_and_uart_index_match():
+    from velatrace.footprint_fit import _same_function
+    assert _same_function("GPIO3/RXD", "RXD0") and _same_function("~{RST}", "RST")
+    assert not _same_function("GPIO1/TXD", "RXD0") and not _same_function("TXD", "RXD")

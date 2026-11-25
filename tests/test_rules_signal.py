@@ -1,6 +1,8 @@
 """Signal-mistake rules: crystal load capacitors, swapped USB D+/D-, output contention. Fire every time, stay quiet otherwise."""
 import pytest
 
+from velatrace.findings import Severity
+
 from test_audit_rules import cap, design, exp4_spare, part, res, rules
 
 XTAL_FP = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
@@ -253,3 +255,257 @@ def test_wch_usb_chip_with_internal_load_caps_is_quiet():
     import velatrace.rules_signal as rs
     assert rs._INTERNAL_CAPS.search("CH334F") and rs._INTERNAL_CAPS.search("CH340C")
     assert not rs._INTERNAL_CAPS.search("STM32F103") and not rs._INTERNAL_CAPS.search("ATCH3400")
+
+
+# --- bus.polarity_swapped -----------------------------------------------------------------------
+
+def can_ic(h_net, l_net, h="CANH", l="CANL", ref="U1", value="TCAN1044"):
+    return part(ref, value, "Package_SO:SOIC-8", ("7", h_net, h), ("6", l_net, l), ("3", "+5V", "VCC"),
+                ("2", "GND", "GND"), ("1", "TXD_NET", "TXD"), ("4", "RXD_NET", "RXD"))
+
+
+def can_conn(h_net="/CAN_H", l_net="/CAN_L"):
+    return part("J2", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+                ("1", h_net, "1"), ("2", l_net, "2"))
+
+
+def bus_found(*parts):
+    return [(f.severity, f.refs, f.nets) for f in rules(design(*parts), "bus.polarity_swapped")]
+
+
+def test_can_swapped_lines_fire_once_per_transceiver_with_the_connector():
+    hits = rules(design(can_ic("/CAN_L", "/CAN_H"), can_conn()), "bus.polarity_swapped")
+    assert [(f.severity, f.refs, f.nets) for f in hits] == [
+        (Severity.ERROR, ("U1", "J2"), ("/CAN_L", "/CAN_H"))]
+    assert "pin 7 (CANH) on CAN_L" in hits[0].evidence and "pin 6 (CANL) on CAN_H" in hits[0].evidence
+
+
+@pytest.mark.parametrize("h_net,l_net,h,l", [("CANL", "CANH", "CANH", "CANL"), ("CAN_L", "CAN_H", "CAN_H", "CAN_L"),
+                                             ("CAN-", "CAN+", "CANH", "CANL"), ("CAN1_L", "CAN1_H", "CANH1", "CANL1"),
+                                             ("CANH", "CANL", "CANL", "CANH")])
+def test_can_swap_fires_for_each_spelling(h_net, l_net, h, l):
+    assert len(bus_found(can_ic(h_net, l_net, h=h, l=l))) == 1
+
+
+def test_can_one_swapped_pin_fires_when_the_other_net_is_named():
+    assert len(bus_found(can_ic("/CAN_L", "/CAN_L"))) == 1
+
+
+def test_can_correct_wiring_and_ambiguous_names_are_quiet():
+    assert bus_found(can_ic("/CAN_H", "/CAN_L"), can_conn()) == []
+    assert bus_found(can_ic("CANH_CANL_BUS", "CAN_BUS_B")) == []  # both tokens in one name, and none
+    assert bus_found(can_ic("BUS_P", "BUS_N")) == []
+    assert bus_found(can_ic("/CAN_L", "/CAN_H", h="TXD1", l="RXD1")) == []  # pins not named for the bus
+
+
+def test_can_single_swapped_pin_next_to_an_unnamed_net_is_quiet():
+    assert bus_found(can_ic("/CAN_L", "Net-(U1-CANL)")) == []
+
+
+def test_can_esd_choke_and_connector_pins_are_quiet():
+    esd = part("U3", "ESDCAN24", "Package_TO_SOT_SMD:SOT-23", ("1", "/CAN_H", "CANL"), ("2", "/CAN_L", "CANH"),
+               ("3", "GND", "GND"))
+    choke = part("U4", "ACT45B-510", "Inductor_SMD:L_Choke", ("1", "/CAN_H", "CANL"), ("2", "/CAN_L", "CANH"))
+    conn = part("J3", "CAN_Conn", "Connector_PinHeader_2.54mm:PinHeader_1x03", ("1", "/CAN_H", "CANL"),
+                ("2", "/CAN_L", "CANH"), ("3", "GND", "GND"))
+    assert bus_found(esd, choke, conn, can_ic("/CAN_H", "/CAN_L")) == []
+
+
+def rs485_ic(a_net, b_net, a="A", b="B", ref="U2", value="MAX485"):
+    return part(ref, value, "Package_SO:SOIC-8", ("6", a_net, a), ("7", b_net, b), ("1", "RXD_NET", "RO"),
+                ("2", "RE_NET", "~{RE}"), ("3", "DE_NET", "DE"), ("4", "TXD_NET", "DI"), ("8", "+5V", "VCC"),
+                ("5", "GND", "GND"))
+
+
+@pytest.mark.parametrize("a_net,b_net", [("RS485_B", "RS485_A"), ("/RS485B", "/RS485A"), ("485_B", "485_A")])
+def test_rs485_swapped_lines_fire(a_net, b_net):
+    assert bus_found(rs485_ic(a_net, b_net)) == [(Severity.ERROR, ("U2",), (a_net, b_net))]
+
+
+def test_rs485_single_swapped_pin_next_to_an_unnamed_net_is_quiet():
+    assert bus_found(rs485_ic("RS485_B", "Net-(U2-B)")) == []
+
+
+def test_rs485_correct_wiring_ambiguous_names_and_other_pin_names_are_quiet():
+    assert bus_found(rs485_ic("RS485_A", "RS485_B")) == []
+    assert bus_found(rs485_ic("/A", "/B")) == []  # bare A/B net names are too ambiguous
+    assert bus_found(rs485_ic("RS485_B", "RS485_A", a="A1", b="B1")) == []
+    assert bus_found(rs485_ic("RS485_B", "RS485_A", a="Y", b="Z")) == []
+    assert bus_found(rs485_ic("RS485_B", "RS485_A", a="", b="")) == []
+    assert bus_found(rs485_ic("RS485_AB", "RS485_A_B")) == []
+
+
+def test_rs485_a_b_pins_without_transceiver_control_pins_are_quiet():
+    mux = part("U5", "74HC157", "Package_SO:SOIC-16", ("1", "RS485_B", "A"), ("2", "RS485_A", "B"),
+               ("8", "GND", "GND"), ("16", "+5V", "VCC"))
+    assert bus_found(mux) == []
+
+
+def test_shared_spi_miso_is_not_contention():
+    from test_audit_rules import design, part, rules
+    a = part("U7", "MCP2518FD", "Package_SO:SOIC-14", ("1", "/SPI_MISO", "SDO", "output"), ("2", "/CS1", "~{CS}", "input"))
+    b = part("U9", "MCP2518FD", "Package_SO:SOIC-14", ("1", "/SPI_MISO", "SDO", "output"), ("2", "/CS2", "~{CS}", "input"))
+    assert rules(design(a, b), "net.output_contention") == []
+    c = part("U7", "74HC04", "Package_SO:SOIC-14", ("2", "/X", "Y1", "output"))
+    d = part("U9", "74HC04", "Package_SO:SOIC-14", ("2", "/X", "Y1", "output"))
+    assert [f.rule for f in rules(design(c, d), "net.output_contention")] == ["net.output_contention"]
+
+
+# --- usb.dp_dn_swapped through a flow-through ESD array -------------------------------------------
+
+def usblc(l1, l6, l3, l4, value="USBLC6-2SC6"):
+    return part("U9", value, "Package_TO_SOT_SMD:SOT-23-6", ("1", l1, "I/O1"), ("2", "GND", "GND"),
+                ("3", l3, "I/O2"), ("4", l4, "I/O2"), ("5", "VBUS", "VBUS"), ("6", l6, "I/O1"))
+
+
+def test_swap_through_usblc6_fires():
+    conn = usb_conn("A_DP", "A_DM")
+    chip = usb_ic("C_DP", "C_DM")  # the array crosses the lines: D+ lands on the chip's DM pin
+    esd = usblc("A_DP", "C_DM", "A_DM", "C_DP")
+    assert sorted(usb_found(conn, esd, chip)) == [(("J1", "U1"), ("A_DM", "C_DP")), (("J1", "U1"), ("A_DP", "C_DM"))]
+
+
+def test_straight_through_usblc6_is_quiet():
+    conn = usb_conn("A_DP", "A_DM")
+    assert usb_found(conn, usblc("A_DP", "C_DP", "A_DM", "C_DM"), usb_ic("C_DP", "C_DM")) == []
+
+
+def test_non_flow_through_esd_array_does_not_join_nets():
+    srv = part("U9", "SRV05-4", "Package_TO_SOT_SMD:SOT-23-6", ("1", "A_DP", "IO1"), ("6", "C_DM", "IO4"),
+               ("3", "A_DM", "IO2"), ("4", "C_DP", "IO3"), ("2", "GND", "GND"))
+    assert usb_found(usb_conn("A_DP", "A_DM"), srv, usb_ic("C_DM", "C_DP")) == []
+
+
+# --- uart.tx_to_tx ------------------------------------------------------------------------------
+
+def uart_chip(ref, net, pin, value="CH340K", extra=()):
+    return part(ref, value, "Package_SO:SOIC-16", ("1", net, pin), ("2", "GND", "GND"), *extra, *exp4_spare())
+
+
+def uart_found(*parts):
+    return [(f.refs, f.nets) for f in rules(design(*parts), "uart.tx_to_tx")]
+
+
+@pytest.mark.parametrize("a,b", [("TXD", "U0TXD"), ("TX", "TXD0"), ("UART1_TX", "PA9/USART1_TX"),
+                                 ("RXD", "U0RXD"), ("RX", "UART0_RX")])
+def test_same_direction_uart_pins_fire(a, b):
+    assert uart_found(uart_chip("U1", "N", a), uart_chip("U2", "N", b, "ESP32-C3")) == [(("U1", "U2"), ("N",))]
+
+
+def test_tx_to_tx_through_a_1k_series_resistor_fires():
+    found = uart_found(uart_chip("U1", "A", "TXD", "CP2104"), res("R4", "A", "B", "1k"),
+                       uart_chip("U2", "B", "TXD0", "ESP32"))
+    assert found == [(("U1", "U2"), ("A", "B"))]
+
+
+def test_crossed_uart_is_quiet():
+    assert uart_found(uart_chip("U1", "A", "TXD"), uart_chip("U2", "A", "RXD", "ESP32"),
+                      uart_chip("U3", "B", "RXD"), uart_chip("U4", "B", "TXD0", "ESP32")) == []
+
+
+def test_uart_tx_quiet_cases():
+    mcu = uart_chip("U2", "N", "TXD0", "ESP32")
+    assert uart_found(uart_chip("U1", "N", "TXD", "TJA1050"), mcu) == []  # CAN transceiver
+    assert uart_found(uart_chip("U1", "N", "TXD", "THVD1450"), mcu) == []  # RS-485
+    assert uart_found(uart_chip("U1", "CAN_TX", "TXD"), uart_chip("U2", "CAN_TX", "TXD0", "ESP32")) == []
+    assert uart_found(uart_chip("U1", "A", "TXD"), res("R1", "A", "B", "10k"), uart_chip("U2", "B", "TXD0")) == []
+    assert uart_found(uart_chip("U1", "N", "TX_EN"), uart_chip("U2", "N", "TXEN", "ESP32")) == []
+    assert uart_found(uart_chip("U1", "N", "RTS/TX"), mcu) == []
+    conn = part("J2", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "N", "TXD"), ("2", "GND", "GND"))
+    assert uart_found(uart_chip("U1", "N", "TXD"), conn) == []  # connectors are not judged
+
+
+def test_two_receivers_on_one_transmitter_or_connector_are_quiet():
+    tx = uart_chip("U1", "N", "TXD")
+    assert uart_found(tx, uart_chip("U2", "N", "RXD", "ESP32"), uart_chip("U3", "N", "RX", "STM32")) == []
+    conn = part("J2", "Conn", "Connector_PinHeader_2.54mm:PinHeader_1x02", ("1", "N", "TXD"), ("2", "GND", "GND"))
+    assert uart_found(conn, uart_chip("U2", "N", "RXD"), uart_chip("U3", "N", "RX", "STM32")) == []
+
+
+def test_unfed_receivers_on_one_net_fire():
+    assert uart_found(uart_chip("U1", "N", "RXD"), uart_chip("U2", "N", "RX", "STM32"),
+                      res("R1", "N", "+3V3", "10k")) == [(("U1", "U2"), ("N",))]
+
+
+# --- crystal.load_caps_value --------------------------------------------------------------------
+
+def value_found(*parts):
+    return [(f.severity, f.refs) for f in rules(design(*parts), "crystal.load_caps_value")]
+
+
+def caps2(a="12pF", b="12pF"):
+    return [cap("C1", "XI", "GND", a), cap("C2", "XO", "GND", b)]
+
+
+@pytest.mark.parametrize("a,b,bad", [("100pF", "100pF", ("C1", "C2")), ("2.2pF", "2.2pF", ("C1", "C2")),
+                                     ("22pF", "100pF", ("C2",)), ("0.1uF", "22pF", ("C1",)), ("47.1pF", "22pF", ("C1",))])
+@pytest.mark.parametrize("crystal", [xtal2, xtal4])
+def test_crystal_load_cap_value_fires(crystal, a, b, bad):
+    assert value_found(mcu(), crystal(), *caps2(a, b)) == [(Severity.WARNING, ("Y1", *bad))]
+
+
+@pytest.mark.parametrize("a,b", [("22pF", "22pF"), ("6pF", "33pF"), ("47pF", "47pF"), ("4pF", "4pF"), ("12pF", "15pF")])
+def test_crystal_load_cap_value_quiet_in_range(a, b):
+    assert value_found(mcu(), xtal2(), *caps2(a, b)) == []
+
+
+def test_crystal_load_cap_value_quiet_for_oscillators_and_unclear_caps():
+    osc = part("Y1", "OSC 8MHz", "Oscillator:Oscillator_SMD_3225-4Pin", ("1", "+3V3", "OE"), ("2", "GND", "GND"),
+               ("3", "XI", "OUT", "output"), ("4", "+3V3", "VDD", "power_in"))
+    assert value_found(mcu(), osc, *caps2("100pF", "100pF")) == []
+    assert value_found(mcu(), part("Y1", "8MHz", XTAL_FP, ("1", "XI", "OUT", "output"), ("2", "GND"),
+                                   ("3", "XO"), ("4", "+3V3", "VDD", "power_in")), *caps2("100pF", "100pF")) == []
+    # not to ground, only one side, DNP, unparsable, or two capacitors on a pin
+    assert value_found(mcu(), xtal2(), cap("C1", "XI", "XO", "100pF"), cap("C2", "XO", "XI", "100pF")) == []
+    assert value_found(mcu(), xtal2(), cap("C1", "XI", "GND", "100pF")) == []
+    dnp = cap("C1", "XI", "GND", "100pF")
+    dnp = type(dnp)(dnp.reference, dnp.value, dnp.footprint, dnp.pins, dnp.fields, dnp=True)
+    assert value_found(mcu(), xtal2(), dnp, cap("C2", "XO", "GND", "100pF")) == []
+    assert value_found(mcu(), xtal2(), *caps2("~", "100pF")) == []
+    assert value_found(mcu(), xtal2(), *caps2("100pF", "100pF"), cap("C3", "XI", "GND", "10pF")) == []
+
+
+def test_crystal_load_cap_value_low_frequency_crystals():
+    assert value_found(mcu(), xtal2(value="455kHz"), *caps2("100pF", "100pF")) == []
+    assert len(value_found(mcu(), xtal2(value="32.768kHz"), *caps2("100pF", "100pF"))) == 1
+
+
+# --- bus.polarity_swapped on a D-sub 9 CAN connector --------------------------------------------
+
+DSUB_FP = "Connector_Dsub:DSUB-9_Male_Horizontal_P2.77x2.84mm_EdgePinOffset9.90mm_Housed_MountingHolesOffset11.32mm"
+
+
+def db9(p2, p7, value="DB9", footprint=DSUB_FP, count=9):
+    nets = {"2": p2, "7": p7, "3": "GND"}
+    return part("J4", value, footprint, *[(str(n), nets.get(str(n), "")) for n in range(1, count + 1)])
+
+
+@pytest.mark.parametrize("p2,p7", [("/CAN_H", "/CAN_L"), ("CANH", "CANL"), ("CAN1_H", "CAN1_L")])
+def test_dsub_can_swapped_fires(p2, p7):
+    hits = rules(design(db9(p2, p7)), "bus.polarity_swapped")
+    assert [(f.severity, f.refs) for f in hits] == [(Severity.ERROR, ("J4",))]
+
+
+@pytest.mark.parametrize("value,fp", [("DE9", "Connector:X"), ("Conn", "Connector_Dsub:DSUB-9_Female_Horizontal"),
+                                      ("D-Sub DE-9", "Connector:X")])
+def test_dsub_can_swapped_fires_for_each_spelling(value, fp):
+    assert len(bus_found(db9("/CAN_H", "/CAN_L", value=value, footprint=fp))) == 1
+
+
+@pytest.mark.parametrize("p2,p7", [("/CAN_L", "/CAN_H"), ("/CAN_L", ""), ("", "/CAN_L"), ("/CAN_H", "/GPIO"),
+                                   ("/CAN_H", "/CAN_H"), ("/CAN_H", "/CAN_L_CAN_H"), ("/TX", "/RX"), ("", "")])
+def test_dsub_can_correct_or_unlabelled_is_quiet(p2, p7):
+    assert bus_found(db9(p2, p7)) == []
+
+
+def test_dsub_can_quiet_for_other_connectors():
+    assert bus_found(db9("/CAN_H", "/CAN_L", value="DB15", footprint="Connector_Dsub:DSUB-15_Female", count=15)) == []
+    assert bus_found(db9("/CAN_H", "/CAN_L", value="Conn", footprint="Connector_PinHeader_2.54mm:PinHeader_1x09")) == []
+
+
+def test_transistor_array_terminals_typed_output_are_not_contention():
+    from test_audit_rules import design, part, rules
+    bridge = part("U3", "CP2102N", "Package_DFN_QFN:QFN-24", ("1", "/DTR", "DTR", "output"))
+    pair = part("U6", "LBC847BDW1T1G", "Package_TO_SOT_SMD:SOT-363", ("1", "/DTR", "E1", "output"),
+                ("2", "/EN", "C1", "output"))
+    assert rules(design(bridge, pair), "net.output_contention") == []

@@ -37,6 +37,7 @@ from .flags import Bucket, Function, Verdict
 from .ipc import KiCadReader
 from .jlc_catalog import best_parts_db
 from .kicad_cli import KiCadCli, sweep_stale_settings
+from .rules_copper import schematic_sync
 from .models import Component, DesignSnapshot, Pin
 from .netlist import read_xml_netlist
 from .report import render_report, save_report
@@ -1318,6 +1319,14 @@ class MainWindow(QMainWindow):
             if snapshot.path != self.audit_snapshot.path:
                 raise ValidationError("The open board changed. Run Check design again.")
             providers = []
+            schematic = snapshot.path.with_suffix(".kicad_sch") if snapshot.path else None
+            if schematic is not None and schematic.is_file():
+                try:   # pcb.schematic_mismatch compares the board with the saved schematic; skipped if it will not export
+                    exported = KiCadCli(self.settings.cli, forbidden=(schematic.parent,)).schematic_snapshot(
+                        schematic, saved_confirmed=True)
+                    providers.append(schematic_sync(exported))
+                except Exception:
+                    pass
             if lookup is not None:
                 lookup.fetch(network=network, choose=self.on_ui_thread(self.choose_part),
                              ask=self.on_ui_thread(self.ask_part))

@@ -1,0 +1,215 @@
+from velatrace.copper import BoardCopper, CopperPad, Segment, parse_copper
+from velatrace.models import Component, DesignSnapshot, Pin
+from velatrace.rules_copper import check_exposed_pad_open, check_mains_spacing
+
+TWO = ("F.Cu", "B.Cu")
+
+
+def board(pads, segments=(), edges=(), values=None):
+    copper = BoardCopper(TWO, 1.6, tuple(segments), (), (), frozenset(), {}, {}, pads=tuple(pads), edges=tuple(edges))
+    refs = dict.fromkeys(p.ref for p in pads)
+    comps = tuple(Component(r, (values or {}).get(r, ""), "", tuple(Pin(p.number, p.net) for p in pads if p.ref == r))
+                  for r in refs)
+    return DesignSnapshot(comps, "test", copper=copper)
+
+
+def pad(ref, number, net, x, y, w=0.3, h=0.8, kind="smd", layers=("F.Cu",)):
+    return CopperPad(ref, number, net, (x, y), (w, h), layers, kind)
+
+
+def qfn(ep_net, ref="U1", extra=()):
+    ring = [pad(ref, str(i + 1), "SIG", x, y) for i, (x, y) in enumerate(
+        [(-2, -1), (-2, 0), (-2, 1), (2, -1), (2, 0), (2, 1), (0, -2), (0, 2)])]
+    return ring + [pad(ref, "9", ep_net, 0, 0, 2.0, 2.0)] + list(extra)
+
+
+def test_exposed_pad_without_net_is_reported_and_grounded_one_is_not():
+    found = check_exposed_pad_open(board(qfn("")))
+    assert [f.rule for f in found] == ["pcb.exposed_pad_open"] and found[0].refs == ("U1",)
+    assert check_exposed_pad_open(board(qfn("unconnected-(U1-EP-Pad9)")))
+    assert not check_exposed_pad_open(board(qfn("GND")))
+
+
+def test_flash_and_sensirion_parts_may_leave_the_pad_open():
+    assert not check_exposed_pad_open(board(qfn(""), values={"U1": "W25Q128JVP"}))
+    assert not check_exposed_pad_open(board(qfn(""), values={"U1": "SGP40-D-R4"}))
+
+
+def test_thermal_vias_without_net_inside_a_grounded_pad():
+    vias = [pad("U1", "", "", x, y, 0.5, 0.5, "thru_hole", TWO) for x, y in ((-0.5, -0.5), (0.5, 0.5))]
+    found = check_exposed_pad_open(board(qfn("GND", extra=vias)))
+    assert len(found) == 1 and "thermal vias" in found[0].title
+    joined = [pad("U1", "9", "GND", x, y, 0.5, 0.5, "thru_hole", TWO) for x, y in ((-0.5, -0.5), (0.5, 0.5))]
+    assert not check_exposed_pad_open(board(qfn("GND", extra=joined)))
+
+
+def test_mounting_hole_and_two_pad_parts_are_not_exposed_pads():
+    hole = [pad("H1", "1", "", 0, 0, 6.4, 6.4, "thru_hole", TWO)] + [
+        pad("H1", "1", "", x, y, 0.8, 0.8, "thru_hole", TWO) for x, y in ((-2, 0), (2, 0), (0, -2), (0, 2))]
+    inductor = [pad("L1", "1", "", -2, 0, 2, 3), pad("L1", "2", "SW", 2, 0, 2, 3)]
+    assert not check_exposed_pad_open(board(hole + inductor))
+
+
+def mains(extra_pads=(), segments=(), edges=(), values=None):
+    """J1 mains terminal (L, N), PS1 AC-DC module, J2 low-voltage header on GND/+5V."""
+    pads = [pad("J1", "1", "/L", 0, 0, 2, 2, "thru_hole", TWO), pad("J1", "2", "/N", 0, 5, 2, 2, "thru_hole", TWO),
+            pad("PS1", "1", "/L", 20, 0, 2, 2, "thru_hole", TWO), pad("PS1", "2", "/N", 20, 5, 2, 2, "thru_hole", TWO),
+            pad("PS1", "3", "GND", 40, 0, 2, 2, "thru_hole", TWO), pad("PS1", "4", "+5V", 40, 5, 2, 2, "thru_hole", TWO),
+            pad("J2", "1", "GND", 60, 0, 2, 2, "thru_hole", TWO), pad("J2", "2", "+5V", 60, 5, 2, 2, "thru_hole", TWO),
+            *extra_pads]
+    return board(pads, segments, edges, values or {"PS1": "HLK-PM01"})
+
+
+def track(net, y, x0=5, x1=15, width=1.0, layer="F.Cu"):
+    return Segment(net, layer, (x0, y), (x1, y), width, x1 - x0)
+
+
+def test_line_and_neutral_tracks_closer_than_2_5_mm():
+    found = check_mains_spacing(mains(segments=[track("/L", 0), track("/N", 2.5)]))   # 1.5 mm gap
+    assert len(found) == 1 and "line and neutral" in found[0].title and "1.50 mm" in found[0].evidence
+    assert not check_mains_spacing(mains(segments=[track("/L", 0), track("/N", 4)]))   # 3 mm gap
+
+
+def test_tracks_on_other_layers_or_across_a_slot_are_fine():
+    assert not check_mains_spacing(mains(segments=[track("/L", 0), track("/N", 2.5, layer="B.Cu")]))
+    slot = [((-5, 1.25), (25, 1.25))]
+    assert not check_mains_spacing(mains(segments=[track("/L", 0), track("/N", 2.5)], edges=slot))
+
+
+def test_mains_track_near_low_voltage_ground():
+    found = check_mains_spacing(mains(segments=[track("/L", 0), track("GND", 2.0, 30, 50), track("/L", 0, 20, 45)]))
+    assert [f.title for f in found] == ["Copper between mains and low-voltage is closer than 2.5 mm"]
+
+
+def test_non_isolated_supply_is_left_alone():
+    # A dropper resistor from line into the low-voltage ground: no isolation barrier to measure.
+    dropper = [pad("R1", "1", "/L", 30, 10), pad("R1", "2", "GND", 32, 10)]
+    assert not check_mains_spacing(mains(dropper, segments=[track("/L", 0), track("GND", 2.0, 0, 20)]))
+
+
+def test_audio_left_channel_is_not_mains():
+    pads = [pad("U1", "1", "/L", 0, 0), pad("U1", "2", "GND", 0, 2), pad("U1", "3", "/R", 0, 4),
+            pad("C1", "1", "/L", 5, 0), pad("C1", "2", "GND", 5, 1)]
+    assert not check_mains_spacing(board(pads, [track("/L", 0), track("GND", 1)]))
+
+
+def test_parse_copper_reads_pads_and_footprint_slots():
+    text = """(kicad_pcb (version 20240108) (generator "pcbnew")
+      (general (thickness 1.6))
+      (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+      (net 0 "") (net 1 "GND")
+      (gr_line (start 0 0) (end 10 0) (layer "Edge.Cuts"))
+      (footprint "X:Y" (layer "F.Cu") (at 10 20 90)
+        (property "Reference" "U1")
+        (fp_line (start 0 -1) (end 0 1) (layer "Edge.Cuts"))
+        (pad "1" smd rect (at 1 0 90) (size 0.5 1.0) (layers "F.Cu" "F.Mask") (net 1 "GND"))
+        (pad "2" thru_hole circle (at 0 0) (size 1 1) (drill 0.5) (layers "*.Cu"))))"""
+    copper = parse_copper(text)
+    one, two = copper.pads
+    assert (one.ref, one.number, one.net, one.layers, one.kind) == ("U1", "1", "GND", ("F.Cu",), "smd")
+    assert abs(one.position[0] - 10) < 1e-9 and abs(one.position[1] - 19) < 1e-9   # turned 90 degrees
+    assert two.net == "" and two.layers == ("F.Cu", "B.Cu")
+    assert len(copper.edges) == 2
+
+
+def test_charger_exposed_pad_without_vias():
+    from velatrace.copper import Via
+    from velatrace.rules_copper import check_thermal_vias_missing
+    found = check_thermal_vias_missing(board(qfn("GND"), values={"U1": "TP4056"}))
+    assert [f.rule for f in found] == ["pcb.thermal_vias_missing"]
+    assert not check_thermal_vias_missing(board(qfn("GND"), values={"U1": "CP2102N"}))   # low power: no claim
+    via_pad = [pad("U1", "9", "GND", 0.5, 0.5, 0.5, 0.5, "thru_hole", TWO)]
+    assert not check_thermal_vias_missing(board(qfn("GND", extra=via_pad), values={"U1": "TP4056"}))
+    snap = board(qfn("GND"), values={"U1": "DRV8833"})
+    snap = snap.__class__(snap.components, snap.source, copper=snap.copper.__class__(
+        **{**snap.copper.__dict__, "vias": (Via("GND", (0.3, -0.3), TWO),)}))
+    assert not check_thermal_vias_missing(snap)
+
+
+def test_schematic_mismatch_reports_rewired_pads_and_changed_values_not_renames_or_end_swaps():
+    from velatrace.rules_copper import schematic_sync
+    sch = DesignSnapshot((Component("U1", "MCU", "", (Pin("1", "/SDA"), Pin("2", "/SCL"), Pin("3", "GND"))),
+                          Component("R1", "4k7", "Resistor_SMD:R_0603", (Pin("1", "/SDA"), Pin("2", "+3V3"))),
+                          Component("R2", "4k7", "Resistor_SMD:R_0603", (Pin("1", "/SCL"), Pin("2", "+3V3"))),
+                          Component("J1", "Conn", "", (Pin("1", "/SDA"), Pin("2", "/SCL"), Pin("3", "GND")))), "sch")
+    def pcb(swap_j1=False, swap_r1=False, r2="4k7", rename=False):
+        n = (lambda x: "Net-" + x) if rename else (lambda x: x)
+        pads = [pad("U1", "1", n("/SDA"), 0, 0), pad("U1", "2", n("/SCL"), 0, 1), pad("U1", "3", "GND", 0, 2),
+                pad("R1", "1", "+3V3" if swap_r1 else n("/SDA"), 1, 0), pad("R1", "2", n("/SDA") if swap_r1 else "+3V3", 1, 1),
+                pad("R2", "1", n("/SCL"), 2, 0), pad("R2", "2", "+3V3", 2, 1),
+                pad("J1", "1", n("/SCL") if swap_j1 else n("/SDA"), 3, 0), pad("J1", "2", n("/SDA") if swap_j1 else n("/SCL"), 3, 1),
+                pad("J1", "3", "GND", 3, 2)]
+        copper = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads),
+                             values=(("R1", "4k7"), ("R2", r2)))
+        return DesignSnapshot((), "pcb", copper=copper)
+    check = schematic_sync(sch)
+    assert check(pcb()) == [] and check(pcb(rename=True)) == [] and check(pcb(swap_r1=True)) == []
+    (found,) = check(pcb(swap_j1=True))
+    assert found.rule == "pcb.schematic_mismatch" and "J1" in found.refs
+    (value,) = check(pcb(r2="10k"))
+    assert "R2 4k7 in the schematic, 10k on the PCB" in value.evidence
+
+
+def test_schematic_pin_without_a_footprint_pad():
+    from velatrace.rules_copper import schematic_sync
+    sch = DesignSnapshot((Component("U1", "TP4056", "Package_SO:SOIC-8", (Pin("1", "GND"), Pin("9", "GND", "PAD"), Pin("2", "/PROG"))),
+                          Component("R1", "2k", "", (Pin("1", "/PROG"), Pin("2", "GND")))), "sch")
+    pads = [pad("U1", "1", "GND", 0, 0), pad("U1", "2", "/PROG", 0, 1), pad("R1", "1", "/PROG", 1, 0), pad("R1", "2", "GND", 1, 1)]
+    copper = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads))
+    (found,) = schematic_sync(sch)(DesignSnapshot((), "pcb", copper=copper))
+    assert found.refs == ("U1",) and "U1 pin 9 (GND)" in found.evidence
+    with_ep = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=(*pads, pad("U1", "9", "GND", 0, 0.5, 2, 2)))
+    assert schematic_sync(sch)(DesignSnapshot((), "pcb", copper=with_ep)) == []
+    # A plain duplicate GND pin is no loss while pin 1 still carries GND.
+    dup = DesignSnapshot(tuple(c if c.reference != "U1" else Component("U1", "TP4056", "", (Pin("1", "GND"), Pin("9", "GND", "GND"),
+                                                                                         Pin("2", "/PROG"))) for c in sch.components), "sch")
+    assert schematic_sync(dup)(DesignSnapshot((), "pcb", copper=copper)) == []
+    by_number = DesignSnapshot(tuple(c if c.reference != "U1" else Component("U1", "TP4056", "", (Pin("1", "GND"), Pin("PAD", "GND", "GND"),
+                                                                                               Pin("2", "/PROG"))) for c in sch.components), "sch")
+    assert len(schematic_sync(by_number)(DesignSnapshot((), "pcb", copper=copper))) == 1
+    # The PCB's U1 is another part (different value): its pads say nothing about the schematic's U1.
+    other = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads), values=(("U1", "1N4148"),))
+    assert schematic_sync(sch)(DesignSnapshot((), "pcb", copper=other)) == []
+
+
+def test_thin_track_from_motor_driver_sense_pin_to_its_resistor():
+    from velatrace.rules_copper import schematic_sync
+    sch = DesignSnapshot((Component("U1", "DRV8825", "", (Pin("6", "/ISA", "ISENA"), Pin("9", "/IO", "IN1"))),
+                          Component("R3", "0.1", "Resistor_SMD:R_0603", (Pin("1", "/ISA"), Pin("2", "GND"))),
+                          Component("R9", "0.1", "Resistor_SMD:R_0603", (Pin("1", "/IO"), Pin("2", "GND")))), "sch")
+    pads = [pad("U1", "6", "/ISA", 0, 0), pad("U1", "9", "/IO", 0, 1), pad("R3", "1", "/ISA", 6, 0),
+            pad("R3", "2", "GND", 7, 0), pad("R9", "1", "/IO", 6, 1), pad("R9", "2", "GND", 7, 1)]
+    def run(width, zones=()):
+        segs = (Segment("/ISA", "F.Cu", (0, 0), (6, 0), width, 6.0), Segment("/IO", "F.Cu", (0, 1), (6, 1), 0.2, 6.0))
+        copper = BoardCopper(TWO, 1.6, segs, (), tuple(zones), frozenset(), {}, {}, pads=tuple(pads))
+        return [f for f in schematic_sync(sch)(DesignSnapshot((), "pcb", copper=copper)) if f.rule == "pcb.track_width"]
+    (found,) = run(0.2)   # ~15 mOhm, 15% of 0.1 ohm; R9 is not on a sense pin
+    assert found.refs == ("U1", "R3") and "15%" in found.evidence
+    assert run(1.5) == []
+    from velatrace.copper import FilledZone
+    assert run(0.2, [FilledZone("/ISA", "F.Cu", ((0, 0), (6, 0), (6, 1)))]) == []
+
+
+def test_a_split_net_names_the_pads_that_moved_away():
+    from velatrace.rules_copper import schematic_sync
+    pins = [("U6", "2"), ("R44", "2"), ("U7", "2"), ("U7", "3"), ("R23", "1")]
+    sch = DesignSnapshot(tuple(Component(ref, "", "", tuple(Pin(n, "/PD4") for r, n in pins if r == ref) + (Pin("9", "GND"),))
+                               for ref in dict.fromkeys(r for r, _ in pins)), "sch")
+    moved = {("U7", "2"), ("U7", "3"), ("R23", "1")}
+    pads = [pad(r, n, "/PD4_at_328PB_A" if (r, n) in moved else "/PD4", 0, i) for i, (r, n) in enumerate(pins)]
+    pads += [pad(r, "9", "GND", 1, i) for i, r in enumerate(dict.fromkeys(r for r, _ in pins))]
+    copper = BoardCopper(TWO, 1.6, (), (), (), frozenset(), {}, {}, pads=tuple(pads))
+    (found,) = schematic_sync(sch)(DesignSnapshot((), "pcb", copper=copper))
+    assert set(found.refs) == {"U7", "R23"} and "U7 pad 2 is on /PD4_at_328PB_A (schematic: /PD4)" in found.evidence
+
+
+def test_four_layer_board_with_nothing_inside():
+    from velatrace.rules_copper import check_inner_layers_empty
+    four = ("F.Cu", "In1.Cu", "In2.Cu", "B.Cu")
+    def snap(segments, unfilled=frozenset()):
+        copper = BoardCopper(four, 1.6, tuple(segments), (), (), frozenset(), {}, {}, unfilled_nets=unfilled)
+        return DesignSnapshot((), "t", copper=copper)
+    outer = [track("A", 0), track("B", 2, layer="B.Cu")]
+    assert [f.rule for f in check_inner_layers_empty(snap(outer))] == ["pcb.inner_layers_empty"]
+    assert check_inner_layers_empty(snap([*outer, track("C", 4, layer="In1.Cu")])) == []
+    assert check_inner_layers_empty(snap(outer, frozenset({"GND"}))) == []   # an unfilled zone may be inside

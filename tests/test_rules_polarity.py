@@ -250,3 +250,12 @@ def test_plain_c_symbol_with_polarized_footprint_and_unnamed_pins_is_quiet():
 @pytest.mark.parametrize("pin", ["U3VDD10", "U2VDD10", "5VSB", "3VDD"])
 def test_letters_after_the_v_are_not_a_voltage(pin):
     assert found("power.rail_voltage_mismatch", chip(pin, "+1V0")) == []
+
+
+def test_rail_label_contradicted_by_its_fixed_regulator_is_not_a_mismatch():
+    ldo = part("U5", "LD1117S33TR", "Package_TO_SOT_SMD:SOT-223-3_TabPin2", ("1", "GND", "GND", "power_in"),
+               ("2", "+3V0", "VO", "power_out"), ("3", "+5V", "VI", "power_in"))
+    mcu = part("U6", "ESP32-S3-WROOM-1", "RF_Module:ESP32-S3-WROOM-1", ("2", "+3V0", "3V3", "power_in"),
+               ("1", "GND", "GND", "power_in"))
+    assert found("power.rail_voltage_mismatch", ldo, mcu) == []
+    assert found("power.rail_voltage_mismatch", mcu) == ["power.rail_voltage_mismatch"]
