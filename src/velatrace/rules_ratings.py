@@ -152,9 +152,52 @@ def led_cases(design: _Design, led: Component, anode: str, cathode: str):
     return cases
 
 
+# Motor drivers: (maximum peak current A, sense voltage at that limit V, stepper so RMS = peak / sqrt 2).
+# DRV8825: 2.5 A, ITRIP = VREF / (5 R), VREF up to 3.3 V. A4988: 2 A, VREF / (8 R), VREF up to 4 V.
+# TMC2208/2209: 2.8 A peak, 0.325 V full scale. DRV8833: 2 A peak, 0.2 V trip, brushed (DC).
+_SENSE_DRIVERS = ((re.compile(r"DRV8825"), 2.5, 0.66, True), (re.compile(r"A498[38]"), 2.0, 0.5, True),
+                  (re.compile(r"TMC22(?:0[89]|2[456])"), 2.8, 0.325, True), (re.compile(r"DRV883[23]"), 2.0, 0.2, False))
+
+
+def _sense_resistor_power(design: _Design) -> list[Finding]:
+    """A motor driver's current-sense resistor whose package cannot take I^2 R at the driver's full current."""
+    from .rules_copper import _SENSE_PIN
+    findings = []
+    for res in design.of_kind("resistor"):
+        ends = two_terminal_nets(res)
+        value = parse_value(res.value, "resistor")
+        watts = _PACKAGE_WATTS.get(package_of(res.footprint) or "")
+        if res.dnp or not ends or not value or not 0 < value.value <= Decimal("0.5") or watts is None:
+            continue
+        sense = [net for net in ends if net not in design.grounds]
+        if len(sense) != 1:
+            continue
+        for ic, pin in design.nodes.get(sense[0], ()):
+            spec = next((d for d in _SENSE_DRIVERS if d[0].search(ic.value.upper())), None) if pin.name else None
+            if spec is None or not _SENSE_PIN.fullmatch(pin.name):
+                continue
+            _, peak_max, volts, stepper = spec
+            ohms = float(value.value)
+            peak = min(peak_max, volts / ohms)
+            amps = peak / 2 ** 0.5 if stepper else peak
+            power = amps * amps * ohms
+            if power > float(watts) * 1.1:
+                findings.append(Finding(
+                    "resistor.power_rating", Severity.WARNING,
+                    f"{res.reference} ({res.value}, {package_of(res.footprint)}) is too small for {ic.reference}'s motor current",
+                    (res.reference, ic.reference), (sense[0],),
+                    f"{res.reference} senses {ic.reference} ({ic.value}) {pin.name}: at the driver's full current "
+                    f"({amps:.2g} A {'RMS' if stepper else 'DC'}) it dissipates about {power:.2g} W, above the "
+                    f"{float(watts):g} W a {package_of(res.footprint)} resistor is rated for.",
+                    "Use a larger package (1206/2010/2512, or a current-sense part rated for the power), or limit the "
+                    "motor current well below the driver's maximum."))
+            break
+    return findings
+
+
 def check_resistor_power_rating(snapshot: DesignSnapshot) -> list[Finding]:
     design = _Design(snapshot)
-    findings = []
+    findings = _sense_resistor_power(design)
     for led in design.of_kind("led"):
         if led.dnp:
             continue

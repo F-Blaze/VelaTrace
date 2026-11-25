@@ -1074,3 +1074,16 @@ def test_tvs_stand_off_below_the_rail_it_protects():
     assert found.refs == ("D7",) and "PWRIN must be at least 6.3 V" in found.evidence
     assert check_tvs_standoff(DesignSnapshot((tvs("SMAJ15A", "PWRIN"), ldo, oring, load), "t")) == []
     assert [f.refs for f in check_tvs_standoff(DesignSnapshot((tvs("SMBJ5.0A", "+12V"),), "t"))] == [("D7",)]
+
+
+def test_motor_sense_resistor_package_too_small_for_full_current():
+    from velatrace.models import Component, DesignSnapshot, Pin
+    from velatrace.rules_ratings import check_resistor_power_rating
+    def board(driver, ohms, package):
+        ic = Component("U1", driver, "", (Pin("6", "/ISA", "ISENA" if driver.startswith("DRV8825") else "AISEN"),
+                                          Pin("1", "GND", "GND", "power_in")))
+        res = Component("R3", ohms, f"Resistor_SMD:R_{package}_Metric", (Pin("1", "/ISA"), Pin("2", "GND")))
+        return [f for f in check_resistor_power_rating(DesignSnapshot((ic, res), "t")) if "motor current" in f.title]
+    assert [f.refs for f in board("DRV8825PWPR", "0.1", "0603")] == [("R3", "U1")]
+    assert board("DRV8825PWPR", "0.1", "2512") == []
+    assert board("DRV8833PWPR", "300m", "1206") == []     # 0.67 A trip: 0.13 W in a 0.25 W part
